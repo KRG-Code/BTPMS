@@ -1,0 +1,259 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base theme colors */
+:root {
+  --text-light: #0b0c18;
+  --background-light: #e8e9f7;
+  --primary-light: #191d67;
+  --secondary-light: #757be6;
+  --accent-light: #141db8;
+
+  --text-dark: #e7e8f4;
+  --background-dark: #080917;
+  --primary-dark: #989ce6;
+  --secondary-dark: #191f8a;
+  --accent-dark: #4750eb;
+
+  --font-body: "Roboto", sans-serif;
+  --font-headings: "Inter", sans-serif;
+}
+
+/* Custom scrollbar hide */
+.scrollbar-hide {
+  scrollbar-width: none !important; /* For Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none !important; /* For Chrome, Safari, and Opera */
+}
+
+body{
+  margin: 0;
+  padding: 0;
+}
+
+/* Dark and light mode styles */
+body.light-mode {
+  color: var(--text-light);
+  background-color: var(--background-light);
+}
+
+body.dark-mode {
+  color: var(--text-dark);
+  background-color: black;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-headings);
+}
+
+.icon {
+  color: var(--primary-light);
+}
+
+body.light-mode .navIcon {
+  color: blue;
+}
+
+body.dark-mode .navIcon {
+  color: blue;
+}
+
+
+.SideNav a {
+  color: var(--text-light);
+  z-index: 4;
+}
+
+body.dark-mode .SideNav a {
+  color: var(--text-dark);
+}
+
+body.light-mode .SideNav{
+  background-color: white;
+  transition: background-color 0.5s ease;
+
+}
+
+body.dark-mode .SideNav{
+  background-color: var(--background-dark);
+  transition: background-color 0.5s ease;
+}
+
+
+.navIcon {
+  font-size: 1.5rem;
+  line-height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  transition: color 0.3s ease; /* Smooth transition for icon color */
+}
+
+.TopNav a {
+  color: var(--text-light);
+}
+
+body.dark-mode .TopNav a {
+  color: var(--text-dark);
+}
+
+
+body.light-mode .TopNav {
+  background-color: white;
+  transition: background-color 0.5s ease;
+}
+
+body.dark-mode .TopNav {
+  background-color: var(--background-dark);
+  transition: background-color 0.5s ease;
+}
+
+.navList {
+  margin-bottom: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem; /* Consistent padding */
+  border-radius: 9999px; /* Consistent border radius */
+  border: 2px solid transparent; /* Ensure border is consistent */
+  transition: background-color 0.3s ease; /* Smooth transition for background color */
+}
+
+.navList:hover {
+  background-color: var(--secondary-light); /* Hover background color */
+}
+
+/* Ensure consistent icon styles */
+.navIcon {
+  font-size: 1.5rem;
+  line-height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  transition: color 0.3s ease; /* Smooth transition for icon color */
+}
+
+/* mapStyles.css */
+
+/* Custom zoom control styles */
+.leaflet-bar {
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.leaflet-bar a {
+  display: block;
+  text-align: center;
+  padding: 5px;
+  font-size: 18px;
+  color: #333;
+  text-decoration: none;
+}
+
+.leaflet-bar a:hover {
+  background-color: #f0f0f0;
+}
+
+/* Map container styling */
+.leaflet-container {
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  top: 0;
+  display: flex;
+}
+
+@media only screen and (min-width: 768spx) and (max-width: 1024px) {
+  /* Hover effect for nav items */
+
+  .navList {
+    margin-bottom: 0.5rem;
+    width: 100%;
+    padding: 0.75rem 1rem; /* Consistent padding */
+    border-radius: 9999px; /* Consistent border radius */
+    border: 2px solid transparent; /* Ensure border is consistent */
+    transition: background-color 0.3s ease; /* Smooth transition for background color */
+  }
+
+  .navList:hover {
+    background-color: var(--secondary-light); /* Hover background color */
+  }
+
+  /* Ensure consistent icon styles */
+  .navIcon {
+    font-size: 1.5rem;
+    line-height: 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border-radius: 9999px;
+    transition: color 0.3s ease; /* Smooth transition for icon color */
+  }
+}
+
+@media only screen and (max-width: 768px) {
+  .SideNav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 999;
+    width: 60vw; /* Adjust width as needed */
+    background-color: var(--background-light); /* Light mode background color */
+    transition: transform 0.3s ease-in-out, visibility 0.3s ease; /* Smooth transition */
+    border-top-left-radius: 0rem;
+    border-bottom-left-radius: 0rem;
+  }
+
+  .SideNav-open{
+    transform: translateX(0); /* Slide into view */
+    visibility: visible; /* Make SideNav visible */
+  }
+
+  .SideNav-close{
+    transform: translateX(-100%); /* Slide out of view */
+    visibility: hidden; /* Hide SideNav */
+  }
+
+  .overlay {
+    position: fixed;
+    top: 0;
+    left: 60vw; /* Align with SideNav width */
+    width: 40vw; /* Cover remaining space */
+    height: 100%;
+    z-index: 998;
+
+  }
+
+}
+
+.pulse {
+  animation: pulse-animation 1.5s infinite;
+}
+
+@keyframes pulse-animation {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+

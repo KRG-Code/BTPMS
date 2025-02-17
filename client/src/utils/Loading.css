@@ -1,0 +1,83 @@
+/* Loading Bar with Changing Color */
+.loading-wrapper {
+  margin-top: 8px; /* Adjust margin as necessary */
+}
+
+.loading-bar-compact-container {
+  width: 100%;
+  background-color: #f3f3f3;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.loading-bar-compact {
+  width: 100%;
+  height: 4px; /* Height of the loading bar */
+  background: linear-gradient(90deg, red, yellow, green, blue, purple);
+  background-size: 400% 100%;
+  animation: loadingBar 3s linear infinite;
+}
+
+@keyframes loadingBar {
+  0% {
+      background-position: 0% 0%;
+  }
+  100% {
+      background-position: 100% 0%;
+  }
+}
+
+/* Loading Spinner (Circle) */
+.loading-spinner-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #3498db;
+  border-radius: 50%;
+  animation: spin 1s ease infinite;
+}
+
+@keyframes spin {
+  0% {
+      transform: rotate(0deg);
+  }
+  100% {
+      transform: rotate(360deg);
+  }
+}
+
+/* Loading Pulse */
+.loading-pulse-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-pulse {
+  width: 20px;
+  height: 20px;
+  background-color: #3498db;
+  border-radius: 50%;
+  animation: pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% {
+      transform: scale(1);
+      opacity: 1;
+  }
+  50% {
+      transform: scale(1.5);
+      opacity: 0.5;
+  }
+  100% {
+      transform: scale(1);
+      opacity: 1;
+  }
+}

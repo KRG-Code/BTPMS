@@ -1,0 +1,25 @@
+{
+  "name": "btpms",
+  "version": "1.0.0",
+  "description": "BTPMS APP",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "server": "npm run start --prefix server",
+    "client": "npm start --prefix client",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KRG-Code/BTPMS.git"
+  },
+  "author": "KRG-CODE",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/KRG-Code/BTPMS/issues"
+  },
+  "homepage": "https://github.com/KRG-Code/BTPMS#readme",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
