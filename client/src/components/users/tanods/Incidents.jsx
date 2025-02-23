@@ -43,7 +43,7 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
       });
       localStorage.setItem("userId", response.data._id); // Store userId in localStorage
       setUserProfile(response.data); // Set userProfile
-      return response.data._id;
+      return response.data;
     } catch (error) {
       console.error("Error fetching user profile:", error);
       toast.error("Error fetching user profile.");
@@ -53,11 +53,11 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
 
   const fetchUpcomingPatrols = async () => {
     const token = localStorage.getItem('token');
-    const userId = await fetchUserProfile();
-    if (!token || !userId) return;
+    const userProfile = await fetchUserProfile();
+    if (!token || !userProfile) return;
 
     try {
-      const response = await axios.get(`${process.env.REACT_APP_API_URL}/auth/tanod-schedules/${userId}`, {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/auth/tanod-schedules/${userProfile._id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const schedulesWithPatrolArea = await Promise.all(
@@ -89,14 +89,14 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
         return startTime.toDateString() === today.toDateString();
       }));
       const startedPatrol = schedulesWithPatrolArea.some(schedule => {
-        const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === userId);
+        const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === userProfile._id);
         return patrolStatus && patrolStatus.status === 'Started';
       });
       setHasStartedPatrol(startedPatrol);
 
       if (startedPatrol) {
         const currentSchedule = schedulesWithPatrolArea.find(schedule => {
-          const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === userId);
+          const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === userProfile._id);
           return patrolStatus && patrolStatus.status === 'Started';
         });
         setCurrentScheduleId(currentSchedule._id); // Set the current schedule ID
@@ -110,11 +110,6 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
 
   useEffect(() => {
     fetchUpcomingPatrols();
-    if (isTracking) {
-      fetchUserProfile().then(() => {
-        startTracking();
-      });
-    }
   }, []);
 
   const toggleDropdown = () => {
@@ -235,11 +230,25 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
     setUserLocation({ latitude, longitude }); // Update the user location state
     if (userProfile) {
       // Emit location update via WebSocket
-      console.log('Emitting location update:', { userId: userProfile._id, latitude, longitude });
+      console.log('Emitting location update:', { 
+        userId: userProfile._id, 
+        latitude, 
+        longitude, 
+        profilePicture: userProfile.profilePicture,
+        patrolArea: userProfile.patrolArea,
+        firstName: userProfile.firstName,
+        lastName: userProfile.lastName,
+        currentScheduleId // Pass the current schedule ID
+      });
       socketRef.current.emit('locationUpdate', {
         userId: userProfile._id,
         latitude,
         longitude,
+        profilePicture: userProfile.profilePicture, // Pass the profile picture
+        patrolArea: userProfile.patrolArea, // Pass the patrol area
+        firstName: userProfile.firstName, // Pass the first name
+        lastName: userProfile.lastName, // Pass the last name
+        currentScheduleId // Pass the current schedule ID
       });
     } else {
       console.error('User profile is not available.');
@@ -281,13 +290,22 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
       {isDropdownOpen && (
         <div className="dropdown-content">
           <div className="mb-4 flex justify-center space-x-4">
-            <button onClick={() => setShowTodaySchedule(true)} className="bg-blue-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-blue-700 transition">
+            <button
+              onClick={() => setShowTodaySchedule(true)}
+              className="bg-blue-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-blue-700 transition"
+            >
               Today's Patrol Schedule
             </button>
-            <button onClick={() => setShowReportIncident(true)} className="bg-green-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-green-700 transition">
+            <button
+              onClick={() => setShowReportIncident(true)}
+              className="bg-green-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-green-700 transition"
+            >
               Report an Incident
             </button>
-            <button onClick={() => setShowReportedIncidents(true)} className="bg-yellow-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-yellow-700 transition">
+            <button
+              onClick={() => setShowReportedIncidents(true)}
+              className="bg-yellow-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-yellow-700 transition"
+            >
               View Reported Incidents
             </button>
             {isTracking ? (
@@ -295,7 +313,7 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
                 Stop Tracking
               </button>
             ) : (
-              <button onClick={startTracking} className="bg-green-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-green-700 transition">
+              <button onClick={() => fetchUserProfile().then(() => startTracking())} className="bg-green-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-green-700 transition">
                 Start Tracking
               </button>
             )}
@@ -398,4 +416,4 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
   );
 };
 
-export default Incidents;
+export default Incidents

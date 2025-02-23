@@ -64,6 +64,7 @@ router.get('/:tanodId/ratings', protect, getTanodRatings);  // Ratings for speci
 router.get('/my-ratings', protect, getUserRatings);         // Current user's ratings
 router.get('/users', protect, getAllUserProfiles);          // Get all user profiles
 router.get('/me', protect, getUserProfile);                 // Get current user profile
+router.get('/users/:userId', protect, getUserProfile);       // Get user profile by userId
 router.delete('/ratings/:ratingId', protect, deleteRating); // Delete a rating
 router.delete('/users/:userId', protect, deleteUser);       // Delete user
 

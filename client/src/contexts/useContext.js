@@ -67,6 +67,10 @@ export const CombinedProvider = ({ children }) => {
     navigate('/');
   };
 
+  const refetchUserProfile = async () => {
+    await fetchData();
+  };
+
   useEffect(() => {
     document.body.classList.toggle('dark-mode', isDarkMode);
     localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
@@ -87,6 +91,7 @@ export const CombinedProvider = ({ children }) => {
         isOpen,
         toggleSideNav,
         closeSideNav,
+        refetchUserProfile,
       }}
     >
       {children}
@@ -95,3 +100,5 @@ export const CombinedProvider = ({ children }) => {
 };
 
 export const useCombinedContext = () => useContext(CombinedContext);
+
+export const UserContext = CombinedContext; // Export UserContext

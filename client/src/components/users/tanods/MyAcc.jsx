@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate, Navigate  } from "react-router-dom";
 import { FaEdit, FaEye, FaEyeSlash } from "react-icons/fa";
 import { compressImage } from "../../../utils/ImageCompression";
@@ -7,8 +7,11 @@ import "react-toastify/dist/ReactToastify.css";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../../../firebase";
 import Loading from "../../../utils/Loading";
+import { UserContext } from '../../../contexts/useContext'; // Import UserContext
+import axios from 'axios';
 
-export default function MyAcc() {
+const MyAcc = () => {
+  const { refetchUserProfile } = useContext(UserContext);
   const navigate = useNavigate();
   const [accountState, setAccountState] = useState({
     firstName: "",
@@ -33,6 +36,7 @@ export default function MyAcc() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [userProfile, setUserProfile] = useState(null); // Define userProfile
 
   const calculateAge = (birthday) => {
     const today = new Date();
@@ -166,6 +170,7 @@ export default function MyAcc() {
         toast.success("Profile updated successfully!");
         setIsEditing(false);
         setLocalProfilePicture(null);
+        await refetchUserProfile(); // Refetch user profile to ensure consistency
       } else {
         toast.error(data.message || "Failed to update profile.");
       }
@@ -175,8 +180,6 @@ export default function MyAcc() {
       setLoading(false);
     }
   };
-
-
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
@@ -253,9 +256,24 @@ export default function MyAcc() {
       setLoading(false);
     }
   };
-  
 
-  
+  const handleCancel = () => {
+    setIsEditing(false);
+    if (userProfile) {
+      setAccountState({
+        firstName: userProfile.firstName,
+        lastName: userProfile.lastName,
+        address: userProfile.address,
+        contactNumber: userProfile.contactNumber,
+        birthday: userProfile.birthday
+          ? new Date(userProfile.birthday).toISOString().split("T")[0]
+          : "",
+        gender: userProfile.gender || "",
+        profilePicture: userProfile.profilePicture || null,
+      });
+    }
+  };
+
   return (
     <div className="container mx-auto mt-8 space-y-6 ">
       <ToastContainer />
@@ -407,7 +425,7 @@ export default function MyAcc() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsEditing(false)}
+                  onClick={handleCancel}
                   className="mt-6 ml-6 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
                 >
                   Cancel
@@ -515,4 +533,6 @@ export default function MyAcc() {
       </div>
     </div>
   );
-}
+};
+
+export default MyAcc;

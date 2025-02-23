@@ -158,14 +158,18 @@ exports.getAllUserProfiles = async (req, res) => {
   }
 };
 
-// Get current user profile
+// Get current user profile or by userId
 exports.getUserProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select("-password");
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const userId = req.params.userId || req.user._id; // Use userId from params or authenticated user id
+    const user = await User.findById(userId).select('-password'); // Exclude password field
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
     res.json(user);
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
