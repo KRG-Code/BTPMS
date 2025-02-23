@@ -16,6 +16,7 @@ const AdminDashboard = lazy(() => import("./components/users/admin/AdminDashboar
 const ManageTanod = lazy(() => import("./components/users/admin/Personels"));
 const Resources = lazy(() => import("./components/users/admin/Resources"));
 const PatrolManagement = lazy(() => import("./components/users/admin/ManagePatrol"));
+const PatrolTrack = lazy(() => import("./components/users/admin/PatrolTracking"));
 
 // Tanod routes
 const Dashboard = lazy(() => import("./components/users/tanods/Dashboard"));
@@ -23,7 +24,6 @@ const Patrolmap = lazy(() => import("./components/users/tanods/Map"));
 const Equipments = lazy(() => import("./components/users/tanods/Equipment"));
 const Performance = lazy(() => import("./components/users/tanods/Performance"));
 const Schedule = lazy(() => import("./components/users/tanods/Schedule"));
-const Incidents = lazy(() => import("./components/users/tanods/Incidents"));
 const MyAccount = lazy(() => import("./components/users/tanods/MyAcc"));
 
 // Resident routes
@@ -67,12 +67,7 @@ function App() {
                 <Route
                   path="/Schedule"
                   element={<ProtectedRoute userTypeAllowed={["tanod"]}><Schedule /></ProtectedRoute>}
-                />
-                <Route
-                  path="/Patrol"
-                  element={<ProtectedRoute userTypeAllowed={["tanod"]}><Incidents /></ProtectedRoute>}
-                />
-                
+                /> 
               </Route>
 
               {/* Protected Routes for Residents */}
@@ -108,6 +103,10 @@ function App() {
                 <Route
                   path="/ManagePatrolschedules"
                   element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolManagement /></ProtectedRoute>}
+                />
+                <Route
+                  path="/PatrolTracking"
+                  element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolTrack /></ProtectedRoute>}
                 />
               </Route>
               

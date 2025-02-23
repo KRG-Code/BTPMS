@@ -30,6 +30,7 @@ const {
   endPatrol,
   updateScheduleStatus,
   savePatrolLogs,
+  getPatrolLogs, // Import the getPatrolLogs function
 } = require('../controllers/authController');
 
 const { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem } = require("../controllers/inventoryController");
@@ -92,5 +93,6 @@ router.put('/schedules/update-status', protect, updateScheduleStatus); // Add th
 router.put('/schedule/:scheduleId/start-patrol', protect, startPatrol);
 router.put('/schedule/:scheduleId/end-patrol', protect, endPatrol);
 router.post('/save-patrol-logs', protect, savePatrolLogs);
+router.get('/patrol-logs/:userId/:scheduleId', protect, getPatrolLogs); // Update this route
 
 module.exports = router;

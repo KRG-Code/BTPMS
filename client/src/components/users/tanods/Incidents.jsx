@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { FaUserShield } from "react-icons/fa";
 import TanodPatrolSchedule from "./incidentComponents/TanodPatrolSchedule";
 import ReportIncident from "./incidentComponents/ReportIncident";
 import ViewReportedIncidents from "./incidentComponents/ViewReportedIncidents";
+import io from 'socket.io-client'; // Import socket.io-client
 
-const Incidents = ({ fetchCurrentPatrolArea }) => {
+const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setUserLocation as a prop
   const [patrols, setPatrols] = useState([]);
   const [upcomingPatrols, setUpcomingPatrols] = useState([]);
   const [incident, setIncident] = useState({ type: "", description: "", location: "" });
@@ -20,7 +21,14 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
   const [patrolLogs, setPatrolLogs] = useState(JSON.parse(localStorage.getItem("patrolLogs")) || []);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState(null);
+  const [editIndex, setEditIndex] = useState(null); // Track the index being edited
   const [hasStartedPatrol, setHasStartedPatrol] = useState(false);
+  const [currentScheduleId, setCurrentScheduleId] = useState(null); // Track the current schedule ID
+  const [isTracking, setIsTracking] = useState(JSON.parse(localStorage.getItem("isTracking")) || false); // Persist tracking state
+  const [userProfile, setUserProfile] = useState(null); // Define userProfile
+  const [watchId, setWatchId] = useState(null); // Add state to store watchId
+  const [intervalId, setIntervalId] = useState(null); // Add state to store intervalId
+  const socketRef = useRef(null); // Add socketRef
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem("token");
@@ -34,6 +42,7 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       localStorage.setItem("userId", response.data._id); // Store userId in localStorage
+      setUserProfile(response.data); // Set userProfile
       return response.data._id;
     } catch (error) {
       console.error("Error fetching user profile:", error);
@@ -84,6 +93,15 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
         return patrolStatus && patrolStatus.status === 'Started';
       });
       setHasStartedPatrol(startedPatrol);
+
+      if (startedPatrol) {
+        const currentSchedule = schedulesWithPatrolArea.find(schedule => {
+          const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === userId);
+          return patrolStatus && patrolStatus.status === 'Started';
+        });
+        setCurrentScheduleId(currentSchedule._id); // Set the current schedule ID
+
+      }
     } catch (error) {
       console.error('Error fetching upcoming patrols:', error);
       toast.error('Failed to load upcoming patrols.');
@@ -92,6 +110,11 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
 
   useEffect(() => {
     fetchUpcomingPatrols();
+    if (isTracking) {
+      fetchUserProfile().then(() => {
+        startTracking();
+      });
+    }
   }, []);
 
   const toggleDropdown = () => {
@@ -100,8 +123,18 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
 
   const savePatrolLog = () => {
     const timestamp = new Date().toLocaleString();
-    const logEntry = { report: currentReport, timestamp };
-    const updatedLogs = [...patrolLogs, logEntry];
+    const logEntry = { report: currentReport, timestamp, scheduleId: currentScheduleId };
+
+    let updatedLogs;
+    if (editIndex !== null) {
+      // Update the existing log entry
+      updatedLogs = patrolLogs.map((log, index) => (index === editIndex ? logEntry : log));
+      setEditIndex(null); // Reset the edit index
+    } else {
+      // Add a new log entry
+      updatedLogs = [...patrolLogs, logEntry];
+    }
+
     setPatrolLogs(updatedLogs);
     localStorage.setItem("patrolLogs", JSON.stringify(updatedLogs));
     localStorage.setItem("currentReport", "");
@@ -126,7 +159,7 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
   const editPatrolLog = (index) => {
     const log = patrolLogs[index];
     setCurrentReport(log.report);
-    confirmDeletePatrolLog(index);
+    setEditIndex(index); // Set the index being edited
   };
 
   const uploadPatrolLogs = async (scheduleId) => {
@@ -136,7 +169,7 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
     try {
       await axios.post(`${process.env.REACT_APP_API_URL}/auth/save-patrol-logs`, {
         scheduleId,
-        logs: patrolLogs,
+        logs: patrolLogs.filter(log => log.scheduleId === scheduleId), // Filter logs by schedule ID
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -150,8 +183,97 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
     }
   };
 
+  const startTracking = () => {
+    setIsTracking(true);
+    localStorage.setItem("isTracking", true); // Persist tracking state
+    if (navigator.geolocation) {
+      const id = navigator.geolocation.watchPosition(updateUserLocation, handleLocationError);
+      setWatchId(id); // Store the watchId
+
+      // Set an interval to update location every 5 seconds
+      const interval = setInterval(() => {
+        navigator.geolocation.getCurrentPosition(updateUserLocation, handleLocationError);
+      }, 5000);
+      setIntervalId(interval); // Store the intervalId
+
+      // Connect to WebSocket
+      const socketUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://barangaypatrol.lgu1.com'  // Production WebSocket URL
+        : 'http://localhost:5000';           // Development WebSocket URL
+      socketRef.current = io(socketUrl, { withCredentials: true });
+      socketRef.current.on('connect', () => {
+        console.log('Connected to WebSocket');
+      });
+      socketRef.current.on('disconnect', () => {
+        console.log('Disconnected from WebSocket');
+      });
+    }
+  };
+
+  const stopTracking = () => {
+    setIsTracking(false);
+    localStorage.setItem("isTracking", false); // Persist tracking state
+    if (navigator.geolocation && watchId !== null) {
+      navigator.geolocation.clearWatch(watchId); // Clear the watch using watchId
+      setWatchId(null); // Reset the watchId
+    }
+    if (intervalId !== null) {
+      clearInterval(intervalId); // Clear the interval
+      setIntervalId(null); // Reset the intervalId
+    }
+    setUserLocation(null); // Clear the user location
+
+    // Disconnect from WebSocket
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+    }
+  };
+
+  const updateUserLocation = async (position) => {
+    const { latitude, longitude } = position.coords;
+    console.log(`Current location: Latitude ${latitude}, Longitude ${longitude}`); // Log the current location
+    setUserLocation({ latitude, longitude }); // Update the user location state
+    if (userProfile) {
+      // Emit location update via WebSocket
+      console.log('Emitting location update:', { userId: userProfile._id, latitude, longitude });
+      socketRef.current.emit('locationUpdate', {
+        userId: userProfile._id,
+        latitude,
+        longitude,
+      });
+    } else {
+      console.error('User profile is not available.');
+    }
+  };
+
+  const handleLocationError = (error) => {
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        toast.error("User denied the request for Geolocation.");
+        break;
+      case error.POSITION_UNAVAILABLE:
+        toast.error("Location information is unavailable. Retrying...");
+        setTimeout(() => {
+          navigator.geolocation.getCurrentPosition(updateUserLocation, handleLocationError);
+        }, 5000);
+        break;
+      case error.TIMEOUT:
+        toast.error("The request to get user location timed out. Retrying...");
+        setTimeout(() => {
+          navigator.geolocation.getCurrentPosition(updateUserLocation, handleLocationError);
+        }, 5000);
+        break;
+      case error.UNKNOWN_ERROR:
+        toast.error("An unknown error occurred.");
+        break;
+      default:
+        toast.error("An error occurred while fetching location.");
+    }
+    console.error("Error getting user's location:", error);
+  };
+
   return (
-    <div className="p-4 max-w-4xl mx-auto bg-white bg-opacity-75 shadow-lg rounded-lg TopNav">
+    <div className="p-4 max-w-4xl mx-auto bg-white bg-opacity-75 shadow-lg rounded-lg TopNav border border-blue-600">
       <h1 onClick={toggleDropdown} className="text-2xl md:text-3xl font-bold text-center mb-4 cursor-pointer bg-blue-600 text-white py-2 px-4 rounded-lg shadow hover:bg-blue-700 transition">
         <FaUserShield className="inline-block mr-2" />
       </h1>
@@ -168,6 +290,15 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
             <button onClick={() => setShowReportedIncidents(true)} className="bg-yellow-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-yellow-700 transition">
               View Reported Incidents
             </button>
+            {isTracking ? (
+              <button onClick={stopTracking} className="bg-red-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-red-700 transition">
+                Stop Tracking
+              </button>
+            ) : (
+              <button onClick={startTracking} className="bg-green-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-green-700 transition">
+                Start Tracking
+              </button>
+            )}
           </div>
 
           {hasStartedPatrol && (
@@ -185,7 +316,7 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
             </>
           )}
 
-          {patrolLogs.length > 0 && (
+          {patrolLogs.filter(log => log.scheduleId === currentScheduleId).length > 0 && (
             <div className="mt-4">
               <h3 className="text-lg md:text-xl font-bold mb-2">Saved Patrol Logs</h3>
               <div className="overflow-y-auto" style={{ maxHeight: "200px" }}>
@@ -198,7 +329,7 @@ const Incidents = ({ fetchCurrentPatrolArea }) => {
                     </tr>
                   </thead>
                   <tbody className="text-black">
-                    {patrolLogs.map((log, index) => (
+                    {patrolLogs.filter(log => log.scheduleId === currentScheduleId).map((log, index) => (
                       <tr key={index}>
                         <td className="border px-4 py-2 text-sm md:text-base">{log.timestamp}</td>
                         <td className="border px-4 py-2 text-sm md:text-base">{log.report}</td>

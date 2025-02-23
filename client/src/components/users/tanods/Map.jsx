@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Polygon, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import axios from 'axios';
@@ -11,10 +11,10 @@ const TanodMap = () => {
   const [patrolAreas, setPatrolAreas] = useState([]);
   const [currentPatrolArea, setCurrentPatrolArea] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
-  const [patrolLogs, setPatrolLogs] = useState([]);
+  const [userLocation, setUserLocation] = useState(null); // Add state to store user location
   const mapRef = useRef(null);
   const userMarkerRef = useRef(null);
-  const start = [14.72661640119096, 121.03715880494757]; // Start point
+  const start = [14.72661640119096, 121.03715880494757];
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem('token');
@@ -28,6 +28,7 @@ const TanodMap = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       setUserProfile(response.data);
+      localStorage.setItem('userId', response.data._id); // Store userId in localStorage
     } catch (error) {
       console.error('Error fetching user profile:', error);
       toast.error('Failed to load user profile.');
@@ -95,27 +96,6 @@ const TanodMap = () => {
     }
   };
 
-  const savePatrolLogs = async () => {
-    const token = localStorage.getItem('token');
-    const scheduleId = currentPatrolArea._id; // Assuming currentPatrolArea has the schedule ID
-    if (!token || !scheduleId) return;
-
-    try {
-      await axios.post(`${process.env.REACT_APP_API_URL}/schedule/save-patrol-logs`, {
-        scheduleId,
-        logs: patrolLogs,
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      setPatrolLogs([]); // Clear the logs after saving
-      toast.success('Patrol logs saved successfully');
-    } catch (error) {
-      console.error('Error saving patrol logs:', error);
-      toast.error('Failed to save patrol logs');
-    }
-  };
-
   useEffect(() => {
     fetchUserProfile();
     fetchPatrolAreas();
@@ -123,13 +103,27 @@ const TanodMap = () => {
   }, []);
 
   useEffect(() => {
-    // Save patrol logs when the component unmounts or patrol area changes
-    return () => {
-      if (patrolLogs.length > 0) {
-        savePatrolLogs();
+    if (userLocation && mapRef.current) {
+      const { latitude, longitude } = userLocation;
+      const userMarker = L.marker([latitude, longitude], {
+        icon: L.divIcon({
+          className: 'custom-icon',
+          html: `<div style="background-image: url(${userProfile?.profilePicture || ''}); background-size: cover; border-radius: 50%; width: 40px; height: 40px; border: 2px solid ${currentPatrolArea?.color || 'red'};"></div>`,
+        }),
+      });
+
+      if (userMarkerRef.current) {
+        mapRef.current.removeLayer(userMarkerRef.current);
       }
-    };
-  }, [currentPatrolArea]);
+
+      userMarker.addTo(mapRef.current);
+      userMarkerRef.current = userMarker;
+      mapRef.current.setView([latitude, longitude], mapRef.current.getZoom()); // Update map view to the new location
+    } else if (!userLocation && userMarkerRef.current) {
+      mapRef.current.removeLayer(userMarkerRef.current);
+      userMarkerRef.current = null;
+    }
+  }, [userLocation, userProfile, currentPatrolArea]);
 
   const MapEvents = () => {
     const map = useMap();
@@ -164,37 +158,8 @@ const TanodMap = () => {
           layer.bindTooltip(currentPatrolArea.legend, { permanent: true, direction: 'center' });
           layer.addTo(map);
         }
-
-        const updateUserLocation = (position) => {
-          const { latitude, longitude } = position.coords;
-          // Clear existing user marker
-          if (userMarkerRef.current) {
-            map.removeLayer(userMarkerRef.current);
-          }
-          // Add a marker for the user's current location
-          if (userProfile && userProfile.profilePicture) {
-            const icon = L.divIcon({
-              html: `<div style="background-image: url(${userProfile.profilePicture}); background-size: cover; border: 2px solid white; border-radius: 50%; width: 50px; height: 50px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);"></div>`,
-              className: 'custom-marker'
-            });
-            userMarkerRef.current = L.marker([latitude, longitude], { icon }).addTo(map)
-              .openPopup();
-          }
-          map.setView([latitude, longitude], 13);
-        };
-
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(updateUserLocation);
-          const watchId = navigator.geolocation.watchPosition(updateUserLocation, (error) => {
-            console.error("Error getting user's location:", error);
-          });
-
-          return () => {
-            navigator.geolocation.clearWatch(watchId);
-          };
-        }
       }
-    }, [map, patrolAreas, currentPatrolArea, userProfile]);
+    }, [patrolAreas, currentPatrolArea]);
 
     return null;
   };
@@ -207,7 +172,7 @@ const TanodMap = () => {
         <MapEvents />
       </MapContainer>
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
-        <Incidents fetchCurrentPatrolArea={fetchCurrentPatrolArea} />
+        <Incidents fetchCurrentPatrolArea={fetchCurrentPatrolArea} setUserLocation={setUserLocation} />
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ const { validationResult } = require("express-validator");
 const { bucket } = require("../config/firebaseAdmin");
 const axios = require('axios');
 const fetch = require('node-fetch');
+const mongoose = require('mongoose');
 
 // Generate JWT token
 const generateToken = (id) =>
@@ -32,7 +33,7 @@ const verifyRecaptcha = async (token) => {
   return data.success;
 };
 
-// Modify the existing registerUser function
+// Register a new user
 exports.registerUser = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty())
@@ -288,7 +289,32 @@ exports.changePassword = async (req, res) => {
   }
 };
 
+exports.loginUser = async (req, res) => {
+  const { email, password } = req.body;
 
+  try {
+    // Find user by email
+    const user = await User.findOne({ email });
+
+    // Verify password
+    if (user && (await bcrypt.compare(password, user.password))) {
+      return res.json({
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        userType: user.userType,
+        token: generateToken(user._id),
+      });
+    }
+
+    // Invalid credentials
+    res.status(401).json({ message: "Invalid email or password" });
+  } catch (error) {
+    console.error("Login Error:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 // Function to add equipment
 exports.addEquipment = async (req, res) => {
@@ -534,6 +560,9 @@ exports.getAllSchedules = async (req, res) => {
       "tanods",
       "firstName lastName"
     ).populate("patrolArea", "legend"); // Populate patrolArea's legend field
+    if (!schedules.length)
+      return res.status(404).json({ message: "No schedules found" });
+
     res.status(200).json(schedules);
   } catch (error) {
     console.error("Error fetching schedules:", error.message);
@@ -764,6 +793,7 @@ exports.savePatrolLogs = async (req, res) => {
         userId: req.user.id,
         log: log.report,
         timestamp: new Date(log.timestamp),
+        scheduleId: scheduleId, // Ensure the schedule ID is saved with the log
       });
     });
 
@@ -772,5 +802,26 @@ exports.savePatrolLogs = async (req, res) => {
   } catch (error) {
     console.error('Error saving patrol logs:', error);
     res.status(500).json({ message: 'Failed to save patrol logs' });
+  }
+};
+
+// Fetch patrol logs for a specific user and schedule
+exports.getPatrolLogs = async (req, res) => {
+  try {
+    const { userId, scheduleId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(scheduleId)) {
+      return res.status(400).json({ message: 'Invalid schedule ID' });
+    }
+    const schedule = await Schedule.findById(scheduleId);
+
+    if (!schedule) {
+      return res.status(404).json({ message: 'Schedule not found' });
+    }
+
+    const patrolLogs = schedule.patrolLogs.filter(log => log.userId.toString() === userId);
+    res.status(200).json(patrolLogs);
+  } catch (error) {
+    console.error('Error fetching patrol logs:', error);
+    res.status(500).json({ message: 'Failed to fetch patrol logs.' });
   }
 };

@@ -1,8 +1,11 @@
-import React from "react";
+import React, { useRef } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import io from 'socket.io-client'; // Import socket.io-client
 
 const TanodPatrolSchedule = ({ todayPatrols, setShowTodaySchedule, fetchUpcomingPatrols, fetchCurrentPatrolArea, uploadPatrolLogs }) => {
+  const socketRef = useRef(null);
+
   const startPatrol = async (patrolId, startTime) => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -29,6 +32,28 @@ const TanodPatrolSchedule = ({ todayPatrols, setShowTodaySchedule, fetchUpcoming
       toast.success("Patrol has started.");
       fetchUpcomingPatrols(); // Refresh the patrols list
       fetchCurrentPatrolArea(); // Update the map with the current patrol area
+
+      // Connect to WebSocket when patrol starts
+      const userId = localStorage.getItem("userId");
+      socketRef.current = io(`${process.env.REACT_APP_API_URL}/namespace`, {
+        query: { userId },
+      });
+
+      socketRef.current.on('connect', () => {
+        console.log('Connected to WebSocket');
+      });
+
+      socketRef.current.on('disconnect', () => {
+        console.log('Disconnected from WebSocket');
+      });
+
+      socketRef.current.on('connect_error', (error) => {
+        console.error('WebSocket connection error:', error);
+      });
+
+      socketRef.current.on('locationUpdate', (location) => {
+        console.log('Location update:', location);
+      });
     } catch (error) {
       console.error("Error starting patrol:", error);
       toast.error("Failed to start patrol.");
@@ -99,6 +124,11 @@ const TanodPatrolSchedule = ({ todayPatrols, setShowTodaySchedule, fetchUpcoming
 
       // Clear local patrol logs
       localStorage.removeItem("patrolLogs");
+
+      // Disconnect from WebSocket
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     } catch (error) {
       console.error("Error ending patrol:", error);
       toast.error("Failed to end patrol.");

@@ -5,7 +5,6 @@ import { GrResources } from "react-icons/gr";
 export const buttonData = [
   { label: "DashBoard", icon: <RiDashboardLine /> },
   { label: "Patrol Map", icon: <RiRoadMapLine /> },
-  { label: "Patrol", icon: <RiAlertLine /> },
   { label: "Schedule", icon: <RiCalendarScheduleLine /> },
   { label: "Performance", icon: <RiUserStarLine /> },
   { label: "Equipments", icon: <RiToolsLine /> },
@@ -20,6 +19,7 @@ export const buttonData2 = [
     export const buttonData3 = [
       { label: "Admin Dashboard", icon: <RiDashboardLine /> },
       { label: "Manage Tanod", icon: <FaPeopleGroup /> },
-      { label: "Manage Patrol Schedules", icon: <RiRoadMapLine /> },
+      { label: "Manage Patrol Schedules", icon: <RiCalendarScheduleLine /> },
+      { label: "Patrol Tracking", icon: <RiRoadMapLine /> },
       { label: "Resources", icon: <GrResources /> },
       ];

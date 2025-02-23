@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http');
+const { initializeWebSocket } = require('./websocket'); // Import WebSocket initialization function
 const connectDB = require('./config/db');
 const dotenv = require('dotenv');
 const cors = require('cors');
@@ -10,6 +12,8 @@ const polygonRoutes = require('./routes/polygonRoutes');
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
+const server = http.createServer(app);
+initializeWebSocket(server); // Initialize WebSocket server
 connectDB(); // Initialize MongoDB or other DB connection
 
 // Firebase Admin Setup
@@ -26,6 +30,12 @@ admin.initializeApp({
 
 // Middleware
 app.use(express.json());
+
+// Set Permissions-Policy header
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', 'geolocation=(self), microphone=()');
+  next();
+});
 
 // Enable CORS depending on environment
 app.use(cors({
@@ -74,6 +84,7 @@ app.use('/api/tanods', tanodRatingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
 
+
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'client/build')));
@@ -92,7 +103,7 @@ app.use((err, req, res, next) => {
 
 // Start the server (for local or production)
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });
 
