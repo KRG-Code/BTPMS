@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import EmergencyReportForm from "./EmergencyReportForm"; // Import the new component
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const ReportIncidents = () => {
   const [formData, setFormData] = useState({
@@ -11,6 +14,7 @@ const ReportIncidents = () => {
   });
 
   const [message, setMessage] = useState("");
+  const [showEmergencyForm, setShowEmergencyForm] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -82,6 +86,14 @@ const ReportIncidents = () => {
     }));
   };
 
+  const handleEmergencyClick = () => {
+    setShowEmergencyForm(true);
+  };
+
+  const handleEmergencyClose = () => {
+    setShowEmergencyForm(false);
+  };
+
   return (
     <div className="p-8 min-h-screen">
       <h1 className="text-4xl font-bold  mb-8 text-center">
@@ -97,7 +109,7 @@ const ReportIncidents = () => {
               name="type"
               value={formData.type}
               onChange={handleChange}
-              className="w-full p-3 border rounded-md"
+              className="w-full p-3 border rounded-md text-black"
               required
             >
               <option value="">Select Type</option>
@@ -108,6 +120,16 @@ const ReportIncidents = () => {
               <option value="Fire">Fire</option>
               <option value="Other">Other</option>
             </select>
+            <button
+              type="button"
+              onClick={handleEmergencyClick}
+              className="mt-2 bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600 w-full"
+            >
+              Emergency Report
+            </button>
+            <p className="mt-2 text-red-500 text-sm">
+              Use this button to report an emergency situation that requires immediate attention.
+            </p>
           </div>
 
           <div className="mb-4">
@@ -119,7 +141,7 @@ const ReportIncidents = () => {
               name="location"
               value={formData.location}
               onChange={handleChange}
-              className="w-full p-3 border rounded-md"
+              className="w-full p-3 border rounded-md text-black"
               placeholder="Enter the location"
               required
             />
@@ -140,7 +162,7 @@ const ReportIncidents = () => {
               name="description"
               value={formData.description}
               onChange={handleChange}
-              className="w-full p-3 border rounded-md"
+              className="w-full p-3 border rounded-md text-black"
               rows="4"
               placeholder="Provide a detailed description of the incident"
               required
@@ -156,7 +178,7 @@ const ReportIncidents = () => {
               name="date"
               value={formData.date}
               onChange={handleChange}
-              className="w-full p-3 border rounded-md"
+              className="w-full p-3 border rounded-md text-black"
               required
             />
             <button
@@ -177,7 +199,7 @@ const ReportIncidents = () => {
               name="time"
               value={formData.time}
               onChange={handleChange}
-              className="w-full p-3 border rounded-md"
+              className="w-full p-3 border rounded-md text-black"
               required
             />
           </div>
@@ -211,6 +233,10 @@ const ReportIncidents = () => {
           )}
         </form>
       </div>
+      {showEmergencyForm && (
+        <EmergencyReportForm onClose={handleEmergencyClose} />
+      )}
+      <ToastContainer />
     </div>
   );
 };
