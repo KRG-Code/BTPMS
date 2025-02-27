@@ -9,7 +9,6 @@ import Loading from "./utils/Loading";
 const SelectionPage = lazy(() => import("./pages/SelectionPage"));
 const SignupPage = lazy(() => import("./pages/Signup"));
 const LoginTanod = lazy(() => import("./pages/LoginTanod"));
-const LoginResident = lazy(() => import("./pages/ResidentLogin"));
 
 //Admin routes
 const AdminDashboard = lazy(() => import("./components/users/admin/AdminDashboard"));
@@ -41,7 +40,6 @@ function App() {
               {/* Public Routes */}
               <Route path="/" element={<SelectionPage />} />
               <Route path="/tanod-login" element={<LoginTanod />} />
-              <Route path="/resident-login" element={<LoginResident />} />
               <Route path="/signup" element={<SignupPage />} />
               <Route element={<Layout />}>
               <Route path="/myaccount" element={<MyAccount />}/>
@@ -74,15 +72,15 @@ function App() {
               <Route element={<Layout />}>
                 <Route
                   path="/Home"
-                  element={<ProtectedRoute userTypeAllowed={["resident"]}><Home /></ProtectedRoute>}
+                  element={<Home />}
                 />
                 <Route
-                  path="/Ratetanod"
-                  element={<ProtectedRoute userTypeAllowed={["resident"]}><ResidentRating /></ProtectedRoute>}
+                  path="/Tanodevaluation"
+                  element={<ResidentRating />}
                 />
                 <Route
                   path="/Reportincidents"
-                  element={<ProtectedRoute userTypeAllowed={["resident"]}><ReportIncident /></ProtectedRoute>}
+                  element={<ReportIncident />}
                 />
               </Route>
               

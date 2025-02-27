@@ -83,7 +83,7 @@ export default function Perform() {
             setLoadingRatings(true);
 
             try {
-                const response = await fetch(`${process.env.REACT_APP_API_URL}/tanods/${tanodId}/ratings`, {
+                const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/${tanodId}/ratings`, {
                     method: "GET",
                     headers: {
                         Authorization: `Bearer ${token}`,

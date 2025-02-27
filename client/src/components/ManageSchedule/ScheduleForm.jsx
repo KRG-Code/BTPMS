@@ -3,6 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import TanodModal from "./TanodModal";
+import { FaUserCircle } from 'react-icons/fa';
 
 const ScheduleForm = ({
   isEditing,
@@ -162,14 +163,15 @@ const ScheduleForm = ({
               const tanod = tanods.find((t) => t._id === tanodId);
               return (
                 <li key={tanodId} className="flex items-center mb-2">
-                  <img
-                    src={
-                      tanod?.profilePicture ||
-                      "https://via.placeholder.com/50"
-                    }
-                    alt={tanod?.firstName}
-                    className="w-8 h-8 rounded-full mr-2"
-                  />
+                  {tanod?.profilePicture ? (
+                    <img
+                      src={tanod?.profilePicture}
+                      alt={tanod?.firstName}
+                      className="w-8 h-8 rounded-full mr-2"
+                    />
+                  ) : (
+                    <FaUserCircle className="w-8 h-8 rounded-full mr-2 text-gray-300" />
+                  )}
                   {tanod?.firstName} {tanod?.lastName}
                 </li>
               );

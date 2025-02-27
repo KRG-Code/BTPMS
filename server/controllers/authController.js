@@ -33,6 +33,12 @@ const verifyRecaptcha = async (token) => {
   return data.success;
 };
 
+// Generate public token for residents
+exports.generatePublicToken = (req, res) => {
+  const token = jwt.sign({ userType: 'resident' }, process.env.JWT_SECRET, { expiresIn: '30d' });
+  res.json({ token });
+};
+
 // Register a new user
 exports.registerUser = async (req, res) => {
   const errors = validationResult(req);
@@ -421,17 +427,21 @@ exports.rateTanod = async (req, res) => {
     // Create a new rating if `ratingId` is not provided
     const newRating = new TanodRating({
       tanodId,
-      userId: req.user._id,
       rating,
       comment,
     });
+
+    // Only set userId if available
+    if (req.user && req.user._id) {
+      newRating.userId = req.user._id;
+    }
 
     await newRating.save();
     return res
       .status(201)
       .json({ message: "Rating submitted successfully", newRating });
   } catch (error) {
-    console.error("Error saving rating:", error);
+    console.error("Error saving rating:", error); // Add logging here
     res.status(500).json({ message: "Error submitting rating" });
   }
 };
@@ -500,11 +510,13 @@ exports.getTanodRatings = async (req, res) => {
       ratingCounts[r.rating - 1]++;
     });
 
-    // Map the ratings to include userId and comment
+    // Map the ratings to include userId, comment, and createdAt
     const commentsWithUser = ratings.map((r) => ({
-      userId: r.userId._id, // Include the user's ID
-      fullName: `${r.userId.firstName} ${r.userId.lastName}`, // Construct full name
+      userId: r.userId ? r.userId._id : null, // Include the user's ID if available
+      fullName: r.userId ? `${r.userId.firstName} ${r.userId.lastName}` : "Anonymous", // Construct full name if available
       comment: r.comment, // Comment
+      rating: r.rating, // Rating
+      createdAt: r.createdAt, // Created date
     }));
 
     res.json({
@@ -827,5 +839,27 @@ exports.getPatrolLogs = async (req, res) => {
   } catch (error) {
     console.error('Error fetching patrol logs:', error);
     res.status(500).json({ message: 'Failed to fetch patrol logs.' });
+  }
+};
+
+// Fetch unread notifications for the logged-in user
+exports.getUnreadNotifications = async (req, res) => {
+  try {
+    const notifications = await Notification.find({ userId: req.user._id, read: false });
+    res.status(200).json(notifications);
+  } catch (error) {
+    console.error('Error fetching unread notifications:', error);
+    res.status(500).json({ message: 'Failed to fetch unread notifications.' });
+  }
+};
+
+// Mark notifications as read
+exports.markNotificationsAsRead = async (req, res) => {
+  try {
+    await Notification.updateMany({ userId: req.user._id, read: false }, { read: true });
+    res.status(200).json({ message: 'Notifications marked as read.' });
+  } catch (error) {
+    console.error('Error marking notifications as read:', error);
+    res.status(500).json({ message: 'Failed to mark notifications as read.' });
   }
 };

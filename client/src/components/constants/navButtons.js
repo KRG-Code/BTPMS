@@ -13,7 +13,7 @@ export const buttonData = [
 export const buttonData2 = [
     { label: "Home", icon: <RiDashboardLine /> },
     { label: "Report Incidents", icon: <RiAlertLine /> },
-    { label: "Rate Tanod", icon: <RiUserStarLine /> },
+    { label: "Tanod Evaluation", icon: <RiUserStarLine /> },
     ];
 
     export const buttonData3 = [

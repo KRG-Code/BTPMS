@@ -13,26 +13,25 @@ exports.getNotifications = async (req, res) => {
 
 // Get unread notifications for the current user
 exports.getUnreadNotifications = async (req, res) => {
-    try {
-      const unreadNotifications = await Notification.find({ userId: req.user.id, read: false });
-      const hasUnread = unreadNotifications.length > 0;
-      res.status(200).json({ hasUnread, notifications: unreadNotifications });
-    } catch (error) {
-      console.error('Error fetching unread notifications:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  };
-  
-  // Mark all notifications as read for the current user
-  exports.markNotificationsAsRead = async (req, res) => {
-    try {
-      await Notification.updateMany({ userId: req.user.id, read: false }, { read: true });
-      res.status(200).json({ message: 'Notifications marked as read' });
-    } catch (error) {
-      console.error('Error marking notifications as read:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
-  };
+  try {
+    const unreadNotifications = await Notification.find({ userId: req.user._id, read: false });
+    res.status(200).json({ unreadNotifications });
+  } catch (error) {
+    console.error('Error fetching unread notifications:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Mark all notifications as read for the current user
+exports.markNotificationsAsRead = async (req, res) => {
+  try {
+    await Notification.updateMany({ userId: req.user._id, read: false }, { read: true });
+    res.status(200).json({ message: 'Notifications marked as read' });
+  } catch (error) {
+    console.error('Error marking notifications as read:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
 // Delete a notification
 exports.deleteNotification = async (req, res) => {
@@ -52,6 +51,7 @@ exports.createNotification = async (userId, message) => {
     const newNotification = new Notification({
       userId,
       message,
+      read: false, // Set read status to false when creating a new notification
     });
     await newNotification.save();
   } catch (error) {

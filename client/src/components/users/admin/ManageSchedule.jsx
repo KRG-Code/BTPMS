@@ -5,6 +5,7 @@ import ScheduleForm from "../../ManageSchedule/ScheduleForm";
 import ScheduleList from "../../ManageSchedule/ScheduleList";
 import ScheduleMembers from "../../ManageSchedule/ScheduleMembers";
 import TanodModal from "../../ManageSchedule/TanodModal";
+import { FaUserCircle } from 'react-icons/fa';
 import {
   fetchTanods,
   fetchSchedules,

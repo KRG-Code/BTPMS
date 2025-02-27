@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { RiUser3Line, RiMenuLine, RiMessage3Line, RiNotification3Line } from "react-icons/ri";
 import ThemeToggle from "../forms/ThemeToggle";
@@ -12,13 +12,15 @@ export default function TopNav() {
   const [showNotificationList, setShowNotificationList] = useState(false);
   const [showMessageList, setShowMessageList] = useState(false);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [userType, setUserType] = useState(null);
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
   const messageRef = useRef(null);
   const navigate = useNavigate();
-  const { toggleSideNav } = useCombinedContext();
+  const { toggleSideNav, logout } = useCombinedContext();
 
-  const handleClickOutside = (event) => {
+  const handleClickOutside = useCallback((event) => {
     if (
       dropdownRef.current && !dropdownRef.current.contains(event.target) &&
       notificationRef.current && !notificationRef.current.contains(event.target) &&
@@ -26,41 +28,72 @@ export default function TopNav() {
     ) {
       closeAllDropdowns();
     }
-  };
+  }, []);
 
   useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("user"));
-    if (storedUser) {
-      fetch(`${process.env.REACT_APP_API_URL}/users/${storedUser.id}`)
-        .then((response) => response.json())
-        .then((data) => {
-          if (data.profilePicture) {
-            setProfilePicture(data.profilePicture);
-          }
-        })
-        .catch((error) => console.error("Error fetching user data:", error));
-    }
+    const fetchUserProfile = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        navigate("/login");
+        return;
+      }
 
+      try {
+        const response = await fetch(
+          `${process.env.REACT_APP_API_URL}/auth/me`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data = await response.json();
+        if (response.ok) {
+          setProfilePicture(data.profilePicture || null);
+          setUserType(data.userType || null);
+          setHasUnreadNotifications(data.hasUnreadNotifications || false);
+        } else {
+          console.error("Failed to load user data");
+        }
+      } catch (error) {
+        console.error("An error occurred while fetching user data:", error);
+      }
+    };
+
+    fetchUserProfile();
     checkUnreadNotifications();
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [handleClickOutside, navigate]);
 
   const checkUnreadNotifications = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/notifications/unread`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/notifications/unread`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Network response was not ok: ${response.statusText}`);
+      }
+
       const data = await response.json();
-      setHasUnreadNotifications(data.hasUnread);
+      setNotifications(data.unreadNotifications);
+      setHasUnreadNotifications(data.unreadNotifications.length > 0);
     } catch (error) {
-      console.error("Error checking unread notifications:", error);
+      console.error("Error fetching unread notifications:", error);
     }
   };
 
@@ -73,7 +106,7 @@ export default function TopNav() {
   const toggleNotificationsDropdown = () => {
     setShowNotificationList(!showNotificationList);
     setShowMessageList(false);
-    if (showNotificationList) markNotificationsAsRead();
+    if (!showNotificationList) markNotificationsAsRead();
   };
 
   const markNotificationsAsRead = async () => {
@@ -97,9 +130,13 @@ export default function TopNav() {
     setShowNotificationList(false);
   };
 
+  const handleBackButton = () => {
+    localStorage.clear();
+    navigate("/");
+  };
+
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    logout(); // Use the logout function from the context
     closeAllDropdowns();
     navigate("/");
   };
@@ -112,6 +149,8 @@ export default function TopNav() {
   const navItems = [
     { id: 1, component: <ThemeToggle />, label: "Theme Toggle" },
   ];
+
+  const storedUserType = localStorage.getItem("userType");
 
   return (
     <aside className="rounded-2xl TopNav relative">
@@ -126,44 +165,56 @@ export default function TopNav() {
             </span>
           ))}
 
-          <div className="relative" ref={messageRef}>
-            <button onClick={toggleMessagesDropdown} className="text-2xl p-1" title="Messages">
-              <RiMessage3Line />
+          {storedUserType === "resident" && (
+            <button onClick={handleBackButton} className="text-2xl p-1" title="Back">
+              Back
             </button>
-            {showMessageList && <MessageList />}
-          </div>
+          )}
 
-          <div className="relative" ref={notificationRef}>
-            <button onClick={toggleNotificationsDropdown} className="text-2xl p-1 relative" title="Notifications">
-              <RiNotification3Line />
-              {hasUnreadNotifications && (
-                <span className="absolute top-0 right-0 inline-block w-3 h-3 bg-red-500 rounded-full pulse"></span>
-              )}
-            </button>
-            {showNotificationList && <NotificationList onClose={toggleNotificationsDropdown} />}
-          </div>
-
-          <div className="relative" ref={dropdownRef}>
-            <button onClick={toggleDropdown} className="text-2xl border-2 rounded-full p-1">
-              {profilePicture ? (
-                <img src={profilePicture} alt="Profile" className="rounded-full w-8 h-8 object-cover" />
-              ) : (
-                <RiUser3Line />
-              )}
-            </button>
-            {isDropdownOpen && (
-              <div className="absolute right-0 mt-6 w-48 TopNav shadow-lg rounded-lg z-50 hover:cursor-pointer text-center">
-                <ul className="py-2 ml-5 mr-5 my-5">
-                  <li className="px-4 py-2 hover:bg-blue5 rounded-3xl" onClick={handleMyAccount}>
-                    My Account
-                  </li>
-                  <li className="px-4 py-2 hover:bg-blue5 rounded-3xl" onClick={handleLogout}>
-                    Log Out
-                  </li>
-                </ul>
+          {storedUserType !== "resident" && (
+            <>
+              <div className="relative" ref={messageRef}>
+                <button onClick={toggleMessagesDropdown} className="text-2xl p-1" title="Messages">
+                  <RiMessage3Line />
+                </button>
+                {showMessageList && <MessageList />}
               </div>
-            )}
-          </div>
+
+              <div className="relative" ref={notificationRef}>
+                <button onClick={toggleNotificationsDropdown} className="text-2xl p-1 relative" title="Notifications">
+                  <RiNotification3Line />
+                  {hasUnreadNotifications && notifications.length > 0 && (
+                    <span className="absolute top-0 right-0 inline-block w-3 h-3 bg-red-500 rounded-full pulse"></span>
+                  )}
+                </button>
+                {showNotificationList && <NotificationList onClose={toggleNotificationsDropdown} />}
+              </div>
+            </>
+          )}
+
+          {storedUserType !== "resident" && (
+            <div className="relative" ref={dropdownRef}>
+              <button onClick={toggleDropdown} className="border-2 rounded-full">
+                {profilePicture ? (
+                  <img src={profilePicture} alt="Profile" className="rounded-full w-12 h-12 object-cover" />
+                ) : (
+                  <RiUser3Line />
+                )}
+              </button>
+              {isDropdownOpen && (
+                <div className="absolute right-0 mt-6 w-48 TopNav shadow-lg rounded-lg z-50 hover:cursor-pointer text-center">
+                  <ul className="py-2 ml-5 mr-5 my-5">
+                    <li className="px-4 py-2 hover:bg-blue5 rounded-3xl" onClick={handleMyAccount}>
+                      My Account
+                    </li>
+                    <li className="px-4 py-2 hover:bg-blue5 rounded-3xl" onClick={handleLogout}>
+                      Log Out
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
     </aside>

@@ -1,19 +1,19 @@
 import React, { useState } from "react";
 import EmergencyReportForm from "./EmergencyReportForm"; // Import the new component
-import { ToastContainer } from "react-toastify";
+import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const ReportIncidents = () => {
   const [formData, setFormData] = useState({
     type: "",
     location: "",
+    locationNote: "", // Added location note state
     description: "",
     date: "",
     time: "",
-    file: null, // Added file state
+    incidentClassification: "Normal Incident", // Added incident classification
   });
 
-  const [message, setMessage] = useState("");
   const [showEmergencyForm, setShowEmergencyForm] = useState(false);
 
   const handleChange = (e) => {
@@ -24,38 +24,65 @@ const ReportIncidents = () => {
     });
   };
 
-  const handleFileChange = (e) => {
-    setFormData({
-      ...formData,
-      file: e.target.files[0], // Set the selected file
-    });
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Here you can call the backend API to submit the form data
-    // Example API call (you can replace this with your actual API):
-    /*
-    const formDataToSend = new FormData();
-    for (const key in formData) {
-      formDataToSend.append(key, formData[key]);
-    }
+    toast.info(
+      <div>
+        <p>Are you sure you want to submit this report?</p>
+        <button
+          onClick={() => {
+            submitReport();
+            toast.dismiss();
+          }}
+          className="bg-green-500 text-white font-bold py-1 px-2 rounded-md hover:bg-green-600"
+        >
+          Yes
+        </button>
+        <button
+          onClick={() => toast.dismiss()}
+          className="bg-red-500 text-white font-bold py-1 px-2 rounded-md hover:bg-red-600 ml-2"
+        >
+          No
+        </button>
+      </div>,
+      { 
+        autoClose: false,
+        closeOnClick: false,
+        draggable: false,
+      }
+    );
+  };
 
-    fetch("/api/report-incident", {
-      method: "POST",
-      body: formDataToSend,
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        setMessage("Incident reported successfully!");
-      })
-      .catch((error) => {
-        setMessage("An error occurred. Please try again.");
+  const submitReport = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/incident-reports`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(formData),
       });
-    */
 
-    setMessage("Incident reported successfully! (Dummy)");
+      if (response.ok) {
+        toast.success("Incident reported successfully!");
+        setFormData({
+          type: "",
+          location: "",
+          locationNote: "",
+          description: "",
+          date: "",
+          time: "",
+          incidentClassification: "Normal Incident",
+        });
+      } else {
+        const errorData = await response.json();
+        toast.error(`Error: ${errorData.message}`);
+      }
+    } catch (error) {
+      toast.error("An error occurred. Please try again.");
+    }
   };
 
   const setCurrentLocation = () => {
@@ -68,10 +95,10 @@ const ReportIncidents = () => {
         }));
       }, (error) => {
         console.error("Error getting location:", error);
-        setMessage("Could not get current location.");
+        toast.error("Could not get current location.");
       });
     } else {
-      setMessage("Geolocation is not supported by this browser.");
+      toast.error("Geolocation is not supported by this browser.");
     }
   };
 
@@ -101,6 +128,20 @@ const ReportIncidents = () => {
       </h1>
       <div className="max-w-lg mx-auto bg-white p-6 rounded-lg shadow-md TopNav">
         <form onSubmit={handleSubmit}>
+        <button
+              type="button"
+              onClick={handleEmergencyClick}
+              className="mt-2 bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600 w-full"
+            >
+              Emergency Report
+            </button>
+        <div className="relative overflow-hidden h-6 mt-2">
+              <p className="absolute text-red-500 text-sm flex items-center animate-slide-infinite whitespace-nowrap">
+                <span role="img" aria-label="warning" className="mr-2">⚠️</span>
+                Use this button to report an emergency situation that requires immediate attention.
+                If the situation does not require immediate action, please use the form below.
+              </p>
+            </div>
           <div className="mb-4">
             <label htmlFor="type" className="block font-bold mb-2">
               Incident Type
@@ -115,21 +156,12 @@ const ReportIncidents = () => {
               <option value="">Select Type</option>
               <option value="Robbery">Robbery</option>
               <option value="Vandalism">Vandalism</option>
-              <option value="Assault">Assault</option>
               <option value="Noise Disturbance">Noise Disturbance</option>
-              <option value="Fire">Fire</option>
+              <option value="Public Intoxication">Public Intoxication</option>
+              <option value="Traffic Violation">Traffic Violation</option>
+              <option value="Trespassing">Trespassing</option>
               <option value="Other">Other</option>
             </select>
-            <button
-              type="button"
-              onClick={handleEmergencyClick}
-              className="mt-2 bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600 w-full"
-            >
-              Emergency Report
-            </button>
-            <p className="mt-2 text-red-500 text-sm">
-              Use this button to report an emergency situation that requires immediate attention.
-            </p>
           </div>
 
           <div className="mb-4">
@@ -152,6 +184,20 @@ const ReportIncidents = () => {
             >
               Use Current Location
             </button>
+          </div>
+
+          <div className="mb-4">
+            <label htmlFor="locationNote" className="block font-bold mb-2">
+              Location Note
+            </label>
+            <textarea
+              name="locationNote"
+              value={formData.locationNote}
+              onChange={handleChange}
+              className="w-full p-3 border rounded-md text-black"
+              rows="2"
+              placeholder="Provide additional details to help find the location"
+            ></textarea>
           </div>
 
           <div className="mb-4">
@@ -204,19 +250,6 @@ const ReportIncidents = () => {
             />
           </div>
 
-          <div className="mb-4">
-            <label htmlFor="file" className="block font-bold mb-2">
-              Upload Picture/Document
-            </label>
-            <input
-              type="file"
-              name="file"
-              onChange={handleFileChange}
-              className="w-full p-3 border rounded-md"
-              accept="image/*,.pdf,.doc,.docx" // Accepts images and document files
-            />
-          </div>
-
           <div className="flex justify-center">
             <button
               type="submit"
@@ -225,18 +258,28 @@ const ReportIncidents = () => {
               Submit Report
             </button>
           </div>
-
-          {message && (
-            <p className="mt-4 text-center text-green-500 font-semibold">
-              {message}
-            </p>
-          )}
         </form>
       </div>
       {showEmergencyForm && (
         <EmergencyReportForm onClose={handleEmergencyClose} />
       )}
       <ToastContainer />
+      <style>
+        {`
+          @keyframes slide-infinite {
+            0% {
+              transform: translateX(100%);
+            }
+            100% {
+              transform: translateX(-100%);
+            }
+          }
+
+          .animate-slide-infinite {
+            animation: slide-infinite 10s linear infinite;
+          }
+        `}
+      </style>
     </div>
   );
 };

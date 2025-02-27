@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { FaEye, FaEyeSlash } from "react-icons/fa"; // Import icons
+import { FaEye, FaEyeSlash, FaUserCircle } from "react-icons/fa"; // Import icons
 
 export default function TanodPersonels() {
   const [tanods, setTanods] = useState([]);
@@ -246,13 +246,15 @@ export default function TanodPersonels() {
               tanods.map((tanod) => (
                 <tr key={tanod._id} className="text-center">
                   <td className="py-2 px-4 border">
-                    <img
-                      src={
-                        tanod.profilePicture || "https://via.placeholder.com/50"
-                      }
-                      alt={tanod.firstName}
-                      className="w-10 h-10 rounded-full mx-auto"
-                    />
+                    {tanod.profilePicture ? (
+                      <img
+                        src={tanod.profilePicture}
+                        alt={tanod.firstName}
+                        className="w-10 h-10 rounded-full mx-auto"
+                      />
+                    ) : (
+                      <FaUserCircle className="w-10 h-10 rounded-full mx-auto text-gray-300" />
+                    )}
                   </td>
                   {/* Combine firstName, middleName, lastName for Full Name */}
                   <td className="py-2 px-4 border">

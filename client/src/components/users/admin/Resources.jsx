@@ -4,6 +4,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
+import { FaUserCircle } from "react-icons/fa"; // Import FaUserCircle
 
 dayjs.extend(customParseFormat);
 
@@ -350,13 +351,15 @@ export default function TanodPersonels() {
               tanods.map((tanod) => (
                 <tr key={tanod._id} className="text-center">
                   <td className="py-2 px-4 border">
-                    <img
-                      src={
-                        tanod.profilePicture || "https://via.placeholder.com/50"
-                      }
-                      alt={tanod.firstName}
-                      className="w-10 h-10 rounded-full mx-auto"
-                    />
+                    {tanod.profilePicture ? (
+                      <img
+                        src={tanod.profilePicture}
+                        alt={tanod.firstName}
+                        className="w-10 h-10 rounded-full mx-auto"
+                      />
+                    ) : (
+                      <FaUserCircle className="w-10 h-10 rounded-full mx-auto text-gray-300" />
+                    )}
                   </td>
                   <td className="py-2 px-4 border">
                     {`${tanod.firstName} ${tanod.middleName || ""} ${

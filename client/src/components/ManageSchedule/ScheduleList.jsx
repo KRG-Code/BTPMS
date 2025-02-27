@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { FaUserCircle } from 'react-icons/fa';
 
 const ScheduleList = ({
   schedules,

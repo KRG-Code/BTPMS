@@ -1,4 +1,3 @@
-
 // models/TanodRating.js
 const mongoose = require('mongoose');
 
@@ -11,7 +10,7 @@ const tanodRatingSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User', // User who rated
-    required: true,
+    required: false, // Make this field optional
   },
   rating: {
     type: Number,

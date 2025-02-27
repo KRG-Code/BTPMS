@@ -39,7 +39,7 @@ export const CombinedProvider = ({ children }) => {
         setUserType(null);
         localStorage.removeItem('userType'); // Clear userType if session expired
         toast.error('Session expired. Please log in again.');
-        navigate('/login'); // Redirect to login if session expired
+        navigate('/'); // Redirect to login if session expired
       }
     } catch (error) {
       toast.error('Error fetching user data');

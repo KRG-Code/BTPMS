@@ -9,6 +9,7 @@ const admin = require('firebase-admin');
 const notificationRoutes = require('./routes/notificationRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const polygonRoutes = require('./routes/polygonRoutes');
+const incidentReportRoutes = require('./routes/incidentReportRoutes');
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
@@ -84,6 +85,8 @@ app.use('/api/tanods', tanodRatingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
 
+// Incident Report Routes
+app.use('/api/incident-reports', incidentReportRoutes);
 
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {

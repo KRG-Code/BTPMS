@@ -30,7 +30,10 @@ const {
   endPatrol,
   updateScheduleStatus,
   savePatrolLogs,
-  getPatrolLogs, // Import the getPatrolLogs function
+  getPatrolLogs,
+  generatePublicToken,
+  getUnreadNotifications, // Import the getUnreadNotifications function
+  markNotificationsAsRead, // Import the markNotificationsAsRead function
 } = require('../controllers/authController');
 
 const { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem } = require("../controllers/inventoryController");
@@ -68,6 +71,13 @@ router.get('/users/:userId', protect, getUserProfile);       // Get user profile
 router.delete('/ratings/:ratingId', protect, deleteRating); // Delete a rating
 router.delete('/users/:userId', protect, deleteUser);       // Delete user
 
+router.get('/myratings', getUserRatings);         // Current user's ratings
+router.get('/user', getAllUserProfiles);
+router.get('/:tanodId/rating', getTanodRatings);    
+
+router.post('/tanods/:tanodId/rate', rateTanod); // Ensure this route is defined
+router.post('/auth/tanods/:tanodId/rate', protect, rateTanod); // Ensure this route is defined
+
 // Equipment Routes
 router.get('/equipments', protect, getEquipments); // Get all borrowed equipments
 router.post('/equipments', protect, addEquipment); // Borrow equipment
@@ -95,5 +105,13 @@ router.put('/schedule/:scheduleId/start-patrol', protect, startPatrol);
 router.put('/schedule/:scheduleId/end-patrol', protect, endPatrol);
 router.post('/save-patrol-logs', protect, savePatrolLogs);
 router.get('/patrol-logs/:userId/:scheduleId', protect, getPatrolLogs); // Update this route
+
+// Notification routes
+router.get('/notifications/unread', protect, getUnreadNotifications); // Ensure this route is defined
+router.post('/notifications/mark-read', protect, markNotificationsAsRead); // Mark notifications as read
+router.get('/auth/:tanodId/rating', getTanodRatings); // Ensure this route is defined
+
+// Public token route
+router.get('/public-token', generatePublicToken);
 
 module.exports = router;

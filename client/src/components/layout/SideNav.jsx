@@ -13,6 +13,13 @@ export default function SideNav() {
   const fetchData = async () => {
     try {
       const token = localStorage.getItem("token");
+      const storedUserType = localStorage.getItem("userType"); // Get userType from local storage
+
+      if (storedUserType) {
+        setUserType(storedUserType); // Set userType from local storage
+        return;
+      }
+
       if (!token) return;
 
       const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/me`, {

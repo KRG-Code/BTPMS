@@ -1,4 +1,5 @@
 import React from "react";
+import { FaUserCircle } from 'react-icons/fa';
 
 const TanodModal = ({
   showAddTanodModal,
@@ -37,13 +38,15 @@ const TanodModal = ({
                       className="mr-2"
                       checked={checkedTanods.includes(tanod._id)}
                     />
-                    <img
-                      src={
-                        tanod.profilePicture || "https://via.placeholder.com/50"
-                      }
-                      alt={tanod.firstName}
-                      className="w-8 h-8 rounded-full mr-2"
-                    />
+                    {tanod.profilePicture ? (
+                      <img
+                        src={tanod.profilePicture}
+                        alt={tanod.firstName}
+                        className="w-8 h-8 rounded-full mr-2"
+                      />
+                    ) : (
+                      <FaUserCircle className="w-8 h-8 rounded-full mr-2 text-gray-300" />
+                    )}
                     {tanod.firstName} {tanod.lastName}
                   </div>
                 ))}
@@ -80,14 +83,15 @@ const TanodModal = ({
                       className="mr-2"
                       checked={checkedTanods.includes(tanodId)}
                     />
-                    <img
-                      src={
-                        tanod?.profilePicture ||
-                        "https://via.placeholder.com/50"
-                      }
-                      alt={tanod?.firstName}
-                      className="w-8 h-8 rounded-full mr-2"
-                    />
+                    {tanod?.profilePicture ? (
+                      <img
+                        src={tanod?.profilePicture}
+                        alt={tanod?.firstName}
+                        className="w-8 h-8 rounded-full mr-2"
+                      />
+                    ) : (
+                      <FaUserCircle className="w-8 h-8 rounded-full mr-2 text-gray-300" />
+                    )}
                     {tanod?.firstName} {tanod?.lastName}
                   </div>
                 );

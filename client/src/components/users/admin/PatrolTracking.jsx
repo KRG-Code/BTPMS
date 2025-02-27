@@ -5,6 +5,7 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 import io from 'socket.io-client'; // Import socket.io-client
 import L from 'leaflet';
+import { FaUserCircle } from 'react-icons/fa';
 
 const PatrolTracking = () => {
   const mapRef = useRef(null);
@@ -75,19 +76,15 @@ const PatrolTracking = () => {
     socketRef.current = io(socketUrl, { withCredentials: true }); // Connect to the correct namespace
 
     socketRef.current.on('connect', () => {
-      console.log('Connected to WebSocket');
     });
 
     socketRef.current.on('disconnect', () => {
-      console.log('Disconnected from WebSocket');
     });
 
     socketRef.current.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error);
     });
 
     socketRef.current.on('locationUpdate', async (data) => {
-      console.log('Received location update:', data); // Log the received location update
       const { userId, latitude, longitude, profilePicture, firstName, lastName, currentScheduleId } = data;
 
       const schedule = await fetchScheduleById(currentScheduleId);

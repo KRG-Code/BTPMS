@@ -3,6 +3,7 @@ import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Loading from "../../../utils/Loading"; // Assuming you have a Loading component
+import { FaUserCircle } from 'react-icons/fa';
 
 export default function TanodSchedule() {
   const [schedules, setSchedules] = useState([]);
@@ -181,11 +182,15 @@ export default function TanodSchedule() {
                   scheduleMembers.map((member) => (
                     <tr key={member._id}>
                       <td className="border">
-                        <img
-                          src={member.profilePicture || "https://via.placeholder.com/50"}
-                          alt={member.firstName}
-                          className="w-10 h-10 rounded-full mx-auto"
-                        />
+                        {member.profilePicture ? (
+                          <img
+                            src={member.profilePicture}
+                            alt={member.firstName}
+                            className="w-10 h-10 rounded-full mx-auto"
+                          />
+                        ) : (
+                          <FaUserCircle className="w-10 h-10 rounded-full mx-auto text-gray-300" />
+                        )}
                       </td>
                       <td className="border">{`${member.firstName} ${member.lastName}`}</td>
                       <td className="border">{member.contactNumber || "N/A"}</td>

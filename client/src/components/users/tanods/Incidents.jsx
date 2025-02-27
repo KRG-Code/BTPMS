@@ -197,10 +197,8 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
         : 'http://localhost:5000';           // Development WebSocket URL
       socketRef.current = io(socketUrl, { withCredentials: true });
       socketRef.current.on('connect', () => {
-        console.log('Connected to WebSocket');
       });
       socketRef.current.on('disconnect', () => {
-        console.log('Disconnected from WebSocket');
       });
     }
   };
@@ -226,20 +224,8 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
 
   const updateUserLocation = async (position) => {
     const { latitude, longitude } = position.coords;
-    console.log(`Current location: Latitude ${latitude}, Longitude ${longitude}`); // Log the current location
     setUserLocation({ latitude, longitude }); // Update the user location state
     if (userProfile) {
-      // Emit location update via WebSocket
-      console.log('Emitting location update:', { 
-        userId: userProfile._id, 
-        latitude, 
-        longitude, 
-        profilePicture: userProfile.profilePicture,
-        patrolArea: userProfile.patrolArea,
-        firstName: userProfile.firstName,
-        lastName: userProfile.lastName,
-        currentScheduleId // Pass the current schedule ID
-      });
       socketRef.current.emit('locationUpdate', {
         userId: userProfile._id,
         latitude,

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { FaUserCircle } from 'react-icons/fa';
 
 const ScheduleMembers = ({ scheduleMembers, setShowMembersTable, scheduleId }) => {
   const [showPatrolLogsModal, setShowPatrolLogsModal] = useState(false);
@@ -60,14 +61,15 @@ const ScheduleMembers = ({ scheduleMembers, setShowMembersTable, scheduleId }) =
               {scheduleMembers.map((member) => (
                 <tr key={member._id}>
                   <td className="border">
-                    <img
-                      src={
-                        member.profilePicture ||
-                        "https://via.placeholder.com/50"
-                      }
-                      alt={member.firstName}
-                      className="w-10 h-10 rounded-full mx-auto"
-                    />
+                    {member.profilePicture ? (
+                      <img
+                        src={member.profilePicture}
+                        alt={member.firstName}
+                        className="w-10 h-10 rounded-full mx-auto"
+                      />
+                    ) : (
+                      <FaUserCircle className="w-10 h-10 rounded-full mx-auto text-gray-300" />
+                    )}
                   </td>
                   <td className="border">{`${member.firstName} ${member.lastName}`}</td>
                   <td className="border">

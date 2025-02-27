@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { RiGovernmentFill } from "react-icons/ri";
 import ThemeToggle from "../components/forms/ThemeToggle";
@@ -8,8 +8,36 @@ import { GiPoliceOfficerHead } from "react-icons/gi";
 const SelectionPage = () => {
   const navigate = useNavigate();
 
-  const handleResidentClick = () => {
-    navigate("/resident-login");
+  useEffect(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userType');
+    const lastRefresh = localStorage.getItem("lastRefresh");
+    const now = new Date().getTime();
+
+    if (!lastRefresh || now - lastRefresh > 3600000) { // 1 hour = 3600000 ms
+      localStorage.setItem("lastRefresh", now);
+      localStorage.setItem("refreshed", "true");
+      window.location.reload();
+    } else {
+      const refreshed = localStorage.getItem("refreshed");
+      if (refreshed === "true") {
+        localStorage.removeItem("refreshed");
+        localStorage.removeItem('token');
+        localStorage.removeItem('userType');
+      }
+    }
+  }, []);
+
+  const handleResidentClick = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/public-token`);
+      const data = await response.json();
+      localStorage.setItem("userType", "resident"); // Set userType to resident
+      localStorage.setItem("token", data.token); // Set the public token
+      navigate("/Home");
+    } catch (error) {
+      console.error('Error fetching public token:', error);
+    }
   };
 
   const handleTanodClick = () => {
