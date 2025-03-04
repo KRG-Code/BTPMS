@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import ScheduleForm from "../../ManageSchedule/ScheduleForm";
-import ScheduleList from "../../ManageSchedule/ScheduleList";
-import ScheduleMembers from "../../ManageSchedule/ScheduleMembers";
-import TanodModal from "../../ManageSchedule/TanodModal";
+import ScheduleForm from "./ManageScheduleComponents/ScheduleForm";
+import ScheduleList from "./ManageScheduleComponents/ScheduleList";
+import ScheduleMembers from "./ManageScheduleComponents/ScheduleMembers";
+import TanodModal from "./ManageScheduleComponents/TanodModal";
 import { FaUserCircle } from 'react-icons/fa';
 import {
   fetchTanods,
@@ -12,7 +12,7 @@ import {
   handleCreateOrUpdateSchedule,
   handleDeleteSchedule,
   handleViewMembers,
-} from "../../ManageSchedule/ScheduleUtils";
+} from "./ManageScheduleComponents/ScheduleUtils";
 
 export default function ScheduleMaker() {
   const [tanods, setTanods] = useState([]);

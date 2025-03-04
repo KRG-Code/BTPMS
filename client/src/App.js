@@ -14,7 +14,7 @@ const LoginTanod = lazy(() => import("./pages/LoginTanod"));
 const AdminDashboard = lazy(() => import("./components/users/admin/AdminDashboard"));
 const ManageTanod = lazy(() => import("./components/users/admin/Personels"));
 const Resources = lazy(() => import("./components/users/admin/Resources"));
-const PatrolManagement = lazy(() => import("./components/users/admin/ManagePatrol"));
+const PatrolManagement = lazy(() => import("./components/users/admin/ManageScheduleComponents/ManagePatrol"));
 const PatrolTrack = lazy(() => import("./components/users/admin/PatrolTracking"));
 
 // Tanod routes

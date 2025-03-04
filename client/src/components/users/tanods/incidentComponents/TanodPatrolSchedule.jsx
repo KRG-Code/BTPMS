@@ -49,6 +49,7 @@ const TanodPatrolSchedule = ({ todayPatrols, setShowTodaySchedule, fetchUpcoming
 
       socketRef.current.on('connect_error', (error) => {
         console.error('WebSocket connection error:', error);
+        toast.error("Connection error occurred");
       });
 
       socketRef.current.on('locationUpdate', (location) => {
@@ -140,32 +141,60 @@ const TanodPatrolSchedule = ({ todayPatrols, setShowTodaySchedule, fetchUpcoming
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
+  const isScheduleActive = (patrol) => {
+    const now = new Date();
+    const endTime = new Date(patrol.endTime);
+    const userId = localStorage.getItem("userId");
+    const patrolStatus = patrol.patrolStatus.find(status => status.tanodId === userId);
+    
+    // Schedule is active if:
+    // 1. End time hasn't passed OR
+    // 2. Patrol status is 'Started' (ongoing)
+    return now <= endTime || (patrolStatus && patrolStatus.status === 'Started');
+  };
+
+  // Filter patrols to show only active or not yet started ones
+  const filteredPatrols = todayPatrols.filter(patrol => {
+    const userId = localStorage.getItem("userId");
+    const patrolStatus = patrol.patrolStatus.find(status => status.tanodId === userId);
+    
+    return patrol.patrolArea && (
+      !patrolStatus || // Not started yet
+      patrolStatus.status === 'Not Started' ||
+      (patrolStatus.status === 'Started' && isScheduleActive(patrol)) // Started and still active
+    );
+  });
+
   const getPatrolButton = (patrol) => {
     const userId = localStorage.getItem("userId");
     const patrolStatus = patrol.patrolStatus.find(status => status.tanodId === userId);
+    const isActive = isScheduleActive(patrol);
+
+    if (!isActive) {
+      return null;
+    }
 
     if (!patrolStatus || patrolStatus.status === 'Not Started') {
       return (
-        <button onClick={() => startPatrol(patrol._id, patrol.startTime)} className="bg-green-600 text-white text-sm md:text-base px-2 py-1 md:px-3 md:py-1 rounded shadow hover:bg-green-700 transition">
+        <button 
+          onClick={() => startPatrol(patrol._id, patrol.startTime)} 
+          className="bg-green-600 text-white text-sm md:text-base px-2 py-1 md:px-3 md:py-1 rounded shadow hover:bg-green-700 transition"
+        >
           Start Patrol
         </button>
       );
     } else if (patrolStatus.status === 'Started') {
       return (
-        <button onClick={() => endPatrol(patrol._id)} className="bg-red-600 text-white text-sm md:text-base px-2 py-1 md:px-3 md:py-1 rounded shadow hover:bg-red-700 transition">
+        <button 
+          onClick={() => endPatrol(patrol._id)} 
+          className="bg-red-600 text-white text-sm md:text-base px-2 py-1 md:px-3 md:py-1 rounded shadow hover:bg-red-700 transition"
+        >
           End Patrol
         </button>
       );
-    } else {
-      return null;
     }
+    return null;
   };
-
-  const filteredPatrols = todayPatrols.filter(patrol => {
-    const userId = localStorage.getItem("userId");
-    const patrolStatus = patrol.patrolStatus.find(status => status.tanodId === userId);
-    return patrol.patrolArea && (!patrolStatus || patrolStatus.status === 'Not Started' || patrolStatus.status === 'Started');
-  });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
@@ -208,7 +237,7 @@ const TanodPatrolSchedule = ({ todayPatrols, setShowTodaySchedule, fetchUpcoming
               </tbody>
             </table>
           ) : (
-            <p className="text-center text-sm md:text-base">No patrol schedule for today.</p>
+            <p className="text-center text-sm md:text-base">No active patrols for today.</p>
           )}
         </div>
       </div>

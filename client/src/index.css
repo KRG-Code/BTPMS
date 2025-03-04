@@ -257,3 +257,62 @@ body.dark-mode .TopNav {
   }
 }
 
+/* Add these styles for markers */
+.user-marker-icon {
+  background: transparent;
+  border: none;
+}
+
+.custom-icon {
+  background: none !important;
+  border: none !important;
+  z-index: 1000;
+}
+
+.custom-marker-icon {
+  z-index: 1000 !important;
+}
+
+.leaflet-marker-icon {
+  z-index: 1000 !important;
+}
+
+.leaflet-marker-pane {
+  z-index: 1000 !important;
+}
+
+.leaflet-popup-pane {
+  z-index: 1001 !important;
+}
+
+/* Add these specific styles for user marker */
+.custom-user-marker {
+  background: none !important;
+  border: none !important;
+}
+
+.marker-container {
+  position: relative;
+  width: 40px;
+  height: 40px;
+}
+
+.pulse-ring {
+  animation: pulse 1.5s infinite;
+}
+
+.profile-image {
+  z-index: 1;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+

@@ -13,7 +13,7 @@ export default function TopNav() {
   const [showMessageList, setShowMessageList] = useState(false);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [userType, setUserType] = useState(null);
+  const [setUserType] = useState(null);
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
   const messageRef = useRef(null);

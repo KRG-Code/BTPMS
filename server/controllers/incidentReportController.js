@@ -40,3 +40,14 @@ exports.createIncidentReport = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
+// Get all incident reports
+exports.getIncidentReports = async (req, res) => {
+  try {
+    const incidentReports = await IncidentReport.find();
+    res.status(200).json(incidentReports);
+  } catch (error) {
+    console.error('Error fetching incident reports:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};

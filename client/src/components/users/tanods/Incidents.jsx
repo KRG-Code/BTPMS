@@ -6,8 +6,9 @@ import TanodPatrolSchedule from "./incidentComponents/TanodPatrolSchedule";
 import ReportIncident from "./incidentComponents/ReportIncident";
 import ViewReportedIncidents from "./incidentComponents/ViewReportedIncidents";
 import io from 'socket.io-client'; // Import socket.io-client
+import { MapContainer } from 'react-leaflet'; // Import MapContainer
 
-const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setUserLocation as a prop
+const Incidents = ({ fetchCurrentPatrolArea, setUserLocation, setIncidentLocations, incidentReports, isTrackingVisible, toggleTracking }) => { // Add setUserLocation as a prop
   const [patrols, setPatrols] = useState([]);
   const [upcomingPatrols, setUpcomingPatrols] = useState([]);
   const [incident, setIncident] = useState({ type: "", description: "", location: "" });
@@ -178,66 +179,89 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
     }
   };
 
-  const startTracking = () => {
+  const updateUserLocation = (position, profile) => {
+    if (!profile) return;
+
+    const { latitude, longitude } = position.coords;
+    const locationData = { 
+      latitude, 
+      longitude, 
+      profilePicture: profile.profilePicture
+    };
+    
+    setUserLocation(locationData);
+    
+    if (socketRef.current) {
+      socketRef.current.emit('locationUpdate', {
+        userId: profile._id,
+        ...locationData,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        currentScheduleId
+      });
+    }
+  };
+
+  const startTracking = async () => {
+    const profile = await fetchUserProfile();
+    if (!profile) {
+      toast.error("Failed to fetch user profile");
+      return;
+    }
+
     setIsTracking(true);
-    localStorage.setItem("isTracking", true); // Persist tracking state
+    toggleTracking();
+    localStorage.setItem("isTracking", "true");
+    
+    // Initialize socket connection
+    const socketUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://barangaypatrol.lgu1.com'
+      : 'http://localhost:5000';
+      
+    socketRef.current = io(socketUrl, { 
+      withCredentials: true,
+      query: { userId: profile._id, role: 'tanod' }
+    });
+
+    // Start location tracking
     if (navigator.geolocation) {
-      const id = navigator.geolocation.watchPosition(updateUserLocation, handleLocationError);
-      setWatchId(id); // Store the watchId
+      const id = navigator.geolocation.watchPosition(
+        (position) => updateUserLocation(position, profile),
+        handleLocationError,
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+      setWatchId(id);
 
-      // Set an interval to update location every 5 seconds
-      const interval = setInterval(() => {
-        navigator.geolocation.getCurrentPosition(updateUserLocation, handleLocationError);
-      }, 5000);
-      setIntervalId(interval); // Store the intervalId
-
-      // Connect to WebSocket
-      const socketUrl = process.env.NODE_ENV === 'production' 
-        ? 'https://barangaypatrol.lgu1.com'  // Production WebSocket URL
-        : 'http://localhost:5000';           // Development WebSocket URL
-      socketRef.current = io(socketUrl, { withCredentials: true });
-      socketRef.current.on('connect', () => {
-      });
-      socketRef.current.on('disconnect', () => {
-      });
+      // Initial location update
+      navigator.geolocation.getCurrentPosition(
+        (position) => updateUserLocation(position, profile),
+        handleLocationError
+      );
     }
   };
 
   const stopTracking = () => {
     setIsTracking(false);
-    localStorage.setItem("isTracking", false); // Persist tracking state
+    toggleTracking(); // Call this first to ensure map cleanup
+    localStorage.setItem("isTracking", "false");
+    
+    // Clear tracking data
+    setUserLocation(null);
+    
+    // Clear geolocation watchers
     if (navigator.geolocation && watchId !== null) {
-      navigator.geolocation.clearWatch(watchId); // Clear the watch using watchId
-      setWatchId(null); // Reset the watchId
+      navigator.geolocation.clearWatch(watchId);
+      setWatchId(null);
     }
     if (intervalId !== null) {
-      clearInterval(intervalId); // Clear the interval
-      setIntervalId(null); // Reset the intervalId
+      clearInterval(intervalId);
+      setIntervalId(null);
     }
-    setUserLocation(null); // Clear the user location
 
-    // Disconnect from WebSocket
+    // Disconnect socket
     if (socketRef.current) {
       socketRef.current.disconnect();
-    }
-  };
-
-  const updateUserLocation = async (position) => {
-    const { latitude, longitude } = position.coords;
-    setUserLocation({ latitude, longitude }); // Update the user location state
-    if (userProfile) {
-      socketRef.current.emit('locationUpdate', {
-        userId: userProfile._id,
-        latitude,
-        longitude,
-        profilePicture: userProfile.profilePicture, // Pass the profile picture
-        patrolArea: userProfile.patrolArea, // Pass the patrol area
-        firstName: userProfile.firstName, // Pass the first name
-        lastName: userProfile.lastName, // Pass the last name
-        currentScheduleId // Pass the current schedule ID
-      });
-    } else {
-      console.error('User profile is not available.');
+      socketRef.current = null;
     }
   };
 
@@ -268,82 +292,99 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
   };
 
   return (
-    <div className="p-4 max-w-4xl mx-auto bg-white bg-opacity-75 shadow-lg rounded-lg TopNav border border-blue-600">
-      <h1 onClick={toggleDropdown} className="text-2xl md:text-3xl font-bold text-center mb-4 cursor-pointer bg-blue-600 text-white py-2 px-4 rounded-lg shadow hover:bg-blue-700 transition">
+    <div className="p-2 sm:p-4 max-w-4xl mx-auto bg-white bg-opacity-75 shadow-lg rounded-lg TopNav border border-blue-600">
+      <h1 onClick={toggleDropdown} className="text-xl sm:text-2xl md:text-3xl font-bold text-center mb-2 sm:mb-4 cursor-pointer bg-blue-600 text-white py-2 px-4 rounded-lg shadow hover:bg-blue-700 transition">
         <FaUserShield className="inline-block mr-2" />
       </h1>
       
       {isDropdownOpen && (
-        <div className="dropdown-content">
-          <div className="mb-4 flex justify-center space-x-4">
+        <div className="dropdown-content space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
             <button
               onClick={() => setShowTodaySchedule(true)}
-              className="bg-blue-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-blue-700 transition"
+              className="w-full bg-blue-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-blue-700 transition"
             >
-              Today's Patrol Schedule
+              Today's Schedule
             </button>
             <button
               onClick={() => setShowReportIncident(true)}
-              className="bg-green-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-green-700 transition"
+              className="w-full bg-green-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-green-700 transition"
             >
-              Report an Incident
+              Report Incident
             </button>
             <button
               onClick={() => setShowReportedIncidents(true)}
-              className="bg-yellow-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-yellow-700 transition"
+              className="w-full bg-yellow-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-yellow-700 transition"
             >
-              View Reported Incidents
+              View Reports
             </button>
             {isTracking ? (
-              <button onClick={stopTracking} className="bg-red-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-red-700 transition">
+              <button 
+                onClick={stopTracking} 
+                className="w-full bg-red-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-red-700 transition"
+              >
                 Stop Tracking
               </button>
             ) : (
-              <button onClick={() => fetchUserProfile().then(() => startTracking())} className="bg-green-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-green-700 transition">
+              <button 
+                onClick={() => fetchUserProfile().then(() => startTracking())} 
+                className="w-full bg-green-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-green-700 transition"
+              >
                 Start Tracking
               </button>
             )}
           </div>
 
           {hasStartedPatrol && (
-            <>
-              <h2 className="text-xl md:text-2xl mb-2">Log Patrol Report</h2>
+            <div className="space-y-2 sm:space-y-4">
+              <h2 className="text-lg sm:text-xl md:text-2xl mb-2">Log Patrol Report</h2>
               <textarea
-                className="border p-2 mb-4 w-full h-24 rounded text-sm md:text-base text-black"
+                className="border p-2 mb-2 sm:mb-4 w-full h-24 rounded text-sm sm:text-base text-black"
                 placeholder="Enter your patrol report..."
                 value={currentReport}
                 onChange={(e) => setCurrentReport(e.target.value)}
               />
-              <button onClick={savePatrolLog} className="bg-blue-600 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-2 rounded-lg shadow hover:bg-blue-700 transition">
+              <button 
+                onClick={savePatrolLog} 
+                className="w-full sm:w-auto bg-blue-600 text-white text-sm sm:text-base px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition"
+              >
                 Save Log
               </button>
-            </>
+            </div>
           )}
 
           {patrolLogs.filter(log => log.scheduleId === currentScheduleId).length > 0 && (
             <div className="mt-4">
-              <h3 className="text-lg md:text-xl font-bold mb-2">Saved Patrol Logs</h3>
-              <div className="overflow-y-auto" style={{ maxHeight: "200px" }}>
+              <h3 className="text-base sm:text-lg md:text-xl font-bold mb-2">Saved Patrol Logs</h3>
+              <div className="overflow-x-auto overflow-y-auto max-h-[200px] sm:max-h-[300px]">
                 <table className="min-w-full bg-white shadow-md rounded-lg border overflow-hidden text-center">
                   <thead className="TopNav">
                     <tr>
-                      <th className="border px-4 py-2 text-sm md:text-base">Time Log</th>
-                      <th className="border px-4 py-2 text-sm md:text-base">Report</th>
-                      <th className="border px-4 py-2 text-sm md:text-base">Action</th>
+                      <th className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">Time Log</th>
+                      <th className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">Report</th>
+                      <th className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">Action</th>
                     </tr>
                   </thead>
                   <tbody className="text-black">
                     {patrolLogs.filter(log => log.scheduleId === currentScheduleId).map((log, index) => (
                       <tr key={index}>
-                        <td className="border px-4 py-2 text-sm md:text-base">{log.timestamp}</td>
-                        <td className="border px-4 py-2 text-sm md:text-base">{log.report}</td>
-                        <td className="border px-4 py-2 text-sm md:text-base">
-                          <button onClick={() => editPatrolLog(index)} className="bg-yellow-600 text-white text-sm md:text-base px-2 py-1 md:px-3 md:py-1 rounded shadow hover:bg-yellow-700 transition">
-                            Edit
-                          </button>
-                          <button onClick={() => confirmDeletePatrolLog(index)} className="bg-red-600 text-white text-sm md:text-base px-2 py-1 md:px-3 md:py-1 rounded shadow hover:bg-red-700 transition ml-2">
-                            Delete
-                          </button>
+                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">{log.timestamp}</td>
+                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">{log.report}</td>
+                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">
+                          <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 justify-center">
+                            <button 
+                              onClick={() => editPatrolLog(index)} 
+                              className="bg-yellow-600 text-white text-xs sm:text-sm px-2 py-1 rounded shadow hover:bg-yellow-700 transition"
+                            >
+                              Edit
+                            </button>
+                            <button 
+                              onClick={() => confirmDeletePatrolLog(index)} 
+                              className="bg-red-600 text-white text-xs sm:text-sm px-2 py-1 rounded shadow hover:bg-red-700 transition"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -356,13 +397,17 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
       )}
 
       {showTodaySchedule && (
-        <TanodPatrolSchedule
-          todayPatrols={todayPatrols}
-          setShowTodaySchedule={setShowTodaySchedule}
-          fetchUpcomingPatrols={fetchUpcomingPatrols}
-          fetchCurrentPatrolArea={fetchCurrentPatrolArea}
-          uploadPatrolLogs={uploadPatrolLogs} // Pass the function as a prop
-        />
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <TanodPatrolSchedule
+              todayPatrols={todayPatrols}
+              setShowTodaySchedule={setShowTodaySchedule}
+              fetchUpcomingPatrols={fetchUpcomingPatrols}
+              fetchCurrentPatrolArea={fetchCurrentPatrolArea}
+              uploadPatrolLogs={uploadPatrolLogs} // Pass the function as a prop
+            />
+          </div>
+        </div>
       )}
 
       {showReportIncident && (
@@ -376,10 +421,15 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
       )}
 
       {showReportedIncidents && (
-        <ViewReportedIncidents
-          incidentLog={incidentLog}
-          setShowReportedIncidents={setShowReportedIncidents}
-        />
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <ViewReportedIncidents
+              setShowReportedIncidents={setShowReportedIncidents}
+              setIncidentLocations={setIncidentLocations}
+              incidentReports={incidentReports}
+            />
+          </div>
+        </div>
       )}
 
       {showDeleteConfirmation && (
@@ -402,4 +452,4 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation }) => { // Add setU
   );
 };
 
-export default Incidents
+export default Incidents;

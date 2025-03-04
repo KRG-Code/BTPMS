@@ -6,32 +6,46 @@ import axios from 'axios';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import Incidents from './Incidents';
+import ViewReportedIncidents from './incidentComponents/ViewReportedIncidents'; // Import ViewReportedIncidents
+import { FaExclamationTriangle, FaInfoCircle } from 'react-icons/fa'; // Import icons
 
 const TanodMap = () => {
   const [patrolAreas, setPatrolAreas] = useState([]);
   const [currentPatrolArea, setCurrentPatrolArea] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [userLocation, setUserLocation] = useState(null); // Add state to store user location
+  const [incidentLocations, setIncidentLocations] = useState({});
+  const [selectedIncident, setSelectedIncident] = useState(null); // Add state for selected incident
+  const [incidentReports, setIncidentReports] = useState([]); // Add this state
+  const [isTrackingVisible, setIsTrackingVisible] = useState(
+    JSON.parse(localStorage.getItem("isTrackingVisible")) || false
+  );
   const mapRef = useRef(null);
   const userMarkerRef = useRef(null);
   const start = [14.72661640119096, 121.03715880494757];
+
+  // Add new refs for different layer types
+  const patrolLayersRef = useRef({});
+  const incidentLayersRef = useRef({});
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('Please log in.');
-      return;
+      return null;
     }
 
     try {
       const response = await axios.get(`${process.env.REACT_APP_API_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setUserProfile(response.data);
-      localStorage.setItem('userId', response.data._id); // Store userId in localStorage
+      const profile = response.data;
+      setUserProfile(profile);
+      localStorage.setItem('userId', profile._id);
+      return profile;
     } catch (error) {
-      console.error('Error fetching user profile:', error);
       toast.error('Failed to load user profile.');
+      return null;
     }
   };
 
@@ -73,11 +87,16 @@ const TanodMap = () => {
 
       const currentPatrol = response.data.find(schedule => {
         const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === userId);
-        return patrolStatus && patrolStatus.status === 'Started';
+        const now = new Date();
+        const endTime = new Date(schedule.endTime);
+        
+        // Check if patrol is active (started and not yet ended)
+        return patrolStatus && 
+               patrolStatus.status === 'Started' && 
+               now <= endTime;
       });
 
       if (currentPatrol && currentPatrol.patrolArea) {
-        console.log('Current Patrol Area ID:', currentPatrol.patrolArea._id); // Debugging information
         const patrolAreaResponse = await axios.get(
           `${process.env.REACT_APP_API_URL}/polygons/${currentPatrol.patrolArea._id}`,
           { headers: { Authorization: `Bearer ${token}` } }
@@ -96,20 +115,117 @@ const TanodMap = () => {
     }
   };
 
+  // Add this function to fetch incident reports
+  const fetchIncidentReports = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Please log in.');
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/incident-reports`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setIncidentReports(response.data);
+    } catch (error) {
+      console.error('Error fetching incident reports:', error);
+      toast.error('Failed to load incident reports.');
+    }
+  };
+
   useEffect(() => {
     fetchUserProfile();
     fetchPatrolAreas();
     fetchCurrentPatrolArea();
+    fetchIncidentReports(); // Add this call
   }, []);
 
   useEffect(() => {
-    if (userLocation && mapRef.current) {
+    const loadStoredData = async () => {
+      if (localStorage.getItem("isTracking") === "true") {
+        const storedProfile = await fetchUserProfile();
+        if (storedProfile) {
+          setUserProfile(storedProfile);
+          // Re-enable tracking if it was active
+          setIsTrackingVisible(true);
+        }
+      }
+    };
+    loadStoredData();
+  }, []);
+
+  // Simplified marker creation function that matches PatrolTracking.jsx style
+  const createUserMarker = (latitude, longitude, profileUrl, areaColor) => {
+    return L.marker([latitude, longitude], {
+      icon: L.divIcon({
+        className: 'custom-icon',
+        html: `
+          <div style="position: relative; width: 50px; height: 50px;">
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                 border-radius: 50%; background-color: ${areaColor || 'red'}; 
+                 opacity: 0.5; animation: pulse 1.5s infinite;"></div>
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                 display: flex; align-items: center; justify-content: center;
+                 background-image: url('${profileUrl}'); background-size: cover; 
+                 border-radius: 50%; border: 2px solid ${areaColor || 'red'};"></div>
+          </div>
+        `,
+        iconSize: [50, 50],
+        iconAnchor: [25, 25]
+      }),
+      zIndexOffset: 1000
+    });
+  };
+
+  const clearMapLayers = (map, layerType = 'all') => {
+    if (!map) return;
+    
+    map.eachLayer((layer) => {
+      if (layerType === 'all') {
+        if (layer instanceof L.Marker || layer instanceof L.Polygon) {
+          map.removeLayer(layer);
+        }
+      } else if (layerType === 'markers' && layer instanceof L.Marker) {
+        map.removeLayer(layer);
+      } else if (layerType === 'polygons' && layer instanceof L.Polygon) {
+        map.removeLayer(layer);
+      }
+    });
+  };
+
+  // Separate user marker effect
+  useEffect(() => {
+    if (!mapRef.current || !userLocation || !isTrackingVisible || !userProfile) {
+      if (userMarkerRef.current && mapRef.current) {
+        mapRef.current.removeLayer(userMarkerRef.current);
+        userMarkerRef.current = null;
+      }
+      return;
+    }
+
+    try {
       const { latitude, longitude } = userLocation;
+
+      // Create user marker
       const userMarker = L.marker([latitude, longitude], {
         icon: L.divIcon({
           className: 'custom-icon',
-          html: `<div style="background-image: url(${userProfile?.profilePicture || ''}); background-size: cover; border-radius: 50%; width: 40px; height: 40px; border: 2px solid ${currentPatrolArea?.color || 'red'};"></div>`,
+          html: `
+            <div style="position: relative; width: 50px; height: 50px; z-index: 1000;">
+              <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                   border-radius: 50%; background-color: ${currentPatrolArea?.color || 'red'}; 
+                   opacity: 0.5; animation: pulse 1.5s infinite; z-index: 998;"></div>
+              <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                   background-image: url('${userProfile.profilePicture}'); 
+                   background-size: cover; border-radius: 50%; 
+                   border: 2px solid ${currentPatrolArea?.color || 'red'}; z-index: 999;"></div>
+            </div>
+          `,
+          iconSize: [50, 50],
+          iconAnchor: [25, 25]
         }),
+        zIndexOffset: 1000
       });
 
       if (userMarkerRef.current) {
@@ -118,51 +234,141 @@ const TanodMap = () => {
 
       userMarker.addTo(mapRef.current);
       userMarkerRef.current = userMarker;
-      mapRef.current.setView([latitude, longitude], mapRef.current.getZoom()); // Update map view to the new location
-    } else if (!userLocation && userMarkerRef.current) {
+      mapRef.current.setView([latitude, longitude], mapRef.current.getZoom());
+
+    } catch (error) {
+      toast.error('Error updating location marker');
+    }
+  }, [userLocation, userProfile, currentPatrolArea, isTrackingVisible]);
+
+  // Add useEffect to handle tracking visibility changes
+  useEffect(() => {
+    if (!isTrackingVisible && userMarkerRef.current && mapRef.current) {
+      // Remove marker when tracking is stopped
       mapRef.current.removeLayer(userMarkerRef.current);
       userMarkerRef.current = null;
+      setUserLocation(null); // Clear user location when tracking stops
     }
-  }, [userLocation, userProfile, currentPatrolArea]);
+  }, [isTrackingVisible]);
 
   const MapEvents = () => {
     const map = useMap();
 
     useEffect(() => {
-      if (map) {
-        mapRef.current = map;
-
-        // Clear existing layers to prevent duplication
-        map.eachLayer((layer) => {
-          if (layer instanceof L.Polygon) {
-            map.removeLayer(layer);
-          }
-        });
-
-        patrolAreas.forEach(area => {
-          if (area && area.coordinates) {
-            const layer = L.polygon(
-              area.coordinates.map(({ lat, lng }) => [lat, lng]),
-              { color: area.color, fillOpacity: 0.2, weight: 2 }
-            );
-            layer.bindTooltip(area.legend, { permanent: true, direction: 'center' });
-            layer.addTo(map);
-          }
-        });
-
-        if (currentPatrolArea && currentPatrolArea.coordinates) {
+      if (!map) return;
+      mapRef.current = map;
+      clearMapLayers(map, 'polygons');
+      
+      // Add patrol areas
+      patrolAreas.forEach(area => {
+        if (area?.coordinates) {
           const layer = L.polygon(
-            currentPatrolArea.coordinates.map(({ lat, lng }) => [lat, lng]),
-            { color: currentPatrolArea.color, fillOpacity: 0.2, weight: 2 }
+            area.coordinates.map(({ lat, lng }) => [lat, lng]),
+            { color: area.color, fillOpacity: 0.2, weight: 2 }
           );
-          layer.bindTooltip(currentPatrolArea.legend, { permanent: true, direction: 'center' });
+          layer.bindTooltip(area.legend, { permanent: true, direction: 'center' });
           layer.addTo(map);
+          patrolLayersRef.current[area._id] = layer;
         }
+      });
+
+      // Add current patrol area
+      if (currentPatrolArea?.coordinates) {
+        const layer = L.polygon(
+          currentPatrolArea.coordinates.map(({ lat, lng }) => [lat, lng]),
+          { color: currentPatrolArea.color, fillOpacity: 0.2, weight: 2 }
+        );
+        layer.bindTooltip(currentPatrolArea.legend, { permanent: true, direction: 'center' });
+        layer.addTo(map);
       }
     }, [patrolAreas, currentPatrolArea]);
 
+    // Handle incident markers
+    useEffect(() => {
+      if (!map) return;
+
+      Object.values(incidentLayersRef.current).forEach(marker => {
+        map.removeLayer(marker);
+      });
+      incidentLayersRef.current = {};
+
+      Object.entries(incidentLocations).forEach(([id, data]) => {
+        const latLngMatch = data.location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
+        if (latLngMatch) {
+          const [_, lat, lng] = latLngMatch.map(Number);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            const marker = createIncidentMarker(lat, lng, data.type, id);
+            marker.addTo(map);
+            incidentLayersRef.current[id] = marker;
+            map.setView([lat, lng], 16);
+          }
+        }
+      });
+    }, [incidentLocations]);
+
     return null;
   };
+
+  const createIncidentMarker = (lat, lng, type, id) => {
+    return L.marker([lat, lng], {
+      icon: L.divIcon({
+        className: 'custom-icon',
+        html: `<div style="position: relative; width: 36px; height: 36px;">
+                 <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                      border-radius: 50%; 
+                      background-color: ${type === 'Emergency' ? 'rgba(255, 0, 0, 0.5)' : 'rgba(0, 0, 255, 0.5)'}; 
+                      animation: pulse 1.5s infinite;"></div>
+                 <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                      display: flex; align-items: center; justify-content: center;">
+                   ${type === 'Emergency' 
+                     ? '<i class="fas fa-exclamation-triangle" style="color: red; font-size: 20px;"></i>'
+                     : '<i class="fas fa-info-circle" style="color: blue; font-size: 20px;"></i>'}
+                 </div>
+               </div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
+      }),
+      zIndexOffset: 1000
+    }).on('click', () => {
+      const incident = incidentReports.find(report => report._id === id);
+      if (incident) setSelectedIncident(incident);
+    });
+  };
+
+  // Update toggle tracking function
+  const toggleTracking = () => {
+    const newTrackingState = !isTrackingVisible;
+    setIsTrackingVisible(newTrackingState);
+    localStorage.setItem("isTrackingVisible", JSON.stringify(newTrackingState));
+    
+    if (!newTrackingState) {
+      // Cleanup when stopping tracking
+      if (userMarkerRef.current && mapRef.current) {
+        mapRef.current.removeLayer(userMarkerRef.current);
+        userMarkerRef.current = null;
+        setUserLocation(null);
+      }
+    } else {
+      // Re-initialize when starting tracking
+      fetchUserProfile().then(profile => {
+        if (profile) {
+          setUserProfile(profile);
+        }
+      });
+    }
+  };
+
+  // Update effect to handle tracking visibility changes
+  useEffect(() => {
+    if (!isTrackingVisible) {
+      // Additional cleanup in effect
+      if (userMarkerRef.current && mapRef.current) {
+        mapRef.current.removeLayer(userMarkerRef.current);
+        userMarkerRef.current = null;
+        setUserLocation(null);
+      }
+    }
+  }, [isTrackingVisible]);
 
   return (
     <div style={{ position: 'relative', height: '100%' }}>
@@ -170,10 +376,47 @@ const TanodMap = () => {
       <MapContainer center={start} zoom={16} style={{ width: '100%', height: '100%' }}>
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <MapEvents />
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
+          <Incidents 
+            fetchCurrentPatrolArea={fetchCurrentPatrolArea} 
+            setUserLocation={setUserLocation}
+            setIncidentLocations={setIncidentLocations}
+            incidentReports={incidentReports} // Pass incidentReports down
+            isTrackingVisible={isTrackingVisible}
+            toggleTracking={toggleTracking}
+          />
+        </div>
       </MapContainer>
-      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
-        <Incidents fetchCurrentPatrolArea={fetchCurrentPatrolArea} setUserLocation={setUserLocation} />
-      </div>
+      {selectedIncident && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" style={{ zIndex: 2001 }}>
+          <div className="bg-blue-50 p-6 rounded-lg w-11/12 max-w-lg relative">
+            <button 
+              onClick={() => setSelectedIncident(null)} 
+              className="absolute top-2 right-2 px-2 py-1 bg-red-500 text-white rounded-lg"
+            >
+              X
+            </button>
+            <h4 className="text-lg font-semibold text-blue-700">Incident Report Details</h4>
+            <div className="mt-2 text-gray-700 space-y-2">
+              <p><strong>Incident:</strong> {selectedIncident.type}</p>
+              <p>
+                <strong>Incident Type:</strong> 
+                <span className={selectedIncident.incidentClassification === 'Emergency Incident' ? 'ml-1 text-red-500 font-bold animate-pulse' : 'ml-1 font-bold'}>
+                  {selectedIncident.incidentClassification || 'N/A'}
+                </span>
+              </p>
+              <p><strong>Date:</strong> {new Date(selectedIncident.date).toLocaleDateString()}</p>
+              <p><strong>Time:</strong> {selectedIncident.time || 'N/A'}</p>
+              <p><strong>Location:</strong> {selectedIncident.location || 'N/A'}</p>
+              <p><strong>Location Note:</strong> {selectedIncident.locationNote || 'N/A'}</p>
+              <p><strong>Description:</strong> {selectedIncident.description || 'N/A'}</p>
+              <p><strong>Full Name:</strong> {selectedIncident.fullName || 'Anonymous'}</p>
+              <p><strong>Contact Number:</strong> {selectedIncident.contactNumber || 'Anonymous'}</p>
+              <p><strong>Status:</strong> {selectedIncident.status || 'Pending'}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

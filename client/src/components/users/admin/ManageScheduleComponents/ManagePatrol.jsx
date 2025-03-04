@@ -9,7 +9,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
 import PatrolAreaManager from './PatrolAreaManager';
 import PatrolScheduleManager from './PatrolScheduleManager';
-import ScheduleMaker from './ManageSchedule';
+import ScheduleMaker from '../ManageSchedule';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
