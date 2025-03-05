@@ -20,6 +20,6 @@ export const buttonData2 = [
       { label: "Admin Dashboard", icon: <RiDashboardLine /> },
       { label: "Manage Tanod", icon: <FaPeopleGroup /> },
       { label: "Manage Patrol Schedules", icon: <RiCalendarScheduleLine /> },
-      { label: "Patrol Tracking", icon: <RiRoadMapLine /> },
+      { label: "Patrol & Incident Tracking", icon: <RiRoadMapLine /> },
       { label: "Resources", icon: <GrResources /> },
       ];

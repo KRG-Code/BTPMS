@@ -20,6 +20,9 @@ const TanodMap = () => {
   const [isTrackingVisible, setIsTrackingVisible] = useState(
     JSON.parse(localStorage.getItem("isTrackingVisible")) || false
   );
+  const [showReportIncident, setShowReportIncident] = useState(false);
+  const [selectedIncidentForResponse, setSelectedIncidentForResponse] = useState(null);
+  const [activeIncidents, setActiveIncidents] = useState([]);
   const mapRef = useRef(null);
   const userMarkerRef = useRef(null);
   const start = [14.72661640119096, 121.03715880494757];
@@ -370,6 +373,33 @@ const TanodMap = () => {
     }
   }, [isTrackingVisible]);
 
+  // Add new useEffect to fetch active incidents
+  useEffect(() => {
+    const fetchActiveIncidents = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      try {
+        const response = await axios.get(
+          `${process.env.REACT_APP_API_URL}/incident-reports`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const inProgressIncidents = response.data.filter(incident => incident.status === 'In Progress');
+        setActiveIncidents(inProgressIncidents);
+        
+        // Set the selected incident if there's an active one
+        const activeIncident = inProgressIncidents.find(incident => incident.status === 'In Progress');
+        if (activeIncident) {
+          setSelectedIncidentForResponse(activeIncident);
+        }
+      } catch (error) {
+        console.error('Error fetching active incidents:', error);
+      }
+    };
+
+    fetchActiveIncidents();
+  }, []);
+
   return (
     <div style={{ position: 'relative', height: '100%' }}>
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
@@ -384,6 +414,10 @@ const TanodMap = () => {
             incidentReports={incidentReports} // Pass incidentReports down
             isTrackingVisible={isTrackingVisible}
             toggleTracking={toggleTracking}
+            showReportIncident={showReportIncident}
+            setShowReportIncident={setShowReportIncident}
+            selectedIncidentForResponse={selectedIncidentForResponse}
+            setSelectedIncidentForResponse={setSelectedIncidentForResponse}
           />
         </div>
       </MapContainer>

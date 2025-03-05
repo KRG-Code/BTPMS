@@ -10,6 +10,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const polygonRoutes = require('./routes/polygonRoutes');
 const incidentReportRoutes = require('./routes/incidentReportRoutes');
+const cctvLocationRoutes = require("./routes/cctvLocationRoutes");
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
@@ -87,6 +88,9 @@ app.use('/api/messages', messageRoutes);
 
 // Incident Report Routes
 app.use('/api/incident-reports', incidentReportRoutes);
+
+// CCTV Location Routes
+app.use("/api/cctv-locations", cctvLocationRoutes);
 
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {

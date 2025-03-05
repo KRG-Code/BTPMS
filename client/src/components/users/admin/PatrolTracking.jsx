@@ -8,6 +8,7 @@ import L from 'leaflet';
 import { FaUserCircle, FaSync } from 'react-icons/fa'; // Add FaSync import
 import IncidentReports from './PatrolTrackingComponents/IncidentReports'; // Import IncidentReports component
 import ViewLocation from './PatrolTrackingComponents/ViewLocation'; // Import ViewLocation component
+import CctvLocationModal from './PatrolTrackingComponents/CctvLocationModal'; // Add import at the top
 
 const PatrolTracking = () => {
   const mapRef = useRef(null);
@@ -19,6 +20,9 @@ const PatrolTracking = () => {
   const [incidentLocations, setIncidentLocations] = useState({}); // Add state for incident locations
   const [selectedReport, setSelectedReport] = useState(null); // Add state for selected incident
   const [incidentReports, setIncidentReports] = useState([]); // Add state for incident reports
+  const [isCctvVisible, setIsCctvVisible] = useState(JSON.parse(localStorage.getItem("isCctvVisible")) || false);
+  const [showCctvModal, setShowCctvModal] = useState(false); // Add state for modal visibility
+  const [cctvLocations, setCctvLocations] = useState([]); // Add state for CCTV locations
 
   const fetchPatrolAreas = async () => {
     const token = localStorage.getItem('token');
@@ -92,6 +96,18 @@ const PatrolTracking = () => {
     }
   };
 
+  const fetchCctvLocations = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/cctv-locations`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setCctvLocations(response.data);
+    } catch (error) {
+      console.error('Error fetching CCTV locations:', error);
+    }
+  };
+
   const initializeWebSocket = () => {
     const socketUrl = process.env.NODE_ENV === 'production' 
       ? 'https://barangaypatrol.lgu1.com'  // Production WebSocket URL
@@ -139,14 +155,33 @@ const PatrolTracking = () => {
   const toggleTrackingVisibility = () => {
     const newVisibilityState = !isTrackingVisible;
     setIsTrackingVisible(newVisibilityState);
-    localStorage.setItem("isTrackingVisible", newVisibilityState); // Persist visibility state
-    refreshMap(); // Refresh the map
+    localStorage.setItem("isTrackingVisible", newVisibilityState);
+
+    // Only toggle visibility of tanod markers
+    Object.values(userMarkerRefs.current).forEach(marker => {
+      if (newVisibilityState) {
+        marker.addTo(mapRef.current);
+      } else {
+        marker.remove();
+      }
+    });
+  };
+
+  const toggleCctvVisibility = () => {
+    setShowCctvModal(true);
   };
 
   const refreshMap = () => {
     if (mapRef.current) {
+      // Only remove tanod markers and patrol areas
       mapRef.current.eachLayer((layer) => {
-        if (layer instanceof L.Marker || layer instanceof L.Polygon) {
+        if (layer instanceof L.Marker) {
+          // Check if the marker is a tanod marker (stored in userMarkerRefs)
+          const isTanodMarker = Object.values(userMarkerRefs.current).includes(layer);
+          if (isTanodMarker) {
+            mapRef.current.removeLayer(layer);
+          }
+        } else if (layer instanceof L.Polygon) {
           mapRef.current.removeLayer(layer);
         }
       });
@@ -163,44 +198,15 @@ const PatrolTracking = () => {
         }
       });
 
-      // Re-add tanod locations
-      tanodLocations.forEach(({ userId, latitude, longitude, profilePicture, patrolArea }) => {
-        const userMarker = L.marker([latitude, longitude], {
-          icon: L.divIcon({
-            className: 'custom-icon',
-            html: `<div style="position: relative; width: 50px; height: 50px;">
-                     <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; background-color: ${patrolArea?.color || 'red'}; animation: pulse 1.5s infinite;"></div>
-                     <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-image: url(${profilePicture || ''}); background-size: cover; border-radius: 50%; border: 2px solid ${patrolArea?.color || 'red'};">
-                     </div>
-                   </div>
-                   <style>
-                     @keyframes pulse {
-                       0% { transform: scale(0.5); opacity: 1; }
-                       100% { transform: scale(2); opacity: 0; }
-                     }
-                   </style>`,
-          }),
-        });
-
-        if (isTrackingVisible) {
-          userMarker.addTo(mapRef.current);
-        }
-        userMarkerRefs.current[userId] = userMarker;
-      });
-
-      // Re-add incident locations
-      Object.keys(incidentLocations).forEach((key) => {
-        const incidentLocation = incidentLocations[key];
-        const latLngMatch = incidentLocation.location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
-        if (latLngMatch) {
-          const [_, lat, lng] = latLngMatch.map(Number);
-          if (!isNaN(lat) && !isNaN(lng)) {
-            const icon = L.divIcon({
+      // Re-add tanod locations only if tracking is visible
+      if (isTrackingVisible) {
+        tanodLocations.forEach(({ userId, latitude, longitude, profilePicture, patrolArea }) => {
+          const userMarker = L.marker([latitude, longitude], {
+            icon: L.divIcon({
               className: 'custom-icon',
-              html: `<div style="position: relative; width: 36px; height: 36px;">
-                       <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; background-color: ${incidentLocation.type === 'Emergency' ? 'rgba(255, 0, 0, 0.5)' : 'rgba(0, 0, 255, 0.5)'}; animation: pulse 1.5s infinite;"></div>
-                       <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 36px; color: ${incidentLocation.type === 'Emergency' ? 'red' : 'blue'};">
-                         <i class="fa ${incidentLocation.type === 'Emergency' ? 'fa-exclamation-triangle' : 'fa-info-circle'}"></i>
+              html: `<div style="position: relative; width: 50px; height: 50px;">
+                       <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; background-color: ${patrolArea?.color || 'red'}; animation: pulse 1.5s infinite;"></div>
+                       <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-image: url(${profilePicture || ''}); background-size: cover; border-radius: 50%; border: 2px solid ${patrolArea?.color || 'red'};">
                        </div>
                      </div>
                      <style>
@@ -209,26 +215,20 @@ const PatrolTracking = () => {
                          100% { transform: scale(2); opacity: 0; }
                        }
                      </style>`,
-            });
-            const incidentMarker = L.marker([lat, lng], { icon }).addTo(mapRef.current);
-            incidentMarker.on('click', () => {
-              const incident = incidentReports.find(report => report._id === key);
-              setSelectedReport(incident);
-            }); // Add click event listener
-            mapRef.current.setView([lat, lng], 15); // Zoom to the location
-          }
-        }
-      });
+            }),
+          });
+          userMarker.addTo(mapRef.current);
+          userMarkerRefs.current[userId] = userMarker;
+        });
+      }
     }
   };
 
   const handleRefreshMap = () => {
-    // Reset all states
+    // Only refresh tanod locations and patrol areas
     setTanodLocations([]);
     setPatrolAreas([]);
-    setIncidentReports([]);
-    setIncidentLocations({});
-    setSelectedReport(null);
+    setCctvLocations([]); // Add this
 
     // Reinitialize WebSocket connection
     if (socketRef.current) {
@@ -238,16 +238,9 @@ const PatrolTracking = () => {
 
     // Fetch fresh data
     fetchPatrolAreas();
-    fetchIncidentReports();
+    fetchCctvLocations(); // Add this
     
-    // Clear and refresh map
-    if (mapRef.current) {
-      mapRef.current.eachLayer((layer) => {
-        if (layer instanceof L.Marker || layer instanceof L.Polygon) {
-          mapRef.current.removeLayer(layer);
-        }
-      });
-    }
+    // Refresh map without affecting incident markers
     refreshMap();
     
     toast.success('Map refreshed successfully');
@@ -256,6 +249,7 @@ const PatrolTracking = () => {
   useEffect(() => {
     fetchPatrolAreas();
     fetchIncidentReports();
+    fetchCctvLocations(); // Add this
     initializeWebSocket(); // Always initialize WebSocket
     return () => {
       if (socketRef.current) {
@@ -277,7 +271,7 @@ const PatrolTracking = () => {
 
         // Clear existing layers to prevent duplication
         map.eachLayer((layer) => {
-          if (layer instanceof L.Polygon) {
+          if (layer instanceof L.Polygon || layer instanceof L.Marker) {
             map.removeLayer(layer);
           }
         });
@@ -292,15 +286,107 @@ const PatrolTracking = () => {
             layer.addTo(map);
           }
         });
+
+        // Add CCTV markers
+        cctvLocations.forEach(cctv => {
+          const marker = L.marker([cctv.latitude, cctv.longitude], {
+            icon: createCctvMarker()
+          });
+          
+          // Enhanced tooltip with name and description
+          marker.bindTooltip(
+            `<div class="font-semibold">${cctv.name}</div>
+             <div class="text-sm mt-1">${cctv.description}</div>`,
+            { 
+              permanent: false,
+              direction: 'top',
+              offset: [0, -10],
+              className: 'custom-tooltip'
+            }
+          );
+          
+          marker.addTo(map);
+        });
       }
-    }, [patrolAreas]);
+    }, [patrolAreas, cctvLocations]); // Add cctvLocations to dependencies
 
     return null;
   };
 
+  const createIncidentMarker = (lat, lng, data, id) => {
+    const getMarkerColor = (status) => {
+      switch (status) {
+        case 'Resolved':
+          return 'rgba(34, 197, 94, 0.5)'; // green
+        case 'In Progress':
+          return 'rgba(59, 130, 246, 0.5)'; // blue
+        case 'Pending':
+          return data.type === 'Emergency' ? 'rgba(255, 0, 0, 0.5)' : 'rgba(0, 0, 255, 0.5)';
+        default:
+          return data.type === 'Emergency' ? 'rgba(255, 0, 0, 0.5)' : 'rgba(0, 0, 255, 0.5)';
+      }
+    };
+
+    return L.marker([lat, lng], {
+      icon: L.divIcon({
+        className: 'custom-icon',
+        html: `<div style="position: relative; width: 36px; height: 36px;">
+                 <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                      border-radius: 50%; 
+                      background-color: ${getMarkerColor(data.status)}; 
+                      animation: ${data.status !== 'Resolved' ? 'pulse 1.5s infinite' : 'none'};"></div>
+                 <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                      display: flex; align-items: center; justify-content: center;">
+                   ${data.status === 'Resolved' 
+                     ? '<i class="fas fa-check-circle" style="color: green; font-size: 20px;"></i>'
+                     : data.type === 'Emergency'
+                     ? '<i class="fas fa-exclamation-triangle" style="color: red; font-size: 20px;"></i>'
+                     : '<i class="fas fa-info-circle" style="color: blue; font-size: 20px;"></i>'}
+                 </div>
+               </div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
+      }),
+      zIndexOffset: data.status === 'Resolved' ? 500 : 1000
+    });
+  };
+
+  const createCctvMarker = () => {
+    return L.divIcon({
+      className: 'custom-cctv-icon',
+      html: `
+        <div class="relative">
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="#3b82f6"
+            style="filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.5));"
+            class="w-8 h-8"
+          >
+            <path 
+              stroke-linecap="round" 
+              stroke-linejoin="round" 
+              stroke-width="2" 
+              d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+  };
+
+  const zoomToLocation = (coordinates) => {
+    if (mapRef.current && coordinates) {
+      mapRef.current.setView(coordinates, 18);
+    }
+  };
+
   return (
     <div className="flex w-full h-full">
-      <div className="relative w-2/3 h-full mr-6">
+      <div className="relative w-2/3 h-full mr-6" style={{ zIndex: 1 }}>
         <MapContainer center={[14.7356, 121.0498]} zoom={13} style={{ height: '100%', width: '100%' }} ref={mapRef}>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <MapEvents />
@@ -327,7 +413,15 @@ const PatrolTracking = () => {
               isTrackingVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
             }`}
           >
-            {isTrackingVisible ? 'Hide Tracking' : 'Show Tracking'}
+            {isTrackingVisible ? 'Stop Tracking' : 'Track Tanods'}
+          </button>
+          <button 
+            onClick={toggleCctvVisibility} 
+            className={`flex-1 py-3 text-white text-lg rounded-lg shadow transition ${
+              isCctvVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+            }`}
+          >
+            CCTV Location
           </button>
           <button
             onClick={handleRefreshMap}
@@ -342,9 +436,15 @@ const PatrolTracking = () => {
             setIncidentLocations={setIncidentLocations} 
             selectedReport={selectedReport} 
             setSelectedReport={setSelectedReport}
+            mapRef={mapRef}
+            zoomToLocation={zoomToLocation}
           />
         </div>
       </div>
+      <CctvLocationModal
+        isOpen={showCctvModal}
+        onClose={() => setShowCctvModal(false)}
+      />
     </div>
   );
 };

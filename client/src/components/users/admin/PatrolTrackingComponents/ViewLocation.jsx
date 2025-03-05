@@ -7,6 +7,17 @@ const ViewLocation = ({ location, isVisible, incidentType, markerId, onMarkerCli
   const map = useMap();
   const markerRef = useRef({});
 
+  // Add cleanup effect
+  useEffect(() => {
+    return () => {
+      // Cleanup: remove marker when component unmounts
+      if (markerRef.current[markerId]) {
+        markerRef.current[markerId].remove();
+        delete markerRef.current[markerId];
+      }
+    };
+  }, [markerId]);
+
   useEffect(() => {
     if (isVisible && location) {
       const latLngMatch = location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);

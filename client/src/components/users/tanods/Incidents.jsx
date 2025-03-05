@@ -3,12 +3,23 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { FaUserShield } from "react-icons/fa";
 import TanodPatrolSchedule from "./incidentComponents/TanodPatrolSchedule";
-import ReportIncident from "./incidentComponents/ReportIncident";
+import ReportIncident from "./incidentComponents/IncidentResponse";
 import ViewReportedIncidents from "./incidentComponents/ViewReportedIncidents";
 import io from 'socket.io-client'; // Import socket.io-client
 import { MapContainer } from 'react-leaflet'; // Import MapContainer
 
-const Incidents = ({ fetchCurrentPatrolArea, setUserLocation, setIncidentLocations, incidentReports, isTrackingVisible, toggleTracking }) => { // Add setUserLocation as a prop
+const Incidents = ({ 
+  fetchCurrentPatrolArea, 
+  setUserLocation, 
+  setIncidentLocations, 
+  incidentReports, 
+  isTrackingVisible, 
+  toggleTracking,
+  showReportIncident,
+  setShowReportIncident,
+  selectedIncidentForResponse,
+  setSelectedIncidentForResponse
+}) => { // Add setUserLocation as a prop
   const [patrols, setPatrols] = useState([]);
   const [upcomingPatrols, setUpcomingPatrols] = useState([]);
   const [incident, setIncident] = useState({ type: "", description: "", location: "" });
@@ -16,7 +27,6 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation, setIncidentLocatio
   const [currentReport, setCurrentReport] = useState(localStorage.getItem("currentReport") || "");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [showTodaySchedule, setShowTodaySchedule] = useState(false);
-  const [showReportIncident, setShowReportIncident] = useState(false);
   const [showReportedIncidents, setShowReportedIncidents] = useState(false);
   const [todayPatrols, setTodayPatrols] = useState([]);
   const [patrolLogs, setPatrolLogs] = useState(JSON.parse(localStorage.getItem("patrolLogs")) || []);
@@ -299,38 +309,42 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation, setIncidentLocatio
       
       {isDropdownOpen && (
         <div className="dropdown-content space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
             <button
               onClick={() => setShowTodaySchedule(true)}
               className="w-full bg-blue-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-blue-700 transition"
             >
               Today's Schedule
             </button>
-            <button
-              onClick={() => setShowReportIncident(true)}
-              className="w-full bg-green-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-green-700 transition"
-            >
-              Report Incident
-            </button>
-            <button
-              onClick={() => setShowReportedIncidents(true)}
-              className="w-full bg-yellow-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-yellow-700 transition"
-            >
-              View Reports
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowReportedIncidents(true)}
+                className="w-full bg-yellow-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-yellow-700 transition"
+              >
+                View Reports
+              </button>
+              {selectedIncidentForResponse && selectedIncidentForResponse.status === 'In Progress' && (
+                <button
+                  onClick={() => setShowReportIncident(true)}
+                  className="w-full bg-green-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-green-700 transition"
+                >
+                  Respond to Incident
+                </button>
+              )}
+            </div>
             {isTracking ? (
               <button 
                 onClick={stopTracking} 
                 className="w-full bg-red-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-red-700 transition"
               >
-                Stop Tracking
+                Stop Tracker
               </button>
             ) : (
               <button 
                 onClick={() => fetchUserProfile().then(() => startTracking())} 
                 className="w-full bg-green-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-green-700 transition"
               >
-                Start Tracking
+                Turn On Tracker
               </button>
             )}
           </div>
@@ -410,14 +424,28 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation, setIncidentLocatio
         </div>
       )}
 
-      {showReportIncident && (
-        <ReportIncident
-          incident={incident}
-          setIncident={setIncident}
-          setIncidentLog={setIncidentLog}
-          incidentLog={incidentLog}
-          setShowReportIncident={setShowReportIncident}
-        />
+      {showReportIncident && selectedIncidentForResponse && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50"
+             style={{ touchAction: 'none' }}
+             onClick={(e) => {
+               if (e.target === e.currentTarget) {
+                 setShowReportIncident(false);
+               }
+             }}>
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div onClick={(e) => e.stopPropagation()}>
+              <ReportIncident
+                incident={incident}
+                setIncident={setIncident}
+                setIncidentLog={setIncidentLog}
+                incidentLog={incidentLog}
+                setShowReportIncident={setShowReportIncident}
+                selectedIncident={selectedIncidentForResponse}
+                setSelectedIncidentForResponse={setSelectedIncidentForResponse}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {showReportedIncidents && (
@@ -427,6 +455,8 @@ const Incidents = ({ fetchCurrentPatrolArea, setUserLocation, setIncidentLocatio
               setShowReportedIncidents={setShowReportedIncidents}
               setIncidentLocations={setIncidentLocations}
               incidentReports={incidentReports}
+              setShowReportIncident={setShowReportIncident}
+              setSelectedIncidentForResponse={setSelectedIncidentForResponse}
             />
           </div>
         </div>

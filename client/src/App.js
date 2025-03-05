@@ -103,7 +103,7 @@ function App() {
                   element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolManagement /></ProtectedRoute>}
                 />
                 <Route
-                  path="/PatrolTracking"
+                  path="/Patrol&incidenttracking"
                   element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolTrack /></ProtectedRoute>}
                 />
               </Route>

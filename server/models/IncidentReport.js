@@ -34,10 +34,49 @@ const incidentReportSchema = new mongoose.Schema({
   contactNumber: {
     type: String,
   },
+  status: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Resolved'],
+    default: 'Pending'
+  },
   createdAt: {
     type: Date,
     default: Date.now,
   },
+  logs: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'IncidentLog'
+  }],
+  log: {
+    type: String,
+    default: null
+  },
+  resolvedAt: {
+    type: Date,
+    default: null
+  },
+  resolvedByFullName: {
+    type: String,
+    default: null
+  },
+  resolvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  responder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  responderName: {
+    type: String,
+    default: null
+  },
+  respondedAt: {
+    type: Date,
+    default: null
+  }
 });
 
 module.exports = mongoose.model('IncidentReport', incidentReportSchema);

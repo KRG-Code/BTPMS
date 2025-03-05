@@ -316,3 +316,17 @@ body.dark-mode .TopNav {
   }
 }
 
+/* Tooltip styles */
+.custom-tooltip .leaflet-tooltip-content {
+  white-space: normal;
+  max-width: 200px;
+}
+
+.leaflet-tooltip {
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+

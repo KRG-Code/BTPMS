@@ -208,7 +208,13 @@ const TanodPatrolSchedule = ({ todayPatrols, setShowTodaySchedule, fetchUpcoming
             Close
           </button>
         </h2>
-        <div className="overflow-y-auto" style={{ maxHeight: "300px" }}>
+        <div className="overflow-y-auto" 
+             style={{ 
+               maxHeight: "300px",
+               WebkitOverflowScrolling: "touch",
+               touchAction: "pan-y" 
+             }}
+             onTouchMove={(e) => e.stopPropagation()}>
           {filteredPatrols.length > 0 ? (
             <table className="min-w-full bg-white shadow-md rounded-lg border overflow-hidden text-center">
               <thead className="TopNav">
