@@ -11,6 +11,7 @@ const RespondToIncident = ({
     const savedLog = localStorage.getItem(`incident_log_${selectedIncident._id}`);
     return savedLog || "";
   });
+  const [assistanceStatus, setAssistanceStatus] = useState(null);
 
   const handleLogChange = (e) => {
     const newValue = e.target.value;
@@ -84,33 +85,103 @@ const RespondToIncident = ({
     );
   };
 
+  const handleRequestAssistance = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const userId = localStorage.getItem('userId');
+      
+      if (!token || !userId) {
+        toast.error('Authentication required');
+        return;
+      }
+
+      toast.info(
+        <div className="text-center">
+          <p className="mb-2">Are you sure you want to request assistance?</p>
+          <div className="flex justify-center space-x-2">
+            <button
+              onClick={async () => {
+                toast.dismiss();
+                try {
+                  const response = await axios.post(
+                    `${process.env.REACT_APP_API_URL}/assistance-requests/create`,
+                    {
+                      incidentId: selectedIncident._id,
+                      requesterId: userId,
+                      location: selectedIncident.location,
+                      incidentType: selectedIncident.type,
+                      incidentClassification: selectedIncident.incidentClassification,
+                      dateRequested: new Date(),
+                      requesterName: selectedIncident.responderName,
+                    },
+                    {
+                      headers: { Authorization: `Bearer ${token}` }
+                    }
+                  );
+
+                  if (response.data) {
+                    toast.success('Assistance request has been sent');
+                    setAssistanceStatus('Pending');
+                  }
+                } catch (error) {
+                  console.error('Error requesting assistance:', error);
+                  toast.error(error.response?.data?.message || 'Failed to request assistance');
+                }
+              }}
+              className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
+            >
+              Yes
+            </button>
+            <button
+              onClick={() => toast.dismiss()}
+              className="bg-gray-600 text-white px-4 py-2 rounded shadow hover:bg-gray-700 transition"
+            >
+              No
+            </button>
+          </div>
+        </div>,
+        { autoClose: false }
+      );
+    } catch (error) {
+      console.error('Error requesting assistance:', error);
+      toast.error('Failed to request assistance');
+    }
+  };
+
   useEffect(() => {
-    // Load any existing incident details when component mounts
-    const fetchIncidentDetails = async () => {
+    const fetchData = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.get(
+        
+        // Fetch incident details
+        const incidentResponse = await axios.get(
           `${process.env.REACT_APP_API_URL}/incident-reports/${selectedIncident._id}/details`,
-          {
-            headers: { Authorization: `Bearer ${token}` }
-          }
+          { headers: { Authorization: `Bearer ${token}` } }
         );
         
-        // If there's an existing log, load it
-        if (response.data.log) {
-          setIncidentLog(response.data.log);
-          localStorage.setItem(`incident_log_${selectedIncident._id}`, response.data.log);
+        if (incidentResponse.data.log) {
+          setIncidentLog(incidentResponse.data.log);
+          localStorage.setItem(`incident_log_${selectedIncident._id}`, incidentResponse.data.log);
+        }
+
+        // Check assistance status
+        const assistanceResponse = await axios.get(
+          `${process.env.REACT_APP_API_URL}/assistance-requests/${selectedIncident._id}/status`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        
+        if (assistanceResponse.data) {
+          setAssistanceStatus(assistanceResponse.data.status);
         }
       } catch (error) {
-        console.error('Error fetching incident details:', error);
+        console.error('Error fetching data:', error);
       }
     };
 
-    fetchIncidentDetails();
+    fetchData();
   }, [selectedIncident._id]);
 
   const handleClose = () => {
-    // Save current log to localStorage before closing
     if (incidentLog.trim()) {
       localStorage.setItem(`incident_log_${selectedIncident._id}`, incidentLog);
     }
@@ -122,12 +193,31 @@ const RespondToIncident = ({
       <div className="bg-white p-6 rounded-lg w-11/12 max-w-lg relative TopNav">
         <h2 className="text-xl md:text-2xl font-bold mb-4 flex justify-between items-center">
           Respond to Incident
-          <button
-            onClick={handleClose}
-            className="bg-red-500 text-white px-3 py-1 rounded"
-          >
-            Close
-          </button>
+          <div className="flex gap-2">
+            {assistanceStatus ? (
+              <span className={`px-3 py-1 rounded ${
+                assistanceStatus === 'Pending' ? 'bg-yellow-500' :
+                assistanceStatus === 'Approved' ? 'bg-green-500' :
+                assistanceStatus === 'Completed' ? 'bg-blue-500' :
+                'bg-gray-500'
+              } text-white`}>
+                Assistance: {assistanceStatus}
+              </span>
+            ) : (
+              <button
+                onClick={handleRequestAssistance}
+                className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600"
+              >
+                Request Assistance
+              </button>
+            )}
+            <button
+              onClick={handleClose}
+              className="bg-red-500 text-white px-3 py-1 rounded"
+            >
+              Close
+            </button>
+          </div>
         </h2>
 
         <div className="mb-4 p-4 bg-gray-100 rounded text-black">
@@ -148,7 +238,7 @@ const RespondToIncident = ({
             </p>
             <textarea
               value={incidentLog}
-              onChange={handleLogChange}
+              onChange={(e) => handleLogChange(e)}
               placeholder="Enter your incident response log here..."
               className="border p-2 mb-4 w-full h-32 rounded text-sm md:text-base text-black resize-none"
             />

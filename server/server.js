@@ -11,6 +11,8 @@ const messageRoutes = require('./routes/messageRoutes');
 const polygonRoutes = require('./routes/polygonRoutes');
 const incidentReportRoutes = require('./routes/incidentReportRoutes');
 const cctvLocationRoutes = require("./routes/cctvLocationRoutes");
+const assistanceRequestRoutes = require('./routes/assistanceRequestRoutes');
+const assistanceIntegrationRoutes = require('./routes/assistanceIntegrationRoutes');
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
@@ -43,11 +45,21 @@ app.use((req, res, next) => {
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? 'https://barangaypatrol.lgu1.com'  // Production front-end URL
-    : 'http://localhost:3000',            // Development front-end URL
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'],            // Development front-end URL
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // Allowed methods
   allowedHeaders: ['Content-Type', 'Authorization'],     // Allowed headers
   credentials: true,  // Enable cookies and authorization headers
 }));
+
+// Add this before your routes
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+  );
+  next();
+});
 
 // Handle preflight requests (for CORS)
 app.options('*', cors());
@@ -91,6 +103,12 @@ app.use('/api/incident-reports', incidentReportRoutes);
 
 // CCTV Location Routes
 app.use("/api/cctv-locations", cctvLocationRoutes);
+
+// Add assistance request routes
+app.use('/api/assistance-requests', assistanceRequestRoutes);
+
+// Add assistance integration routes
+app.use('/api/integration', assistanceIntegrationRoutes);
 
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {

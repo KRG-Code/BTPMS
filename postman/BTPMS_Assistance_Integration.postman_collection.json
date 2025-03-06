@@ -1,0 +1,149 @@
+{
+  "info": {
+    "name": "BTPMS Assistance Integration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Assistance",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"action\": \"create\",\n    \"incidentId\": \"67c56103eae51ef801d52fb3\",\n    \"requesterId\": \"670ccc4783de1355c2f97be0\",\n    \"location\": \"PAYATAS\",\n    \"incidentType\": \"Vandalism\",\n    \"incidentClassification\": \"Normal Incident\",\n    \"adminId\": \"65f2e6b9a2389b34a89d9012\",\n    \"notes\": \"Immediate assistance needed\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/assistance",
+          "host": ["{{BASE_URL}}"],
+          "path": ["assistance"]
+        }
+      }
+    },
+    {
+      "name": "Update Assistance",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"action\": \"update\",\n    \"incidentId\": \"65f2e6b9a2389b34a89d1234\",\n    \"status\": \"Approved\",\n    \"adminId\": \"65f2e6b9a2389b34a89d9012\",\n    \"notes\": \"Assistance request approved\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/assistance",
+          "host": ["{{BASE_URL}}"],
+          "path": ["assistance"]
+        }
+      }
+    },
+    {
+      "name": "Update Assistance Status",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "5a996eee-08b3-4da3-affe-221e94fb0897",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"status\": \"Approved\",\n    \"adminId\": \"670ccc4783de1355c2f97be0\",\n    \"notes\": \"Assistance request approved by integrated system\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/integration/assistance/67c56103eae51ef801d52fb3",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "integration", "assistance", "67c56103eae51ef801d52fb3"]
+        }
+      }
+    },
+    {
+      "name": "Get All Assistance",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "5a996eee-08b3-4da3-affe-221e94fb0897",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:5000/api/integration/assistance",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "integration", "assistance"]
+        }
+      }
+    },
+    {
+      "name": "Get Specific Assistance",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "5a996eee-08b3-4da3-affe-221e94fb0897",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:5000/api/integration/assistance/67c56103eae51ef801d52fb3",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "integration", "assistance", "67c56103eae51ef801d52fb3"]
+        }
+      }
+    },
+    {
+      "name": "Delete Assistance",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/assistance/65f2e6b9a2389b34a89d1234",
+          "host": ["{{BASE_URL}}"],
+          "path": ["assistance", "65f2e6b9a2389b34a89d1234"]
+        }
+      }
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { toast } from 'react-toastify';
+import { toast } from 'react-toastify'; // Keep toast import but remove ToastContainer
+import 'react-toastify/dist/ReactToastify.css';
 import ResolvedIncidentsModal from './ResolvedIncidentsModal';
 import ViewLocation from './ViewLocation';
 import CctvReviewPanel from './CctvReviewPanel';
@@ -13,6 +14,7 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
   const [resolvedIncidents, setResolvedIncidents] = useState([]);
   const [showCctvReview, setShowCctvReview] = useState(false);
   const [activePanel, setActivePanel] = useState(null); // 'details' or 'cctv'
+  const [assistanceRequests, setAssistanceRequests] = useState({});
 
   const fetchIncidentReports = async () => {
     const token = localStorage.getItem('token');
@@ -20,7 +22,6 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
       toast.error('Please log in.');
       return;
     }
-
     try {
       const response = await axios.get(`${process.env.REACT_APP_API_URL}/incident-reports`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -37,7 +38,6 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
   const fetchResolvedIncidents = async () => {
     const token = localStorage.getItem('token');
     if (!token) return;
-
     try {
       const response = await axios.get(`${process.env.REACT_APP_API_URL}/incident-reports`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -50,9 +50,38 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
     }
   };
 
+  const fetchAssistanceRequests = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/assistance-requests`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      // Update how we process the assistance requests
+      const requests = {};
+      response.data.forEach(request => {
+        // Convert ObjectId to string for comparison
+        const incidentId = request.incidentId._id || request.incidentId;
+        requests[incidentId] = request;
+      });
+      setAssistanceRequests(requests);
+      console.log('Assistance Requests:', requests); // Debug log
+    } catch (error) {
+      console.error('Error fetching assistance requests:', error);
+    }
+  };
+
+  // Add debug useEffect
+  useEffect(() => {
+    console.log('Current Assistance Requests:', assistanceRequests);
+    console.log('Current Incident Reports:', incidentReports);
+  }, [assistanceRequests, incidentReports]);
+
   useEffect(() => {
     fetchIncidentReports();
     fetchResolvedIncidents();
+    fetchAssistanceRequests();
   }, []);
 
   const formatDate = (dateString) => {
@@ -63,7 +92,6 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
   const fetchIncidentDetails = async (reportId) => {
     const token = localStorage.getItem('token');
     if (!token) return null;
-
     try {
       const response = await axios.get(
         `${process.env.REACT_APP_API_URL}/incident-reports/${reportId}/details`,
@@ -102,6 +130,11 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
   };
 
   const handleToggleLocation = (report) => {
+    if (!report || !report.location) {
+      toast.error('Invalid location data');
+      return;
+    }
+
     const latLngMatch = report.location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
     if (!latLngMatch) {
       toast.warning(
@@ -112,7 +145,12 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
         </div>,
         {
           autoClose: 5000,
-          icon: '📍'
+          icon: '📍',
+          position: "top-right",
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true
         }
       );
       return;
@@ -126,8 +164,8 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
         Object.keys(newVisibleLocations).forEach(key => {
           delete newVisibleLocations[key];
         });
-        newVisibleLocations[report._id] = { 
-          location: report.location, 
+        newVisibleLocations[report._id] = {
+          location: report.location,
           type: getIncidentType(report.incidentClassification),
           status: report.status
         };
@@ -135,7 +173,6 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
       setIncidentLocations(newVisibleLocations);
       return newVisibleLocations;
     });
-
     setShowAll(false);
   };
 
@@ -151,8 +188,8 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
         .forEach((report) => {
           const latLngMatch = report.location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
           if (latLngMatch) {
-            allLocations[report._id] = { 
-              location: report.location, 
+            allLocations[report._id] = {
+              location: report.location,
               type: getIncidentType(report.incidentClassification),
               status: report.status
             };
@@ -195,14 +232,11 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
       'Pending': 2,
       'Resolved': 3
     };
-
     return [...incidents].sort((a, b) => {
       const statusA = a.status || 'Pending';
       const statusB = b.status || 'Pending';
-      
       const priorityDiff = statusPriority[statusA] - statusPriority[statusB];
       if (priorityDiff !== 0) return priorityDiff;
-      
       return new Date(b.date) - new Date(a.date);
     });
   };
@@ -220,6 +254,69 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
   const handleCloseCctvReview = () => {
     setShowCctvReview(false);
     setActivePanel(null);
+  };
+
+  const handleAssistanceAction = async (incidentId, action) => {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      toast.error('Authentication required');
+      return;
+    }
+  
+    const toastId = toast.info(
+      <div className="text-center">
+        <p className="mb-2">Are you sure you want to {action.toLowerCase()} this assistance request?</p>
+        <div className="flex justify-center space-x-2 mt-4">
+          <button
+            onClick={async () => {
+              toast.dismiss(toastId);
+              try {
+                const response = await axios({
+                  method: 'put',
+                  url: `${process.env.REACT_APP_API_URL}/assistance-requests/${assistanceRequests[incidentId]._id}/status`,
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  },
+                  data: {
+                    status: action,
+                    notes: `Assistance request ${action.toLowerCase()} by admin`
+                  }
+                });
+  
+                if (response.data) {
+                  toast.success(`Assistance request has been ${action.toLowerCase()}`);
+                  await fetchAssistanceRequests();
+                  console.log('Assistance request updated:', response.data);
+                }
+              } catch (error) {
+                console.error('Error updating assistance request:', error);
+                const errorMessage = error.response?.data?.message || error.message;
+                toast.error(`Failed to ${action.toLowerCase()} assistance request: ${errorMessage}`);
+              }
+            }}
+            className={`px-4 py-2 text-white rounded ${
+              action === 'Approved' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'
+            }`}
+          >
+            Yes, {action}
+          </button>
+          <button
+            onClick={() => toast.dismiss(toastId)}
+            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>,
+      {
+        autoClose: false,
+        closeButton: false,
+        closeOnClick: false,
+        draggable: false
+      }
+    );
   };
 
   return (
@@ -248,6 +345,7 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
               <th className="py-2 px-4 border-b text-center">Incident</th>
               <th className="py-2 px-4 border-b text-center">Date</th>
               <th className="py-2 px-4 border-b text-center">Status</th>
+              <th className="py-2 px-4 border-b text-center">Assistance</th>
               <th className="py-2 px-4 border-b text-center">Action</th>
             </tr>
           </thead>
@@ -260,13 +358,57 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
                   {report.status || 'Pending'}
                 </td>
                 <td className="py-2 px-4 border-b text-center">
+                  {(() => {
+                    const assistanceRequest = assistanceRequests[report._id];
+                    if (assistanceRequest) {
+                      return (
+                        <div className="flex flex-col items-center space-y-1">
+                          <span className={`text-sm font-medium ${
+                            assistanceRequest.status === 'Pending' ? 'text-yellow-500' :
+                            assistanceRequest.status === 'Approved' ? 'text-green-500' :
+                            assistanceRequest.status === 'Rejected' ? 'text-red-500' :
+                            'text-gray-500'
+                          }`}>
+                            {assistanceRequest.status}
+                          </span>
+                          {assistanceRequest.status === 'Pending' && (
+                            <div className="flex space-x-1">
+                              <button
+                                onClick={() => handleAssistanceAction(report._id, 'Approved')}
+                                className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600 transition-colors"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleAssistanceAction(report._id, 'Rejected')}
+                                className="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600 transition-colors"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    return <span className="text-gray-400">No Request</span>;
+                  })()}
+                </td>
+                <td className="py-2 px-4 border-b text-center">
                   <div className="flex flex-col items-center space-y-2">
-                    <button className="bg-blue-500 text-white px-1 py-1 rounded w-28" onClick={() => handleViewDetails(report)}>View Details</button>
-                    <button className="bg-green-500 text-white px-1 py-1 rounded w-28" onClick={() => handleToggleLocation(report)}>
+                    <button
+                      className="bg-blue-500 text-white px-1 py-1 rounded w-28"
+                      onClick={() => handleViewDetails(report)}
+                    >
+                      View Details
+                    </button>
+                    <button
+                      className="bg-green-500 text-white px-1 py-1 rounded w-28"
+                      onClick={() => handleToggleLocation(report)}
+                    >
                       {visibleLocations[report._id] ? 'Hide Location' : 'View Location'}
                     </button>
-                    <button 
-                      className="bg-purple-500 text-white px-1 py-1 rounded w-28" 
+                    <button
+                      className="bg-purple-500 text-white px-1 py-1 rounded w-28"
                       onClick={() => handleCctvReview(report)}
                     >
                       Review CCTV
@@ -281,13 +423,18 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
 
       {selectedReport && activePanel === 'details' && (
         <div className="relative p-4 bg-blue-50 rounded-lg shadow-md mt-4">
-          <button onClick={handleCloseDetails} className="absolute top-2 right-2 px-2 py-1 bg-red-500 text-white rounded-lg">X</button>
+          <button
+            onClick={handleCloseDetails}
+            className="absolute top-2 right-2 px-2 py-1 bg-red-500 text-white rounded-lg"
+          >
+            X
+          </button>
           <h4 className="text-lg font-semibold text-blue-700">Incident Report Details</h4>
           <div className="mt-2 text-gray-700 space-y-2">
             <p><strong>Incident:</strong> {selectedReport.type}</p>
             <p>
               <strong>Incident Type:</strong> 
-              <span className={`${selectedReport.incidentClassification === 'Emergency Incident' ? 'ml-1 text-red-500 font-bold animate-pulse' : 'ml-1 font-bold'}`}>
+              <span className={selectedReport.incidentClassification === 'Emergency Incident' ? 'ml-1 text-red-500 font-bold animate-pulse' : 'ml-1 font-bold'}>
                 {getIncidentType(selectedReport.incidentClassification) || 'N/A'}
               </span>
             </p>
@@ -304,7 +451,6 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
                 {selectedReport.status || 'Pending'}
               </span>
             </p>
-            
             {selectedReport.status === 'In Progress' && (
               <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <h5 className="font-semibold text-blue-700 mb-2">Response Details</h5>
@@ -329,8 +475,8 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
       )}
 
       {selectedReport && activePanel === 'cctv' && (
-        <CctvReviewPanel 
-          incident={selectedReport} 
+        <CctvReviewPanel
+          incident={selectedReport}
           onClose={handleCloseCctvReview}
           mapRef={mapRef}
           zoomToLocation={zoomToLocation}
@@ -339,7 +485,7 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
 
       <ResolvedIncidentsModal
         isOpen={showResolvedModal}
-        onClose={handleCloseResolvedModal} 
+        onClose={handleCloseResolvedModal}
         resolvedIncidents={resolvedIncidents}
       />
     </div>

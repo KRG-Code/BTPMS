@@ -233,25 +233,18 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
       const incidentCoords = getIncidentCoordinates();
       if (!incidentCoords) return;
 
-      let incidentMarker = null;
-      let nearestCctvMarkerRef = null;
+      const reviewLayerGroup = L.layerGroup().addTo(mapRef.current);
 
       // Add incident marker
-      incidentMarker = L.marker(incidentCoords, {
+      const incidentMarker = L.marker(incidentCoords, {
         icon: createIncidentMarker()
-      }).addTo(mapRef.current);
+      }).addTo(reviewLayerGroup);
 
       // Find and update nearest CCTV marker
-      mapRef.current.eachLayer((layer) => {
-        if (layer instanceof L.Marker) {
-          const markerLatLng = layer.getLatLng();
-          if (markerLatLng.lat === nearestCctv.latitude && 
-              markerLatLng.lng === nearestCctv.longitude) {
-            layer.setIcon(createNearestCctvMarker());
-            nearestCctvMarkerRef = layer;
-          }
-        }
-      });
+      const nearestCctvMarker = L.marker(
+        [nearestCctv.latitude, nearestCctv.longitude],
+        { icon: createNearestCctvMarker() }
+      ).addTo(reviewLayerGroup);
 
       // Zoom to show both markers
       const bounds = L.latLngBounds([incidentCoords, [nearestCctv.latitude, nearestCctv.longitude]]);
@@ -259,12 +252,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
 
       // Cleanup function
       return () => {
-        if (incidentMarker) {
-          incidentMarker.remove();
-        }
-        if (nearestCctvMarkerRef) {
-          nearestCctvMarkerRef.setIcon(createCctvMarker());
-        }
+        mapRef.current.removeLayer(reviewLayerGroup);
       };
     }
   }, [nearestCctv]);

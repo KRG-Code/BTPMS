@@ -262,6 +262,7 @@ exports.loginTanod = async (req, res) => {
       userType: user.userType,
       token: generateToken(user._id), // Use the generateToken function
       profilePicture: user.profilePicture,
+      id: user._id // Add this line to ensure userId is included
     });
   } catch (error) {
     console.error("Login Error:", error.message);
@@ -269,6 +270,43 @@ exports.loginTanod = async (req, res) => {
   }
 };
 
+exports.loginAdmin = async (req, res) => {
+  const { username, password } = req.body; // Extract username and password from request body
+  try {
+    const user = await User.findOne({ username }); // Find user by username
+
+    // If user is not found, return an error
+    if (!user) {
+      return res.status(401).json({ message: "Invalid username or password" });
+    }
+
+    // Verify password
+    const isPasswordMatch = await bcrypt.compare(password, user.password);
+    if (!isPasswordMatch) {
+      return res.status(401).json({ message: "Invalid username or password" });
+    }
+
+    // Check if the user type is either "tanod" or "admin"
+    if (user.userType !== "tanod" && user.userType !== "admin") {
+      return res.status(403).json({ message: "Access denied: User type not authorized" });
+    }
+
+    // If the password matches and user type is valid, return user info and token
+    return res.json({
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      userType: user.userType,
+      token: generateToken(user._id), // Use the generateToken function
+      profilePicture: user.profilePicture,
+      id: user._id // Add this line to ensure userId is included
+    });
+  } catch (error) {
+    console.error("Login Error:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 // Change Password
 exports.changePassword = async (req, res) => {

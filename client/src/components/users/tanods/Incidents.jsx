@@ -222,31 +222,57 @@ const Incidents = ({
     setIsTracking(true);
     toggleTracking();
     localStorage.setItem("isTracking", "true");
-    
+
     // Initialize socket connection
     const socketUrl = process.env.NODE_ENV === 'production' 
       ? 'https://barangaypatrol.lgu1.com'
       : 'http://localhost:5000';
-      
+
     socketRef.current = io(socketUrl, { 
       withCredentials: true,
-      query: { userId: profile._id, role: 'tanod' }
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      transports: ['polling', 'websocket']
     });
 
-    // Start location tracking
+    // Join tracking room after connection
+    socketRef.current.on('connect', () => {
+      console.log('Connected to socket server');
+      socketRef.current.emit('joinTrackingRoom');
+    });
+
+    // Start location tracking with high accuracy
     if (navigator.geolocation) {
       const id = navigator.geolocation.watchPosition(
-        (position) => updateUserLocation(position, profile),
+        (position) => {
+          const locationData = {
+            userId: profile._id,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            profilePicture: profile.profilePicture,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            currentScheduleId
+          };
+
+          // Update local state
+          setUserLocation(locationData);
+
+          // Emit location update if socket is connected
+          if (socketRef.current?.connected) {
+            console.log('Emitting location update:', locationData);
+            socketRef.current.emit('locationUpdate', locationData);
+          }
+        },
         handleLocationError,
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        { 
+          enableHighAccuracy: true, 
+          timeout: 5000, 
+          maximumAge: 0 
+        }
       );
       setWatchId(id);
-
-      // Initial location update
-      navigator.geolocation.getCurrentPosition(
-        (position) => updateUserLocation(position, profile),
-        handleLocationError
-      );
     }
   };
 

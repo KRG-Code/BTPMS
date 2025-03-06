@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import React, { useState, useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
 import { toast } from 'react-toastify';
@@ -430,6 +430,27 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
+};
+
+const MapComponent = ({ incident }) => {
+  const map = useMap();
+  const layerGroupRef = useRef(null);
+
+  useEffect(() => {
+    // Create a new layer group if it doesn't exist
+    if (!layerGroupRef.current) {
+      layerGroupRef.current = L.layerGroup().addTo(map);
+    }
+
+    return () => {
+      if (layerGroupRef.current) {
+        layerGroupRef.current.clearLayers();
+        map.removeLayer(layerGroupRef.current);
+      }
+    };
+  }, [map]);
+
+  // ... rest of the component code ...
 };
 
 export default CctvLocationModal;

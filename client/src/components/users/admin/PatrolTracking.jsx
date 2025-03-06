@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
-import { toast } from 'react-toastify';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import io from 'socket.io-client'; // Import socket.io-client
 import L from 'leaflet';
 import { FaUserCircle, FaSync } from 'react-icons/fa'; // Add FaSync import
@@ -108,142 +109,211 @@ const PatrolTracking = () => {
     }
   };
 
-  const initializeWebSocket = () => {
-    const socketUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://barangaypatrol.lgu1.com'  // Production WebSocket URL
-      : 'http://localhost:5000';           // Development WebSocket URL
-    socketRef.current = io(socketUrl, { withCredentials: true }); // Connect to the correct namespace
+  const createMarker = (location) => {
+    if (!mapRef.current) {
+      console.error('Map reference is not available');
+      return null;
+    }
 
-    socketRef.current.on('connect', () => {
+    console.log('Creating marker for location:', location);
+
+    const marker = L.marker([location.latitude, location.longitude], {
+      icon: L.divIcon({
+        className: 'custom-icon',
+        html: `
+          <div style="position: relative; width: 50px; height: 50px; z-index: 1000;">
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                 border-radius: 50%; background-color: ${location.areaColor || 'red'}; 
+                 opacity: 0.5; animation: pulse 1.5s infinite; z-index: 998;"></div>
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                 background-image: url('${location.profilePicture}'); 
+                 background-size: cover; border-radius: 50%; 
+                 border: 2px solid ${location.areaColor || 'red'}; z-index: 999;"></div>
+          </div>
+        `,
+        iconSize: [50, 50],
+        iconAnchor: [25, 25]
+      }),
+      zIndexOffset: 1000
     });
 
-    socketRef.current.on('disconnect', () => {
+    marker.bindTooltip(`${location.firstName} ${location.lastName}`, {
+      permanent: false,
+      direction: 'bottom',
+      offset: [0, 10],
+      className: 'custom-tooltip'
     });
 
-    socketRef.current.on('connect_error', (error) => {
-    });
-
-    socketRef.current.on('locationUpdate', async (data) => {
-      const { userId, latitude, longitude, profilePicture, firstName, lastName, currentScheduleId } = data;
-
-      const schedule = await fetchScheduleById(currentScheduleId);
-      const patrolAreaId = schedule?.patrolArea?._id || schedule?.patrolArea;
-      const patrolArea = patrolAreaId ? await fetchPatrolAreaById(patrolAreaId) : null;
-
-      setTanodLocations((prevLocations) => {
-        const existingLocation = prevLocations.find(location => location.userId === userId);
-        if (existingLocation) {
-          return prevLocations.map(location =>
-            location.userId === userId ? { ...location, latitude, longitude, profilePicture, patrolArea, firstName, lastName, currentScheduleId } : location
-          );
-        } else {
-          return [...prevLocations, { userId, latitude, longitude, profilePicture, patrolArea, firstName, lastName, currentScheduleId }];
-        }
-      });
-
-      // Clear existing layers to prevent duplication
-      if (mapRef.current) {
-        mapRef.current.eachLayer((layer) => {
-          if (layer instanceof L.Polygon) {
-            mapRef.current.removeLayer(layer);
-          }
-        });
-      }
-    });
-  };
-
-  const toggleTrackingVisibility = () => {
-    const newVisibilityState = !isTrackingVisible;
-    setIsTrackingVisible(newVisibilityState);
-    localStorage.setItem("isTrackingVisible", newVisibilityState);
-
-    // Only toggle visibility of tanod markers
-    Object.values(userMarkerRefs.current).forEach(marker => {
-      if (newVisibilityState) {
-        marker.addTo(mapRef.current);
-      } else {
-        marker.remove();
-      }
-    });
-  };
-
-  const toggleCctvVisibility = () => {
-    setShowCctvModal(true);
+    return marker;
   };
 
   const refreshMap = () => {
-    if (mapRef.current) {
-      // Only remove tanod markers and patrol areas
-      mapRef.current.eachLayer((layer) => {
-        if (layer instanceof L.Marker) {
-          // Check if the marker is a tanod marker (stored in userMarkerRefs)
-          const isTanodMarker = Object.values(userMarkerRefs.current).includes(layer);
-          if (isTanodMarker) {
-            mapRef.current.removeLayer(layer);
-          }
-        } else if (layer instanceof L.Polygon) {
-          mapRef.current.removeLayer(layer);
-        }
-      });
+    if (!mapRef.current || !isTrackingVisible) return;
 
-      // Re-add patrol areas
-      patrolAreas.forEach(area => {
-        if (area && area.coordinates) {
-          const layer = L.polygon(
-            area.coordinates.map(({ lat, lng }) => [lat, lng]),
-            { color: area.color, fillOpacity: 0.2, weight: 2 }
-          );
-          layer.bindTooltip(area.legend, { permanent: true, direction: 'center' });
-          layer.addTo(mapRef.current);
-        }
-      });
+    console.log('Refreshing map with tanod locations:', tanodLocations);
 
-      // Re-add tanod locations only if tracking is visible
-      if (isTrackingVisible) {
-        tanodLocations.forEach(({ userId, latitude, longitude, profilePicture, patrolArea }) => {
-          const userMarker = L.marker([latitude, longitude], {
-            icon: L.divIcon({
-              className: 'custom-icon',
-              html: `<div style="position: relative; width: 50px; height: 50px;">
-                       <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; background-color: ${patrolArea?.color || 'red'}; animation: pulse 1.5s infinite;"></div>
-                       <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-image: url(${profilePicture || ''}); background-size: cover; border-radius: 50%; border: 2px solid ${patrolArea?.color || 'red'};">
-                       </div>
-                     </div>
-                     <style>
-                       @keyframes pulse {
-                         0% { transform: scale(0.5); opacity: 1; }
-                         100% { transform: scale(2); opacity: 0; }
-                       }
-                     </style>`,
-            }),
-          });
-          userMarker.addTo(mapRef.current);
-          userMarkerRefs.current[userId] = userMarker;
-        });
+    // Clear existing markers
+    Object.values(userMarkerRefs.current).forEach(marker => {
+      if (marker && mapRef.current) {
+        mapRef.current.removeLayer(marker);
       }
-    }
+    });
+    userMarkerRefs.current = {};
+
+    // Create new markers
+    tanodLocations.forEach(location => {
+      if (location.latitude && location.longitude) {
+        const userMarker = createMarker(location);
+        if (userMarker) {
+          userMarker.addTo(mapRef.current);
+          userMarkerRefs.current[location.userId] = userMarker;
+        }
+      }
+    });
   };
 
-  const handleRefreshMap = () => {
-    // Only refresh tanod locations and patrol areas
-    setTanodLocations([]);
-    setPatrolAreas([]);
-    setCctvLocations([]); // Add this
+  const initializeWebSocket = () => {
+    const socketUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://barangaypatrol.lgu1.com'
+      : 'http://localhost:5000';
 
-    // Reinitialize WebSocket connection
     if (socketRef.current) {
       socketRef.current.disconnect();
+      socketRef.current.removeAllListeners();
     }
-    initializeWebSocket();
 
-    // Fetch fresh data
-    fetchPatrolAreas();
-    fetchCctvLocations(); // Add this
-    
-    // Refresh map without affecting incident markers
-    refreshMap();
-    
-    toast.success('Map refreshed successfully');
+    socketRef.current = io(socketUrl, {
+      withCredentials: true,
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      timeout: 20000
+    });
+
+    socketRef.current.on('connect', () => {
+      console.log('Connected to WebSocket server');
+      socketRef.current.emit('joinTrackingRoom');
+    });
+
+    // Add handler for initial locations
+    socketRef.current.on('initializeLocations', (locations) => {
+      console.log('Received initial locations:', locations);
+      setTanodLocations(locations.map(loc => ({
+        ...loc,
+        lastUpdate: Date.now()
+      })));
+    });
+
+    socketRef.current.on('locationUpdate', async (data) => {
+      console.log('Location update received:', data);
+      const { userId, latitude, longitude, profilePicture, firstName, lastName, currentScheduleId } = data;
+      
+      try {
+        // Fetch schedule and patrol area data
+        const schedule = await fetchScheduleById(currentScheduleId);
+        const patrolAreaId = schedule?.patrolArea?._id || schedule?.patrolArea;
+        const patrolArea = patrolAreaId ? await fetchPatrolAreaById(patrolAreaId) : null;
+        const areaColor = patrolArea?.color || 'red';
+
+        // Update tanod locations state
+        setTanodLocations(prev => {
+          const others = prev.filter(loc => loc.userId !== userId);
+          const newLocation = {
+            userId,
+            latitude,
+            longitude,
+            profilePicture,
+            firstName,
+            lastName,
+            areaColor,
+            currentScheduleId,
+            patrolArea,
+            lastUpdate: Date.now()
+          };
+
+          // Create or update marker immediately
+          if (mapRef.current && isTrackingVisible) {
+            // Remove existing marker if it exists
+            if (userMarkerRefs.current[userId]) {
+              userMarkerRefs.current[userId].remove();
+            }
+
+            // Create new marker
+            const marker = createMarker(newLocation);
+            if (marker) {
+              marker.addTo(mapRef.current);
+              userMarkerRefs.current[userId] = marker;
+            }
+          }
+
+          return [...others, newLocation];
+        });
+      } catch (error) {
+        console.error('Error processing location update:', error);
+      }
+    });
+
+    // ...existing socket event handlers...
+  };
+
+  // Add this new function to handle marker updates
+  const updateMarker = (location) => {
+    if (!mapRef.current || !isTrackingVisible) return;
+
+    // Remove existing marker if it exists
+    if (userMarkerRefs.current[location.userId]) {
+      mapRef.current.removeLayer(userMarkerRefs.current[location.userId]);
+    }
+
+    // Create new marker
+    const marker = createMarker(location);
+    marker.addTo(mapRef.current);
+    userMarkerRefs.current[location.userId] = marker;
+  };
+
+  const handleRefreshMap = async () => {
+    try {
+      // Clear all existing markers and layers
+      if (mapRef.current) {
+        mapRef.current.eachLayer((layer) => {
+          if (!(layer instanceof L.TileLayer)) {
+            layer.remove();
+          }
+        });
+      }
+  
+      // Clear all stored references
+      userMarkerRefs.current = {};
+      setTanodLocations([]);
+      setPatrolAreas([]);
+      setCctvLocations([]);
+      setIncidentLocations({});
+  
+      // Disconnect and reconnect socket
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        await new Promise(resolve => setTimeout(resolve, 500)); // Small delay before reconnecting
+        initializeWebSocket();
+      }
+  
+      // Fetch all data fresh
+      await Promise.all([
+        fetchPatrolAreas(),
+        fetchIncidentReports(),
+        fetchCctvLocations()
+      ]);
+  
+      // Force map to update view
+      if (mapRef.current) {
+        mapRef.current.setView(mapRef.current.getCenter(), mapRef.current.getZoom());
+      }
+  
+      toast.success('Map refreshed successfully');
+    } catch (error) {
+      console.error('Error refreshing map:', error);
+      toast.error('Error refreshing map');
+    }
   };
 
   useEffect(() => {
@@ -251,31 +321,173 @@ const PatrolTracking = () => {
     fetchIncidentReports();
     fetchCctvLocations(); // Add this
     initializeWebSocket(); // Always initialize WebSocket
+
+    const intervalId = setInterval(() => {
+      if (socketRef.current && !socketRef.current.connected) {
+        console.log('Attempting to reconnect...');
+        socketRef.current.connect();
+      }
+    }, 5000);
+
     return () => {
+      clearInterval(intervalId);
       if (socketRef.current) {
+        socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
   }, []);
 
   useEffect(() => {
-    refreshMap();
-  }, [tanodLocations, isTrackingVisible, incidentLocations]);
+    if (isTrackingVisible) {
+      refreshMap();
+    } else {
+      // Clear all markers when tracking is disabled
+      Object.values(userMarkerRefs.current).forEach(marker => {
+        if (marker && mapRef.current) {
+          marker.remove();
+        }
+      });
+      userMarkerRefs.current = {};
+    }
+  }, [tanodLocations, isTrackingVisible]);
+
+  // Add CSS for marker animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes pulse {
+        0% { transform: scale(1); opacity: 0.5; }
+        50% { transform: scale(1.2); opacity: 0.3; }
+        100% { transform: scale(1); opacity: 0.5; }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+
+  // Add this useEffect to handle cleanup of stale markers
+  const MARKER_TIMEOUT = 10000; // 10 seconds timeout for inactive markers
+
+  // Update the useEffect that handles cleanup of stale markers
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      setTanodLocations(prev => {
+        const filtered = prev.filter(loc => (now - loc.lastUpdate) < MARKER_TIMEOUT);
+        
+        // Remove markers for stale locations
+        prev.forEach(loc => {
+          if (!filtered.find(f => f.userId === loc.userId)) {
+            if (userMarkerRefs.current[loc.userId] && mapRef.current) {
+              userMarkerRefs.current[loc.userId].remove();
+              delete userMarkerRefs.current[loc.userId];
+            }
+          }
+        });
+        
+        return filtered;
+      });
+    }, 5000); // Check every 5 seconds instead of every minute
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
+
+  // Remove or update the second cleanup interval since it's redundant now
+  // Remove this useEffect or merge it with the one above
+  useEffect(() => {
+    const cleanup = setInterval(() => {
+      const now = Date.now();
+      setTanodLocations(prev => 
+        prev.filter(loc => now - loc.lastUpdate < MARKER_TIMEOUT)
+      );
+    }, 5000); // Match the interval with the other cleanup
+
+    return () => clearInterval(cleanup);
+  }, []);
+
+  const toggleTrackingVisibility = () => {
+    const newVisibilityState = !isTrackingVisible;
+    setIsTrackingVisible(newVisibilityState);
+    localStorage.setItem("isTrackingVisible", newVisibilityState);
+
+    if (!newVisibilityState) {
+      // Clear markers when turning off tracking
+      Object.values(userMarkerRefs.current).forEach(marker => {
+        if (mapRef.current && mapRef.current.hasLayer(marker)) {
+          marker.remove();
+        }
+      });
+      userMarkerRefs.current = {};
+    } else {
+      // Refresh markers when turning on tracking
+      refreshMap();
+    }
+  };
+
+  const toggleCctvVisibility = () => {
+    setShowCctvModal(true);
+  };
+
+  // Add cleanup interval to remove stale locations
+  useEffect(() => {
+    const cleanup = setInterval(() => {
+      const now = Date.now();
+      setTanodLocations(prev => 
+        prev.filter(loc => now - loc.lastUpdate < 300000) // Remove locations older than 5 minutes
+      );
+    }, 60000); // Run every minute
+
+    return () => clearInterval(cleanup);
+  }, []);
+
+  // Add cleanup effect
+  useEffect(() => {
+    return () => {
+      // Cleanup markers when component unmounts
+      Object.values(userMarkerRefs.current).forEach(marker => {
+        if (marker && mapRef.current) {
+          marker.remove();
+        }
+      });
+      userMarkerRefs.current = {};
+    };
+  }, []);
+
+  // Add this useEffect to persist markers
+  useEffect(() => {
+    if (isTrackingVisible && mapRef.current) {
+      // Clear existing markers
+      Object.values(userMarkerRefs.current).forEach(marker => {
+        if (marker) marker.remove();
+      });
+      userMarkerRefs.current = {};
+
+      // Re-add all markers
+      tanodLocations.forEach(location => {
+        updateMarker(location);
+      });
+    }
+  }, [isTrackingVisible]);
 
   const MapEvents = () => {
     const map = useMap();
+    const layerGroupRef = useRef(null);
 
     useEffect(() => {
       if (map) {
         mapRef.current = map;
 
-        // Clear existing layers to prevent duplication
-        map.eachLayer((layer) => {
-          if (layer instanceof L.Polygon || layer instanceof L.Marker) {
-            map.removeLayer(layer);
-          }
-        });
+        // Create a new layer group if it doesn't exist
+        if (!layerGroupRef.current) {
+          layerGroupRef.current = L.layerGroup().addTo(map);
+        }
 
+        // Clear only the layers in our layer group
+        layerGroupRef.current.clearLayers();
+
+        // Add patrol areas to the layer group
         patrolAreas.forEach(area => {
           if (area && area.coordinates) {
             const layer = L.polygon(
@@ -283,17 +495,16 @@ const PatrolTracking = () => {
               { color: area.color, fillOpacity: 0.2, weight: 2 }
             );
             layer.bindTooltip(area.legend, { permanent: true, direction: 'center' });
-            layer.addTo(map);
+            layerGroupRef.current.addLayer(layer);
           }
         });
 
-        // Add CCTV markers
+        // Add CCTV markers to the layer group
         cctvLocations.forEach(cctv => {
           const marker = L.marker([cctv.latitude, cctv.longitude], {
             icon: createCctvMarker()
           });
           
-          // Enhanced tooltip with name and description
           marker.bindTooltip(
             `<div class="font-semibold">${cctv.name}</div>
              <div class="text-sm mt-1">${cctv.description}</div>`,
@@ -305,10 +516,16 @@ const PatrolTracking = () => {
             }
           );
           
-          marker.addTo(map);
+          layerGroupRef.current.addLayer(marker);
         });
       }
-    }, [patrolAreas, cctvLocations]); // Add cctvLocations to dependencies
+
+      return () => {
+        if (layerGroupRef.current) {
+          layerGroupRef.current.clearLayers();
+        }
+      };
+    }, [patrolAreas, cctvLocations, map]);
 
     return null;
   };
@@ -385,67 +602,82 @@ const PatrolTracking = () => {
   };
 
   return (
-    <div className="flex w-full h-full">
-      <div className="relative w-2/3 h-full mr-6" style={{ zIndex: 1 }}>
-        <MapContainer center={[14.7356, 121.0498]} zoom={13} style={{ height: '100%', width: '100%' }} ref={mapRef}>
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <MapEvents />
-          {Object.keys(incidentLocations).map((key) => (
-            <ViewLocation
-              key={key}
-              location={incidentLocations[key].location}
-              isVisible={!!incidentLocations[key]}
-              incidentType={incidentLocations[key].type}
-              markerId={key}
-              onMarkerClick={() => {
-                const incident = incidentReports.find(report => report._id === key);
-                setSelectedReport(incident);
-              }} // Pass the click handler
-            />
-          ))}
-        </MapContainer>
-      </div>
-      <div className="w-1/3 h-full flex flex-col items-center bg-gray-100 p-4 space-y-4 rounded-lg TopNav">
-        <div className="w-full flex justify-between gap-2">
-          <button 
-            onClick={toggleTrackingVisibility} 
-            className={`flex-1 py-3 text-white text-lg rounded-lg shadow transition ${
-              isTrackingVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-            }`}
-          >
-            {isTrackingVisible ? 'Stop Tracking' : 'Track Tanods'}
-          </button>
-          <button 
-            onClick={toggleCctvVisibility} 
-            className={`flex-1 py-3 text-white text-lg rounded-lg shadow transition ${
-              isCctvVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-            }`}
-          >
-            CCTV Location
-          </button>
-          <button
-            onClick={handleRefreshMap}
-            className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition flex items-center justify-center"
-            title="Refresh Map"
-          >
-            <FaSync className="text-xl" />
-          </button>
-        </div>
-        <div className="w-full overflow-y-auto">
-          <IncidentReports 
-            setIncidentLocations={setIncidentLocations} 
-            selectedReport={selectedReport} 
-            setSelectedReport={setSelectedReport}
-            mapRef={mapRef}
-            zoomToLocation={zoomToLocation}
-          />
-        </div>
-      </div>
-      <CctvLocationModal
-        isOpen={showCctvModal}
-        onClose={() => setShowCctvModal(false)}
+    <>
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+        limit={3} // Add this to limit number of toasts shown at once
       />
-    </div>
+      <div className="flex w-full h-full">
+        <div className="relative w-2/3 h-full mr-6" style={{ zIndex: 1 }}>
+          <MapContainer center={[14.7356, 121.0498]} zoom={13} style={{ height: '100%', width: '100%' }} ref={mapRef}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <MapEvents />
+            {Object.keys(incidentLocations).map((key) => (
+              <ViewLocation
+                key={key}
+                location={incidentLocations[key].location}
+                isVisible={!!incidentLocations[key]}
+                incidentType={incidentLocations[key].type}
+                markerId={key}
+                onMarkerClick={() => {
+                  const incident = incidentReports.find(report => report._id === key);
+                  setSelectedReport(incident);
+                }} // Pass the click handler
+              />
+            ))}
+          </MapContainer>
+        </div>
+        <div className="w-1/3 h-full flex flex-col items-center bg-gray-100 p-4 space-y-4 rounded-lg TopNav">
+          <div className="w-full flex justify-between gap-2">
+            <button 
+              onClick={toggleTrackingVisibility} 
+              className={`flex-1 py-3 text-white text-lg rounded-lg shadow transition ${
+                isTrackingVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+              }`}
+            >
+              {isTrackingVisible ? 'Stop Tracking' : 'Track Tanods'}
+            </button>
+            <button 
+              onClick={toggleCctvVisibility} 
+              className={`flex-1 py-3 text-white text-lg rounded-lg shadow transition ${
+                isCctvVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+              }`}
+            >
+              CCTV Location
+            </button>
+            <button
+              onClick={handleRefreshMap}
+              className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition flex items-center justify-center"
+              title="Refresh Map"
+            >
+              <FaSync className="text-xl" />
+            </button>
+          </div>
+          <div className="w-full overflow-y-auto">
+            <IncidentReports 
+              setIncidentLocations={setIncidentLocations} 
+              selectedReport={selectedReport} 
+              setSelectedReport={setSelectedReport}
+              mapRef={mapRef}
+              zoomToLocation={zoomToLocation}
+            />
+          </div>
+        </div>
+        <CctvLocationModal
+          isOpen={showCctvModal}
+          onClose={() => setShowCctvModal(false)}
+        />
+      </div>
+    </>
   );
 };
 
