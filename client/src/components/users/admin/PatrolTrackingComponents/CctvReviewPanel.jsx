@@ -170,7 +170,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
       className: 'custom-cctv-icon',
       html: `
         <div class="relative">
-          <div class="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-75"></div>
+          <div class="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-75"></div>
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
             fill="none" 

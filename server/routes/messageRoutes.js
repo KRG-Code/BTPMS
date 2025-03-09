@@ -6,7 +6,9 @@ const {
   getConversationMessages, 
   sendMessage, 
   createConversation,
-  deleteConversation 
+  deleteConversation,
+  checkUnreadMessages,
+  markMessagesAsRead
 } = require('../controllers/messageController');
 
 const router = express.Router();
@@ -20,5 +22,7 @@ router.delete('/conversations/:conversationId', protect, deleteConversation);
 // Message routes
 router.get('/', protect, getMessages);
 router.post('/', protect, sendMessage);
+router.get('/unread', protect, checkUnreadMessages);
+router.post('/conversations/:conversationId/read', protect, markMessagesAsRead);
 
 module.exports = router;

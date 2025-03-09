@@ -20,9 +20,25 @@ exports.getConversations = async (req, res) => {
     const conversations = await Conversation.find({
       participants: req.user._id,
       deletedFor: { $ne: req.user._id } // Don't show conversations deleted by user
-    }).populate('participants', 'firstName lastName profilePicture userType');
+    }).populate('participants', 'firstName lastName profilePicture userType')
+    .populate('lastMessageSender', 'firstName lastName');
     
-    res.status(200).json({ conversations });
+    // Add read status for each conversation
+    const conversationsWithReadStatus = await Promise.all(
+      conversations.map(async (conv) => {
+        const hasUnread = await Message.exists({
+          conversationId: conv._id,
+          userId: { $ne: req.user._id },
+          read: false
+        });
+        return {
+          ...conv.toObject(),
+          read: !hasUnread
+        };
+      })
+    );
+    
+    res.status(200).json({ conversations: conversationsWithReadStatus });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -54,25 +70,37 @@ exports.sendMessage = async (req, res) => {
       userId: req.user._id,
       content
     });
-    await newMessage.save();
     
-    // Fully populate the new message
-    const populatedMessage = await Message.findById(newMessage._id)
+    const savedMessage = await newMessage.save();
+    
+    // Populate the message with user details
+    const populatedMessage = await Message.findById(savedMessage._id)
       .populate('userId', '_id firstName lastName profilePicture userType');
-    
-    // Update conversation's lastMessage and updatedAt
+
+    // Update conversation's last message and timestamp
     await Conversation.findByIdAndUpdate(conversationId, {
       lastMessage: content,
+      lastMessageSender: req.user._id,
       updatedAt: Date.now(),
-      // Remove from deletedFor when new message is sent
       $pull: { deletedFor: req.user._id }
     });
 
-    // Emit the new message to all clients in the conversation
-    getIO().to(`conversation_${conversationId}`).emit('messageReceived', populatedMessage);
+    // Get socket instance and broadcast message
+    const io = getIO();
+    if (io) {
+      const messageToSend = {
+        ...populatedMessage.toObject(),
+        conversationId,
+        createdAt: new Date().toISOString()
+      };
+      
+      // Broadcast to all clients in the conversation room
+      io.to(`conversation_${conversationId}`).emit('messageReceived', messageToSend);
+    }
 
     res.status(201).json({ message: populatedMessage });
   } catch (error) {
+    console.error('Error sending message:', error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -138,6 +166,49 @@ exports.deleteConversation = async (req, res) => {
     });
     
     res.status(200).json({ message: "Conversation deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Add helper function for getting user conversations
+const getUserConversations = async (userId) => {
+  const conversations = await Conversation.find({
+    participants: userId,
+    deletedFor: { $ne: userId }
+  });
+  return conversations.map(conv => conv._id);
+};
+
+// Add new controller for checking unread messages
+exports.checkUnreadMessages = async (req, res) => {
+  try {
+    const conversationIds = await getUserConversations(req.user._id);
+    const unreadCount = await Message.countDocuments({
+      conversationId: { $in: conversationIds },
+      userId: { $ne: req.user._id },
+      read: false
+    });
+    
+    res.status(200).json({ hasUnread: unreadCount > 0 });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Add mark as read functionality
+exports.markMessagesAsRead = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    await Message.updateMany(
+      {
+        conversationId,
+        userId: { $ne: req.user._id },
+        read: false
+      },
+      { read: true }
+    );
+    res.status(200).json({ message: "Messages marked as read" });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react"; // Add useRef import
 import axios from "axios";
 import { toast } from "react-toastify";
 import { RiUser3Line } from "react-icons/ri";
 import ConversationModal from "./ConversationModal";
+import { io } from "socket.io-client";
 
 export default function MessageList() {
   const [conversations, setConversations] = useState([]);
@@ -11,9 +12,46 @@ export default function MessageList() {
   const [showModal, setShowModal] = useState(false);
   const [tanods, setTanods] = useState([]);
   const [showTanodList, setShowTanodList] = useState(false);
+  const refreshIntervalRef = useRef(null); // Add this line
 
   useEffect(() => {
     fetchConversations();
+    
+    const socket = io(process.env.REACT_APP_API_URL, {
+      auth: { token: localStorage.getItem("token") }
+    });
+
+    socket.on('messageReceived', (newMsg) => {
+      setConversations(prevConvs => {
+        return prevConvs.map(conv => {
+          if (conv._id === newMsg.conversationId) {
+            return {
+              ...conv,
+              lastMessage: newMsg.content,
+              updatedAt: new Date().toISOString()
+            };
+          }
+          return conv;
+        }).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      });
+    });
+
+    return () => {
+      if (socket) socket.disconnect();
+    };
+  }, []);
+
+  // Add auto-refresh for conversations
+  useEffect(() => {
+    refreshIntervalRef.current = setInterval(() => {
+      fetchConversations();
+    }, 500); // 0.5 seconds
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
   }, []);
 
   const fetchConversations = async () => {
@@ -27,11 +65,18 @@ export default function MessageList() {
       const response = await axios.get(`${process.env.REACT_APP_API_URL}/messages/conversations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setConversations(response.data.conversations);
+      setConversations(prev => {
+        // Only update if there are actual changes
+        const hasChanges = JSON.stringify(prev) !== JSON.stringify(response.data.conversations);
+        return hasChanges ? response.data.conversations : prev;
+      });
       setLoading(false);
     } catch (error) {
       console.error("Error fetching conversations:", error);
-      toast.error("Error fetching conversations.");
+      // Don't show error toast during auto-refresh
+      if (!refreshIntervalRef.current) { // Fix this line
+        toast.error("Error fetching conversations.");
+      }
     }
   };
 
@@ -66,15 +111,21 @@ export default function MessageList() {
 
   const startConversation = async (tanodId) => {
     try {
-      const response = await axios.post(
-        `${process.env.REACT_APP_API_URL}/messages/conversations`,
-        { participantId: tanodId },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-      );
-      setShowTanodList(false);
-      setSelectedConversation(response.data.conversation);
-      setShowModal(true);
-      fetchConversations();
+      // Instead of creating conversation immediately, just store the user info
+      const selectedUser = tanods.find(user => user._id === tanodId);
+      if (selectedUser) {
+        setShowTanodList(false);
+        setSelectedConversation({
+          _id: 'temp_' + Date.now(), // Temporary ID
+          participants: [
+            { _id: localStorage.getItem("userId") },
+            selectedUser
+          ],
+          lastMessage: '',
+          temporary: true // Flag to indicate this is a new conversation
+        });
+        setShowModal(true);
+      }
     } catch (error) {
       toast.error("Error starting conversation.");
     }
@@ -83,17 +134,62 @@ export default function MessageList() {
   const deleteConversation = async (conversationId, e) => {
     e.stopPropagation(); // Prevent opening the conversation modal
     
-    if (window.confirm('Are you sure you want to delete this conversation?')) {
-      try {
-        await axios.delete(
-          `${process.env.REACT_APP_API_URL}/messages/conversations/${conversationId}`,
-          { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-        );
-        toast.success("Conversation deleted successfully");
-        fetchConversations();
-      } catch (error) {
-        toast.error("Error deleting conversation");
+    toast.info(
+      <div>
+        <p>Are you sure you want to delete this conversation?</p>
+        <div className="mt-2 flex justify-end gap-2">
+          <button
+            onClick={() => {
+              performDelete(conversationId);
+              toast.dismiss();
+            }}
+            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+          >
+            Delete
+          </button>
+          <button
+            onClick={() => toast.dismiss()}
+            className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>,
+      {
+        autoClose: false,
+        closeButton: false,
+        closeOnClick: false,
       }
+    );
+  };
+
+  const performDelete = async (conversationId) => {
+    try {
+      await axios.delete(
+        `${process.env.REACT_APP_API_URL}/messages/conversations/${conversationId}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      toast.success("Conversation deleted successfully");
+      fetchConversations();
+    } catch (error) {
+      toast.error("Error deleting conversation");
+    }
+  };
+
+  const markConversationAsRead = async (conversationId) => {
+    try {
+      await axios.post(
+        `${process.env.REACT_APP_API_URL}/messages/conversations/${conversationId}/read`,
+        {},
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      setConversations(prevConvs => 
+        prevConvs.map(conv => 
+          conv._id === conversationId ? { ...conv, read: true } : conv
+        )
+      );
+    } catch (error) {
+      console.error("Error marking conversation as read:", error);
     }
   };
 
@@ -175,8 +271,12 @@ export default function MessageList() {
                       onClick={() => {
                         setSelectedConversation(conv);
                         setShowModal(true);
+                        // Mark messages as read when opening conversation
+                        markConversationAsRead(conv._id);
                       }}
-                      className="p-3 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors"
+                      className={`p-3 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors ${
+                        !conv.read ? 'bg-blue-50 border-l-4 border-blue-500' : 'bg-gray-100'
+                      }`}
                     >
                       <div className="flex items-center space-x-3">
                         <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 flex items-center justify-center">
@@ -192,7 +292,7 @@ export default function MessageList() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-center">
-                            <p className="font-semibold text-black">
+                            <p className={`font-semibold text-black ${!conv.read ? 'font-bold' : ''}`}>
                               {otherParticipant?.firstName} {otherParticipant?.lastName}
                             </p>
                             <button
@@ -202,8 +302,19 @@ export default function MessageList() {
                               Delete
                             </button>
                           </div>
-                          <p className="text-sm text-gray-500 truncate">
-                            {conv.lastMessage || 'No messages yet'}
+                          <p className={`text-sm text-gray-500 truncate ${!conv.read ? 'font-semibold' : ''}`}>
+                            {conv.lastMessage ? (
+                              <>
+                                <span className="font-medium">
+                                  {conv.lastMessageSender?._id === localStorage.getItem("userId")
+                                    ? "You"
+                                    : conv.lastMessageSender?.firstName || "Unknown"}: 
+                                </span>&nbsp;
+                                {conv.lastMessage}
+                              </>
+                            ) : (
+                              'No messages yet'
+                            )}
                           </p>
                         </div>
                       </div>

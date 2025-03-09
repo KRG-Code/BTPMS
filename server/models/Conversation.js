@@ -10,6 +10,10 @@ const conversationSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  lastMessageSender: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
   updatedAt: {
     type: Date,
     default: Date.now

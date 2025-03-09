@@ -239,12 +239,16 @@ body.dark-mode .TopNav {
 }
 
 .pulse {
-  animation: pulse-animation 1.5s infinite;
+  animation: pulse 2s infinite;
+  width: 12px;  /* Smaller dot size */
+  height: 12px; /* Smaller dot size */
+  background-color: rgb(239, 68, 68); /* red-500 */
+  border-radius: 70%;
 }
 
-@keyframes pulse-animation {
+@keyframes pulse {
   0% {
-    transform: scale(1);
+    transform: scale(.7);
     opacity: 1;
   }
   50% {
@@ -252,7 +256,7 @@ body.dark-mode .TopNav {
     opacity: 0.7;
   }
   100% {
-    transform: scale(1);
+    transform: scale(.7);
     opacity: 1;
   }
 }
@@ -303,17 +307,6 @@ body.dark-mode .TopNav {
 
 .profile-image {
   z-index: 1;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(0.5);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(2);
-    opacity: 0;
-  }
 }
 
 /* Tooltip styles */

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { RiUser3Line, RiMenuLine, RiMessage3Line, RiNotification3Line } from "react-icons/ri";
 import ThemeToggle from "../forms/ThemeToggle";
 import { useCombinedContext } from "../../contexts/useContext";
@@ -14,6 +15,7 @@ export default function TopNav() {
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [setUserType] = useState(null);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
   const messageRef = useRef(null);
@@ -64,6 +66,7 @@ export default function TopNav() {
 
     fetchUserProfile();
     checkUnreadNotifications();
+    checkUnreadMessages();
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
@@ -97,10 +100,39 @@ export default function TopNav() {
     }
   };
 
+  const checkUnreadMessages = async () => {
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/messages/unread`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }
+      );
+      setHasUnreadMessages(response.data.hasUnread);
+    } catch (error) {
+      console.error("Error checking unread messages:", error);
+    }
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkUnreadMessages();
+    }, 1000); // Check every second
+
+    // Initial check
+    checkUnreadMessages();
+
+    return () => clearInterval(interval);
+  }, []);
+
   const toggleDropdown = () => setIsDropdownOpen(!isDropdownOpen);
   const toggleMessagesDropdown = () => {
     setShowMessageList(!showMessageList);
     setShowNotificationList(false);
+    // Reset unread messages when opening message list
+    if (!showMessageList) {
+      setHasUnreadMessages(false);
+    }
   };
 
   const toggleNotificationsDropdown = () => {
@@ -174,8 +206,11 @@ export default function TopNav() {
           {storedUserType !== "resident" && (
             <>
               <div className="relative" ref={messageRef}>
-                <button onClick={toggleMessagesDropdown} className="text-2xl p-1" title="Messages">
+                <button onClick={toggleMessagesDropdown} className="text-2xl p-1 relative" title="Messages">
                   <RiMessage3Line />
+                  {hasUnreadMessages && (
+                    <span className="absolute top-0 right-0 inline-block w-3 h-3 bg-red-500 rounded-full pulse"></span>
+                  )}
                 </button>
                 {showMessageList && <MessageList />}
               </div>
