@@ -238,15 +238,8 @@ body.dark-mode .TopNav {
 
 }
 
-.pulse {
-  animation: pulse 2s infinite;
-  width: 12px;  /* Smaller dot size */
-  height: 12px; /* Smaller dot size */
-  background-color: rgb(239, 68, 68); /* red-500 */
-  border-radius: 70%;
-}
-
-@keyframes pulse {
+/* Notification and Message pulse animation */
+@keyframes notificationPulse {
   0% {
     transform: scale(.7);
     opacity: 1;
@@ -259,6 +252,45 @@ body.dark-mode .TopNav {
     transform: scale(.7);
     opacity: 1;
   }
+}
+
+/* Incident marker pulse animation */
+@keyframes markerPulse {
+  0% { 
+    transform: scale(0.5); 
+    opacity: 1; 
+  }
+  50% { 
+    transform: scale(1); 
+    opacity: 1; 
+  }
+  100% { 
+    transform: scale(2); 
+    opacity: 0; 
+  }
+}
+
+/* TopNav notification/message pulse class */
+.notification-pulse {
+  animation: notificationPulse 2s infinite;
+  width: 12px;
+  height: 12px;
+  background-color: rgb(239, 68, 68);
+  border-radius: 50%;
+}
+
+/* Incident marker pulse class */
+.marker-pulse {
+  animation: markerPulse 1.5s infinite;
+}
+
+/* Update existing pulse class to use new notification animation */
+.pulse {
+  animation: notificationPulse 2s infinite;
+  width: 12px;  /* Smaller dot size */
+  height: 12px; /* Smaller dot size */
+  background-color: rgb(239, 68, 68); /* red-500 */
+  border-radius: 70%;
 }
 
 /* Add these styles for markers */
@@ -321,5 +353,32 @@ body.dark-mode .TopNav {
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   border-radius: 4px;
   border: 1px solid #ddd;
+}
+
+/* Incident marker styles */
+.custom-icon {
+  background: none !important;
+  border: none !important;
+  z-index: 1000;
+}
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-ping {
+  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Update marker z-index */
+.leaflet-marker-icon {
+  z-index: 1000 !important;
+}
+
+.leaflet-marker-pane {
+  z-index: 1000 !important;
 }
 

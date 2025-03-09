@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import L from 'leaflet'; // Add this import
 
 const ViewReportedIncidents = ({ 
   setShowReportedIncidents, 
@@ -137,9 +138,11 @@ const ViewReportedIncidents = ({
       if (newVisibleLocations[incident._id]) {
         delete newVisibleLocations[incident._id];
       } else {
+        const incidentType = getIncidentType(incident.incidentClassification);
         newVisibleLocations[incident._id] = {
           location: incident.location,
-          type: getIncidentType(incident.incidentClassification)
+          type: incidentType,
+          status: incident.status
         };
       }
       setIncidentLocations(newVisibleLocations);
@@ -286,9 +289,17 @@ const ViewReportedIncidents = ({
     );
   };
 
+  const styles = `
+    @keyframes pulse {
+      0% { transform: scale(0.5); opacity: 1; }
+      100% { transform: scale(2); opacity: 0; }
+    }
+  `;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" 
          style={{ zIndex: 2000 }}>
+      <style>{styles}</style>
       <div className="bg-white p-6 rounded-lg w-11/12 max-w-3xl relative TopNav">
         <h2 className="text-xl md:text-2xl font-bold mb-4 flex justify-between items-center">
           Reported Incidents

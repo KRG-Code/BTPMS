@@ -49,7 +49,12 @@ router.post('/register', [
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
 ], registerUser);
 
-router.post('/registertanod', [
+router.post('/registertanod', protect, async (req, res, next) => {
+  if (req.user.userType !== 'admin') {
+    return res.status(403).json({ message: 'Not authorized to register tanods' });
+  }
+  next();
+}, [
   body('firstName').notEmpty().withMessage('First Name is required'),
   body('lastName').notEmpty().withMessage('Last Name is required'),
   body('email').optional().isEmail().withMessage('Invalid email'),
@@ -61,13 +66,27 @@ router.post('/login/resident', loginResident); // For residents
 router.post('/login/tanod', loginTanod);       // For Tanods
 
 // User Profile & Ratings Routes
-router.put('/update', protect, updateUserProfile);          // Update user profile
-router.put('/change-password', protect, changePassword);    // Change user password
+router.put('/update', protect, updateUserProfile);          // Update user profile - for all users
+router.put('/change-password', protect, changePassword);    // Change password - for all users
+router.put('/users/:userId/password', protect, async (req, res, next) => {
+  // Admin middleware
+  if (req.user.userType !== 'admin') {
+    return res.status(403).json({ message: 'Not authorized to update other users' });
+  }
+  next();
+}, changePassword); // For admin password reset
 router.get('/:tanodId/ratings', protect, getTanodRatings);  // Ratings for specific Tanod
 router.get('/my-ratings', protect, getUserRatings);         // Current user's ratings
 router.get('/users', protect, getAllUserProfiles);          // Get all user profiles
 router.get('/me', protect, getUserProfile);                 // Get current user profile
 router.get('/users/:userId', protect, getUserProfile);       // Get user profile by userId
+router.put('/users/:userId', protect, async (req, res, next) => {
+  // Add admin check middleware
+  if (req.user.userType !== 'admin') {
+    return res.status(403).json({ message: 'Not authorized to update users' });
+  }
+  next();
+}, updateUserProfile);
 router.delete('/ratings/:ratingId', protect, deleteRating); // Delete a rating
 router.delete('/users/:userId', protect, deleteUser);       // Delete user
 

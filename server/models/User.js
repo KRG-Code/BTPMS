@@ -6,7 +6,12 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   middleName: { type: String },
-  lastName: { type: String, required: true },
+  lastName: { 
+    type: String, 
+    required: function() {
+      return this.userType !== 'admin'; // Only required if user is not admin
+    }
+  },
   address: { type: String },
   contactNumber: { type: String },
   birthday: { type: Date, required: false },
@@ -18,12 +23,41 @@ const userSchema = new mongoose.Schema({
   userType: { type: String, enum: ['resident', 'tanod', 'admin'], required: true },
 });
 
-// Hash password before saving the user
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next(); // Only hash if the password is modified
-  this.password = await bcrypt.hash(this.password, await bcrypt.genSalt(10)); // Hash the password
-  next();
+// Update the pre-save middleware
+userSchema.pre('save', async function(next) {
+  try {
+    // Only hash the password if it has been modified
+    if (!this.isModified('password')) {
+      return next();
+    }
+
+    // Generate salt and hash password
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
+
+// Update the comparePassword method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  try {
+    if (!candidatePassword || !this.password) {
+      return false;
+    }
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    return false;
+  }
+};
+
+// Add method to handle password updates
+userSchema.methods.updatePassword = async function(newPassword) {
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(newPassword, salt);
+  return this.save();
+};
 
 // Export the User model
 module.exports = mongoose.model('User', userSchema);

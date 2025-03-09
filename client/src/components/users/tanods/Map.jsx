@@ -167,7 +167,7 @@ const TanodMap = () => {
           <div style="position: relative; width: 50px; height: 50px;">
             <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
                  border-radius: 50%; background-color: ${areaColor || 'red'}; 
-                 opacity: 0.5; animation: pulse 1.5s infinite;"></div>
+                 opacity: 0.5; animation: pulse 1.5s ease-in-out infinite;"></div>
             <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
                  display: flex; align-items: center; justify-content: center;
                  background-image: url('${profileUrl}'); background-size: cover; 
@@ -316,18 +316,17 @@ const TanodMap = () => {
     return L.marker([lat, lng], {
       icon: L.divIcon({
         className: 'custom-icon',
-        html: `<div style="position: relative; width: 36px; height: 36px;">
-                 <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                      border-radius: 50%; 
-                      background-color: ${type === 'Emergency' ? 'rgba(255, 0, 0, 0.5)' : 'rgba(0, 0, 255, 0.5)'}; 
-                      animation: pulse 1.5s infinite;"></div>
-                 <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                      display: flex; align-items: center; justify-content: center;">
-                   ${type === 'Emergency' 
-                     ? '<i class="fas fa-exclamation-triangle" style="color: red; font-size: 20px;"></i>'
-                     : '<i class="fas fa-info-circle" style="color: blue; font-size: 20px;"></i>'}
-                 </div>
-               </div>`,
+        html: `
+          <div style="position: relative; width: 36px; height: 36px;">
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                 border-radius: 50%; background-color: ${type === 'Emergency' ? 'rgba(255, 0, 0, 0.5)' : 'rgba(0, 0, 255, 0.5)'}; 
+                 animation: markerPulse 1.5s ease-in-out infinite;"></div>
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                 display: flex; align-items: center; justify-center; font-size: 36px; 
+                 color: ${type === 'Emergency' ? 'red' : 'blue'};">
+              <i class="fa ${type === 'Emergency' ? 'fa-exclamation-triangle' : 'fa-info-circle'}"></i>
+            </div>
+          </div>`,
         iconSize: [36, 36],
         iconAnchor: [18, 18]
       }),
@@ -398,6 +397,29 @@ const TanodMap = () => {
     };
 
     fetchActiveIncidents();
+  }, []);
+
+  useEffect(() => {
+    // Add global animation styles
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes pulse {
+        0% { transform: scale(.5); opacity: 1; }
+        50% { transform: scale(1); opacity: 1; }
+        100% { transform: scale(2); opacity: 0; }
+      }
+      
+      @keyframes markerPulse {
+        0% { transform: scale(.5); opacity: 1; }
+        50% { transform: scale(1); opacity: 1; }
+        100% { transform: scale(2); opacity: 0; }
+      }
+      .pulse-animation {
+      animation: pulse 3s ease-out infinite;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
   }, []);
 
   return (

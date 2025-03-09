@@ -40,6 +40,31 @@ const Incidents = ({
   const [watchId, setWatchId] = useState(null); // Add state to store watchId
   const [intervalId, setIntervalId] = useState(null); // Add state to store intervalId
   const socketRef = useRef(null); // Add socketRef
+  const watchPositionId = useRef(null);
+
+  // Add global animation styles
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+@keyframes pulse {
+  0% { transform: scale(0.1); opacity: 1; }
+  50% { transform: scale(1); opacity: .5; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes markerPulse {
+  0% { transform: scale(0.1); opacity: 1; }
+  50% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.pulse-animation {
+  animation: pulse 2s ease-out infinite;
+}
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem("token");
@@ -128,6 +153,12 @@ const Incidents = ({
   };
 
   const savePatrolLog = () => {
+    // Check if the report is empty or only contains whitespace
+    if (!currentReport || !currentReport.trim()) {
+      toast.error("Cannot save empty patrol log.");
+      return;
+    }
+
     const timestamp = new Date().toLocaleString();
     const logEntry = { report: currentReport, timestamp, scheduleId: currentScheduleId };
 
@@ -212,6 +243,49 @@ const Incidents = ({
     }
   };
 
+  const startLocationTracking = async () => {
+    const profile = await fetchUserProfile();
+    if (!profile) {
+      toast.error("Failed to fetch user profile");
+      return;
+    }
+
+    if (navigator.geolocation) {
+      watchPositionId.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const locationData = {
+            userId: profile._id,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            profilePicture: profile.profilePicture,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            currentScheduleId: currentScheduleId // Make sure this is defined in your state
+          };
+
+          // Update location in Map component
+          setUserLocation(locationData);
+
+          // Send location to server if socket is connected
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('locationUpdate', locationData);
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          toast.error('Error getting location. Please check your GPS settings.');
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0
+        }
+      );
+    } else {
+      toast.error('Geolocation is not supported by your browser');
+    }
+  };
+
   const startTracking = async () => {
     const profile = await fetchUserProfile();
     if (!profile) {
@@ -223,57 +297,50 @@ const Incidents = ({
     toggleTracking();
     localStorage.setItem("isTracking", "true");
 
-    // Initialize socket connection
+    // Get the authentication token
+    const token = localStorage.getItem('token');
+    if (!token) {
+      toast.error('Authentication required');
+      return;
+    }
+
+    // Initialize socket connection with auth token
     const socketUrl = process.env.NODE_ENV === 'production' 
       ? 'https://barangaypatrol.lgu1.com'
       : 'http://localhost:5000';
 
-    socketRef.current = io(socketUrl, { 
+    socketRef.current = io(socketUrl, {
+      auth: { token }, // Add token to auth object
       withCredentials: true,
+      transports: ['websocket'],
       reconnection: true,
-      reconnectionAttempts: Infinity,
+      reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      transports: ['polling', 'websocket']
+      timeout: 20000
     });
 
-    // Join tracking room after connection
     socketRef.current.on('connect', () => {
       console.log('Connected to socket server');
-      socketRef.current.emit('joinTrackingRoom');
+      socketRef.current.emit('joinTrackingRoom', { token }); // Pass token in room join
+      startLocationTracking();
     });
 
-    // Start location tracking with high accuracy
-    if (navigator.geolocation) {
-      const id = navigator.geolocation.watchPosition(
-        (position) => {
-          const locationData = {
-            userId: profile._id,
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            profilePicture: profile.profilePicture,
-            firstName: profile.firstName,
-            lastName: profile.lastName,
-            currentScheduleId
-          };
+    socketRef.current.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+      if (error.message === 'Authentication error') {
+        toast.error('Authentication failed. Please log in again.');
+        stopTracking();
+      } else {
+        toast.error('Connection error. Retrying...');
+      }
+    });
 
-          // Update local state
-          setUserLocation(locationData);
-
-          // Emit location update if socket is connected
-          if (socketRef.current?.connected) {
-            console.log('Emitting location update:', locationData);
-            socketRef.current.emit('locationUpdate', locationData);
-          }
-        },
-        handleLocationError,
-        { 
-          enableHighAccuracy: true, 
-          timeout: 5000, 
-          maximumAge: 0 
-        }
-      );
-      setWatchId(id);
-    }
+    // Add error handler
+    socketRef.current.on('error', (error) => {
+      console.error('Socket error:', error);
+      toast.error('Connection error occurred');
+      stopTracking();
+    });
   };
 
   const stopTracking = () => {
@@ -327,6 +394,17 @@ const Incidents = ({
     console.error("Error getting user's location:", error);
   };
 
+  useEffect(() => {
+    return () => {
+      if (watchPositionId.current) {
+        navigator.geolocation.clearWatch(watchPositionId.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
   return (
     <div className="p-2 sm:p-4 max-w-4xl mx-auto bg-white bg-opacity-75 shadow-lg rounded-lg TopNav border border-blue-600">
       <h1 onClick={toggleDropdown} className="text-xl sm:text-2xl md:text-3xl font-bold text-center mb-2 sm:mb-4 cursor-pointer bg-blue-600 text-white py-2 px-4 rounded-lg shadow hover:bg-blue-700 transition">
@@ -367,7 +445,7 @@ const Incidents = ({
               </button>
             ) : (
               <button 
-                onClick={() => fetchUserProfile().then(() => startTracking())} 
+                onClick={startTracking} 
                 className="w-full bg-green-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-green-700 transition"
               >
                 Turn On Tracker

@@ -21,6 +21,7 @@ const MyAcc = () => {
     birthday: "",
     gender: "",
     profilePicture: null,
+    _id: "", // Add this to store user ID
   });
   const [localProfilePicture, setLocalProfilePicture] = useState(null);
   const [age, setAge] = useState(null);
@@ -85,6 +86,7 @@ const MyAcc = () => {
               : "",
             gender: data.gender || "",
             profilePicture: data.profilePicture || null,
+            _id: data._id, // Store the user ID
           });
           setAge(calculateAge(data.birthday));
         } else {
@@ -128,54 +130,52 @@ const MyAcc = () => {
     setLoading(true);
     const token = localStorage.getItem("token");
 
-    let updatedProfilePictureURL = accountState.profilePicture;
-    if (updatedProfilePictureURL) {
-      try {
+    try {
+      let updatedProfilePictureURL = accountState.profilePicture;
+      
+      // Only upload new image if it's a File object
+      if (accountState.profilePicture instanceof File) {
         const storageRef = ref(
           storage,
-          `userprofiles/${updatedProfilePictureURL.name}`
+          `userprofiles/${Date.now()}_${accountState.profilePicture.name}`
         );
-        const snapshot = await uploadBytes(
-          storageRef,
-          updatedProfilePictureURL
-        );
+        const snapshot = await uploadBytes(storageRef, accountState.profilePicture);
         updatedProfilePictureURL = await getDownloadURL(snapshot.ref);
-      } catch (error) {
-        toast.error("Error uploading profile picture. Please try again.");
-        setLoading(false);
-        return;
       }
-    }
 
-    const updatedAccountState = {
-      ...accountState,
-      profilePicture: updatedProfilePictureURL,
-    };
+      const updateData = {
+        address: accountState.address,
+        contactNumber: accountState.contactNumber,
+        birthday: accountState.birthday,
+        gender: accountState.gender,
+        profilePicture: updatedProfilePictureURL,
+      };
 
-    try {
       const response = await fetch(
         `${process.env.REACT_APP_API_URL}/auth/update`,
         {
           method: "PUT",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify(updatedAccountState),
+          body: JSON.stringify(updateData),
         }
       );
 
-      const data = await response.json();
-      if (response.ok) {
-        toast.success("Profile updated successfully!");
-        setIsEditing(false);
-        setLocalProfilePicture(null);
-        await refetchUserProfile(); // Refetch user profile to ensure consistency
-      } else {
-        toast.error(data.message || "Failed to update profile.");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update profile");
       }
+
+      const data = await response.json();
+      toast.success("Profile updated successfully!");
+      setIsEditing(false);
+      setLocalProfilePicture(null);
+      await refetchUserProfile();
     } catch (error) {
-      toast.error("An error occurred while updating the profile.");
+      console.error("Update Error:", error);
+      toast.error(error.message || "Failed to update profile");
     } finally {
       setLoading(false);
     }
@@ -183,75 +183,68 @@ const MyAcc = () => {
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-  
-    // Validation checks
-    if (
-      !passwords.currentPassword ||
-      !passwords.newPassword ||
-      !passwords.confirmNewPassword
-    ) {
-      toast.error("All fields are required.");
+    
+    if (!passwords.currentPassword || !passwords.newPassword || !passwords.confirmNewPassword) {
+      toast.error("All password fields are required.");
       return;
     }
     
-    if (passwords.newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters long.");
-      return;
-    }
-  
-    if (passwords.newPassword === passwords.currentPassword) {
-      toast.error("New password cannot be the same as the current password.");
-      return;
-    }
-  
     if (passwords.newPassword !== passwords.confirmNewPassword) {
       toast.error("New passwords do not match.");
       return;
     }
-  
-    setLoading(true);
-  
+
+    if (passwords.newPassword.length < 6) {
+      toast.error("New password must be at least 6 characters long.");
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please log in.");
+      return;
+    }
+
     try {
-      const token = localStorage.getItem("token");
+      setLoading(true);
       const response = await fetch(
         `${process.env.REACT_APP_API_URL}/auth/change-password`,
         {
           method: "PUT",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify(passwords),
+          body: JSON.stringify({
+            currentPassword: passwords.currentPassword,
+            newPassword: passwords.newPassword,
+          }),
         }
       );
-  
+
       const data = await response.json();
-  
-      if (response.ok) {
-        toast.success("Password changed successfully!");
-  
-        // Clear local storage
-        localStorage.removeItem("token");
-        localStorage.removeItem("userType");
-  
-        // Redirect to the root path
-        navigate("/");
-  
-        // Clear password fields
-        setPasswords({
-          currentPassword: "",
-          newPassword: "",
-          confirmNewPassword: "",
-        });
-        setIsChangingPassword(false);
-      } else if (response.status === 401) {
-        toast.error("Current password is incorrect.");
-      } else {
-        toast.error(data.message || "Failed to change password.");
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to change password");
       }
+
+      toast.success("Password changed successfully! Redirecting to login...");
+      
+      // Clear form
+      setPasswords({
+        currentPassword: "",
+        newPassword: "",
+        confirmNewPassword: ""
+      });
+      
+      // Clear all auth data and redirect after a short delay
+      setTimeout(() => {
+        localStorage.clear();
+        navigate("/tanod-login");
+      }, 2000);
+
     } catch (error) {
       console.error("Password Change Error:", error);
-      toast.error("An error occurred while changing the password.");
+      toast.error(error.message || "Failed to change password");
     } finally {
       setLoading(false);
     }

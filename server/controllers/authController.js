@@ -88,46 +88,45 @@ exports.registerUser = async (req, res) => {
 
 // Register a new Tanod
 exports.registerTanod = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty())
-    return res.status(400).json({ errors: errors.array() });
-
-  const {
-    firstName,
-    middleName,
-    lastName,
-    email,
-    username,
-    password,
-    userType,
-  } = req.body;
-
   try {
-    const userExists = await User.findOne({ username });
-    if (userExists)
-      return res.status(400).json({ message: "Username already exists" });
+    const { firstName, middleName, lastName, email, username, password } = req.body;
 
+    // Validate required fields
+    if (!firstName || !lastName || !username || !password) {
+      return res.status(400).json({ message: "All required fields must be provided" });
+    }
+
+    // Check for existing user
+    const existingUser = await User.findOne({
+      $or: [{ username }, { email }]
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        message: existingUser.username === username
+          ? "Username already exists"
+          : "Email already exists"
+      });
+    }
+
+    // Create new user
     const user = await User.create({
       firstName,
       middleName,
       lastName,
       email,
       username,
-      password,
-      userType,
+      password, // Let the pre-save middleware handle hashing
+      userType: "tanod"
     });
-    res.status(201).json({
-      _id: user._id,
-      firstName: user.firstName,
-      middleName: user.middleName,
-      email: user.email,
-      lastName: user.lastName,
-      username: user.username,
-      token: generateToken(user._id),
-    });
+
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.status(201).json(userResponse);
   } catch (error) {
-    console.error("Registration Error:", error.message);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("Registration Error:", error);
+    res.status(500).json({ message: error.message || "Server error" });
   }
 };
 
@@ -179,23 +178,62 @@ exports.getUserProfile = async (req, res) => {
   }
 };
 
-// Update user profile
 exports.updateUserProfile = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty())
-    return res.status(400).json({ errors: errors.array() });
-
   try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const userId = req.params.userId || req.user._id;
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
-    Object.assign(user, req.body);
-    if (req.file) user.profilePicture = req.file.filename;
+    // Check authorization
+    if (req.user.userType !== 'admin' && req.user._id.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
 
-    await user.save();
-    res.json(user);
+    // Handle password update for admin users
+    if (req.user.userType === 'admin' && req.body.password) {
+      user.password = req.body.password;
+    }
+
+    // Special handling for lastName field
+    if (user.userType === 'admin') {
+      // For admin users, lastName is optional
+      delete req.body.lastName; // Remove validation for lastName
+    } else if (!req.body.lastName && !user.lastName) {
+      // For non-admin users, lastName is required
+      return res.status(400).json({ message: "Last name is required" });
+    }
+
+    // Update other fields
+    const allowedFields = [
+      'firstName',
+      'lastName',
+      'middleName', 
+      'email',
+      'username',
+      'address',
+      'contactNumber',
+      'birthday',
+      'gender',
+      'profilePicture'
+    ];
+
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) {
+        user[field] = req.body[field];
+      }
+    });
+
+    const updatedUser = await user.save();
+    const userResponse = updatedUser.toObject();
+    delete userResponse.password;
+    
+    res.json(userResponse);
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("Update Error:", error);
+    res.status(500).json({ message: error.message || "Server error" });
   }
 };
 
@@ -233,40 +271,35 @@ exports.loginResident = async (req, res) => {
 // authController.js
 
 exports.loginTanod = async (req, res) => {
-  const { username, password } = req.body; // Extract username and password from request body
   try {
-    const user = await User.findOne({ username }); // Find user by username
+    const { username, password } = req.body;
 
-    // If user is not found, return an error
+    const user = await User.findOne({ username }).select('+password');
     if (!user) {
       return res.status(401).json({ message: "Invalid username or password" });
     }
 
-    // Verify password
-    const isPasswordMatch = await bcrypt.compare(password, user.password);
-    if (!isPasswordMatch) {
+    const isMatch = await user.comparePassword(password);
+
+    if (!isMatch) {
       return res.status(401).json({ message: "Invalid username or password" });
     }
 
-    // Check if the user type is either "tanod" or "admin"
     if (user.userType !== "tanod" && user.userType !== "admin") {
-      return res.status(403).json({ message: "Access denied: User type not authorized" });
+      return res.status(403).json({ message: "Access denied" });
     }
 
-    // If the password matches and user type is valid, return user info and token
-    return res.json({
-      _id: user._id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      userType: user.userType,
-      token: generateToken(user._id), // Use the generateToken function
-      profilePicture: user.profilePicture,
-      id: user._id // Add this line to ensure userId is included
+    const token = generateToken(user._id);
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.json({
+      ...userResponse,
+      token
     });
+
   } catch (error) {
-    console.error("Login Error:", error.message);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -310,29 +343,30 @@ exports.loginAdmin = async (req, res) => {
 
 // Change Password
 exports.changePassword = async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-
   try {
-    const user = await User.findById(req.user.id);
+    const userId = req.params.userId || req.user._id;
+    const { currentPassword, newPassword } = req.body;
     
+    const user = await User.findById(userId).select('+password');
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Current password is incorrect" });
+
+    // Verify current password
+    if (!req.params.userId) {
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
     }
 
-    // Set the new password directly
-    user.password = newPassword; // Set new password directly
-
-    // Save the user, which will trigger the pre-save hook
+    // Update password
+    user.password = newPassword;
     await user.save();
-    
+
     res.json({ message: "Password updated successfully" });
   } catch (error) {
-    console.error("Change Password Error:", error.message);
+    console.error("Change Password Error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -452,7 +486,6 @@ exports.rateTanod = async (req, res) => {
       if (!existingRating) {
         return res.status(404).json({ message: "Rating not found" });
       }
-
       existingRating.rating = rating;
       existingRating.comment = comment;
       await existingRating.save();
@@ -491,11 +524,9 @@ exports.getUserRatings = async (req, res) => {
       "tanodId",
       "firstName lastName"
     );
-
     if (!ratings.length) {
       return res.status(404).json({ message: "No ratings found" });
     }
-
     res.json(ratings);
   } catch (error) {
     console.error("Error fetching user ratings:", error);
@@ -510,14 +541,12 @@ exports.deleteRating = async (req, res) => {
       _id: req.params.ratingId,
       userId: req.user._id,
     });
-
     if (!rating) {
       return res.status(404).json({
         message:
           "Rating not found or you do not have permission to delete this rating",
       });
     }
-
     res.json({ message: "Rating deleted successfully" });
   } catch (error) {
     console.error("Error deleting rating:", error);
@@ -539,7 +568,6 @@ exports.getTanodRatings = async (req, res) => {
         .status(404)
         .json({ message: "No ratings found for this Tanod." });
     }
-
     const overallRating =
       ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
     const ratingCounts = [0, 0, 0, 0, 0]; // For ratings 1-5
@@ -578,7 +606,6 @@ exports.createSchedule = async (req, res) => {
     if (!unit || !tanods || !startTime || !endTime) {
       return res.status(400).json({ message: "All fields are required" });
     }
-
     const status = new Date(startTime) > new Date() ? 'Upcoming' : 'Ongoing';
 
     const schedule = new Schedule({
@@ -589,7 +616,6 @@ exports.createSchedule = async (req, res) => {
       patrolArea,
       status,
     });
-
     await schedule.save();
 
     // Create a notification for each Tanod in the schedule
@@ -597,7 +623,6 @@ exports.createSchedule = async (req, res) => {
       userId: tanodId,
       message: `You have new patrol schedule!, your group is ${unit}.`,
     }));
-
     await Notification.insertMany(notifications);
 
     res.status(201).json({ message: "Schedule created successfully", schedule });
@@ -660,12 +685,11 @@ exports.updateSchedule = async (req, res) => {
     schedule.status = new Date(startTime) > new Date() ? 'Upcoming' : 'Ongoing';
 
     await schedule.save();
-    
+
     const notifications = tanods.map(tanodId => ({
       userId: tanodId,
       message: `Your patrol schedule has been updated!`,
     }));
-
     await Notification.insertMany(notifications);
 
     res
@@ -684,7 +708,6 @@ exports.deleteSchedule = async (req, res) => {
     if (!schedule) {
       return res.status(404).json({ message: "Schedule not found" });
     }
-
     res.status(200).json({ message: "Schedule deleted successfully" });
   } catch (error) {
     console.error("Error deleting schedule:", error.message);
@@ -702,8 +725,9 @@ exports.getScheduleMembers = async (req, res) => {
       "tanods",
       "firstName lastName profilePicture contactNumber"
     );
-    if (!schedule)
+    if (!schedule) {
       return res.status(404).json({ message: "Schedule not found" });
+    }
 
     res.status(200).json({ tanods: schedule.tanods });
   } catch (error) {
@@ -743,10 +767,8 @@ exports.updatePatrolArea = async (req, res) => {
     if (!schedule) {
       return res.status(404).json({ message: "Schedule not found" });
     }
-
     schedule.patrolArea = patrolArea;
     await schedule.save();
-
     res.status(200).json({ message: "Patrol area assigned successfully", schedule });
   } catch (error) {
     res.status(500).json({ message: "Failed to assign patrol area", error: error.message });
@@ -763,7 +785,6 @@ exports.startPatrol = async (req, res) => {
     if (!schedule) {
       return res.status(404).json({ message: "Schedule not found" });
     }
-
     schedule.status = 'Ongoing';
     const memberStatus = schedule.patrolStatus.find(status => status.tanodId.toString() === userId.toString());
     if (memberStatus) {
@@ -772,9 +793,7 @@ exports.startPatrol = async (req, res) => {
     } else {
       schedule.patrolStatus.push({ tanodId: userId, status: 'Started', startTime: new Date() });
     }
-
     await schedule.save();
-
     res.status(200).json({ message: "Patrol started", schedule });
   } catch (error) {
     console.error("Error starting patrol:", error.message);
@@ -792,7 +811,6 @@ exports.endPatrol = async (req, res) => {
     if (!schedule) {
       return res.status(404).json({ message: "Schedule not found" });
     }
-
     const memberStatus = schedule.patrolStatus.find(status => status.tanodId.toString() === userId.toString());
     if (memberStatus) {
       memberStatus.status = 'Completed';
@@ -805,9 +823,7 @@ exports.endPatrol = async (req, res) => {
     if (allMembersEnded) {
       schedule.status = 'Completed';
     }
-
     await schedule.save();
-
     res.status(200).json({ message: "Patrol ended", schedule });
   } catch (error) {
     console.error("Error ending patrol:", error.message);
@@ -820,7 +836,6 @@ exports.updateScheduleStatus = async () => {
   try {
     const schedules = await Schedule.find({ status: { $in: ['Upcoming', 'Ongoing'] } });
     const now = new Date();
-
     for (const schedule of schedules) {
       if (new Date(schedule.endTime) <= now) {
         schedule.status = 'Completed';
@@ -841,7 +856,6 @@ exports.savePatrolLogs = async (req, res) => {
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });
     }
-
     logs.forEach(log => {
       schedule.patrolLogs.push({
         userId: req.user.id,
@@ -850,7 +864,6 @@ exports.savePatrolLogs = async (req, res) => {
         scheduleId: scheduleId, // Ensure the schedule ID is saved with the log
       });
     });
-
     await schedule.save();
     res.status(200).json({ message: 'Patrol logs saved successfully' });
   } catch (error) {
@@ -871,7 +884,6 @@ exports.getPatrolLogs = async (req, res) => {
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });
     }
-
     const patrolLogs = schedule.patrolLogs.filter(log => log.userId.toString() === userId);
     res.status(200).json(patrolLogs);
   } catch (error) {

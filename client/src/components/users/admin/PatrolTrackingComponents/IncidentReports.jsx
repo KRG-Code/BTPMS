@@ -66,17 +66,10 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
         requests[incidentId] = request;
       });
       setAssistanceRequests(requests);
-      console.log('Assistance Requests:', requests); // Debug log
     } catch (error) {
       console.error('Error fetching assistance requests:', error);
     }
   };
-
-  // Add debug useEffect
-  useEffect(() => {
-    console.log('Current Assistance Requests:', assistanceRequests);
-    console.log('Current Incident Reports:', incidentReports);
-  }, [assistanceRequests, incidentReports]);
 
   useEffect(() => {
     fetchIncidentReports();

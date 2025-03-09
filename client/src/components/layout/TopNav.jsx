@@ -233,7 +233,9 @@ export default function TopNav() {
                 {profilePicture ? (
                   <img src={profilePicture} alt="Profile" className="rounded-full w-12 h-12 object-cover" />
                 ) : (
-                  <RiUser3Line />
+                  <RiUser3Line
+                  className="rounded-full w-12 h-12 object-cover"
+                  />
                 )}
               </button>
               {isDropdownOpen && (

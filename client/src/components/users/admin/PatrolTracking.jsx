@@ -110,31 +110,43 @@ const PatrolTracking = () => {
   };
 
   const createMarker = (location) => {
-    if (!mapRef.current) {
-      console.error('Map reference is not available');
-      return null;
-    }
-
-    console.log('Creating marker for location:', location);
+    if (!mapRef.current) return null;
 
     const marker = L.marker([location.latitude, location.longitude], {
       icon: L.divIcon({
         className: 'custom-icon',
         html: `
-          <div style="position: relative; width: 50px; height: 50px; z-index: 1000;">
-            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                 border-radius: 50%; background-color: ${location.areaColor || 'red'}; 
-                 opacity: 0.5; animation: pulse 1.5s infinite; z-index: 998;"></div>
-            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                 background-image: url('${location.profilePicture}'); 
-                 background-size: cover; border-radius: 50%; 
-                 border: 2px solid ${location.areaColor || 'red'}; z-index: 999;"></div>
+          <div style="position: relative; width: 50px; height: 50px;">
+            <div class="pulse-ring" style="
+              position: absolute;
+              width: 50px;
+              height: 50px;
+              border-radius: 50%;
+              background-color: ${location.areaColor || 'red'};
+              opacity: 0.5;
+              animation: markerPulse 1.5s infinite;
+            "></div>
+            <div style="
+              position: absolute;
+              width: 50px;
+              height: 50px;
+              border-radius: 50%;
+              background-image: url('${location.profilePicture}');
+              background-size: cover;
+              border: 2px solid ${location.areaColor || 'red'};
+            "></div>
           </div>
+          <style>
+            @keyframes markerPulse {
+              0% { transform: scale(0.95); opacity: 0.8; }
+              50% { transform: scale(1.2); opacity: 0.3; }
+              100% { transform: scale(0.95); opacity: 0.8; }
+            }
+          </style>
         `,
         iconSize: [50, 50],
         iconAnchor: [25, 25]
-      }),
-      zIndexOffset: 1000
+      })
     });
 
     marker.bindTooltip(`${location.firstName} ${location.lastName}`, {
@@ -150,9 +162,6 @@ const PatrolTracking = () => {
   const refreshMap = () => {
     if (!mapRef.current || !isTrackingVisible) return;
 
-    console.log('Refreshing map with tanod locations:', tanodLocations);
-
-    // Clear existing markers
     Object.values(userMarkerRefs.current).forEach(marker => {
       if (marker && mapRef.current) {
         mapRef.current.removeLayer(marker);
@@ -160,7 +169,6 @@ const PatrolTracking = () => {
     });
     userMarkerRefs.current = {};
 
-    // Create new markers
     tanodLocations.forEach(location => {
       if (location.latitude && location.longitude) {
         const userMarker = createMarker(location);
@@ -177,23 +185,37 @@ const PatrolTracking = () => {
       ? 'https://barangaypatrol.lgu1.com'
       : 'http://localhost:5000';
 
+    const token = localStorage.getItem('token');
+
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current.removeAllListeners();
     }
 
     socketRef.current = io(socketUrl, {
+      auth: { token },
       withCredentials: true,
-      transports: ['polling', 'websocket'],
+      transports: ['websocket'], // Only use WebSocket transport
       reconnection: true,
-      reconnectionAttempts: Infinity,
+      reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      timeout: 20000
+      timeout: 20000,
+      forceNew: true
+    });
+
+    socketRef.current.on('connect_error', (error) => {
+      if (error.message === 'xhr poll error') {
+        return; // Ignore polling errors since we're using websocket only
+      }
+      toast.error('Connection error. Retrying...');
     });
 
     socketRef.current.on('connect', () => {
-      console.log('Connected to WebSocket server');
       socketRef.current.emit('joinTrackingRoom');
+    });
+
+    socketRef.current.on('disconnect', () => {
+      toast.warn('Connection lost. Attempting to reconnect...');
     });
 
     // Add handler for initial locations

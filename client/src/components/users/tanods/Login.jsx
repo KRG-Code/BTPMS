@@ -48,12 +48,15 @@ export default function LoginTanod() {
 
       if (response.ok) {
         await login(data.token);
+        localStorage.setItem("userType", data.userType);
+        localStorage.setItem("userId", data._id);
+        
         if (data.userType === 'admin') {
           toast.success('Logged in as Admin!');
-          navigate('/admindashboard'); 
+          navigate('/admindashboard');
         } else if (data.userType === 'tanod') {
           toast.success('Logged in successfully as Tanod!');
-          navigate('/dashboard'); 
+          navigate('/dashboard');
         } else {
           toast.error('Unauthorized user type');
         }
@@ -61,7 +64,6 @@ export default function LoginTanod() {
         toast.error(data.message || 'Invalid login credentials');
       }
     } catch (error) {
-      console.error('Login Error:', error);
       toast.error('An error occurred. Please try again.');
     } finally {
       setLoading(false);
