@@ -803,31 +803,57 @@ exports.startPatrol = async (req, res) => {
 
 // Update patrol status to 'Completed' if all members have ended the patrol
 exports.endPatrol = async (req, res) => {
-  const { scheduleId } = req.params;
-  const userId = req.user._id;
-
   try {
-    const schedule = await Schedule.findById(scheduleId);
+    const { id } = req.params; // Schedule ID from URL parameter
+    const userId = req.user.id; // Get user ID from authenticated request
+
+    const schedule = await Schedule.findById(id);
     if (!schedule) {
-      return res.status(404).json({ message: "Schedule not found" });
-    }
-    const memberStatus = schedule.patrolStatus.find(status => status.tanodId.toString() === userId.toString());
-    if (memberStatus) {
-      memberStatus.status = 'Completed';
-      memberStatus.endTime = new Date();
+      return res.status(404).json({ message: 'Schedule not found' });
     }
 
-    // Check if all members have ended the patrol
-    const allMembersEnded = schedule.patrolStatus.every(status => status.status === 'Completed' || status.status === 'Absent');
+    // Find the patrol status for this user
+    const patrolStatus = schedule.patrolStatus.find(
+      status => status.tanodId.toString() === userId.toString()
+    );
+
+    if (!patrolStatus) {
+      return res.status(400).json({ message: 'User not found in patrol status' });
+    }
+
+    // Update the patrol status
+    patrolStatus.status = 'Completed';
+    patrolStatus.endTime = new Date();
+
+    // Check if all members have ended their patrol
+    const allMembersEnded = schedule.patrolStatus.every(
+      status => status.status === 'Completed' || status.status === 'Absent'
+    );
 
     if (allMembersEnded) {
       schedule.status = 'Completed';
     }
+
     await schedule.save();
-    res.status(200).json({ message: "Patrol ended", schedule });
+
+    // Emit the update through WebSocket
+    const io = require('../websocket').getIO();
+    io.to('schedules').emit('scheduleUpdate', {
+      type: 'update',
+      schedule
+    });
+
+    res.status(200).json({ 
+      message: 'Patrol ended successfully',
+      schedule
+    });
+
   } catch (error) {
-    console.error("Error ending patrol:", error.message);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error('Error ending patrol:', error);
+    res.status(500).json({ 
+      message: 'Failed to end patrol',
+      error: error.message
+    });
   }
 };
 

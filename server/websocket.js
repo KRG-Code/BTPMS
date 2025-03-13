@@ -1,5 +1,9 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const TanodLocation = require('./models/TanodLocation');
+const mongoose = require('mongoose');
+const IncidentReport = require('./models/IncidentReport');
+const Schedule = require('./models/Schedule'); // Add this import
 
 let io;
 let activeLocations = new Map();
@@ -15,7 +19,7 @@ const initializeWebSocket = (server) => {
     },
     pingTimeout: 60000,
     pingInterval: 25000,
-    transports: ['polling', 'websocket'],
+    transports: ['websocket', 'polling'], // Allow both WebSocket and polling
   });
 
   // Add authentication middleware
@@ -31,6 +35,84 @@ const initializeWebSocket = (server) => {
       next();
     } catch (err) {
       next(new Error('Authentication error'));
+    }
+  });
+
+  // Set up change streams
+  const incidentChangeStream = IncidentReport.watch();
+  const locationChangeStream = TanodLocation.watch();
+  const scheduleChangeStream = Schedule.watch();
+
+  // Handle incident changes
+  incidentChangeStream.on('change', async (change) => {
+    if (change.operationType === 'insert' || change.operationType === 'update') {
+      try {
+        const incident = await IncidentReport.findById(change.documentKey._id)
+          .populate('reporter', 'firstName lastName')
+          .populate('responder', 'firstName lastName');
+          
+        io.to('incidents').emit('incidentUpdate', {
+          type: change.operationType,
+          incident
+        });
+      } catch (error) {
+        console.error('Error processing incident change:', error);
+      }
+    }
+  });
+
+  // Handle location changes
+  locationChangeStream.on('change', async (change) => {
+    try {
+      if (change.operationType === 'update' || change.operationType === 'insert') {
+        const location = await TanodLocation.findById(change.documentKey._id)
+          .populate('userId', 'firstName lastName profilePicture')
+          .populate({
+            path: 'currentScheduleId',
+            populate: {
+              path: 'patrolArea',
+              select: 'color legend'
+            }
+          });
+
+        if (location && location.isActive) {
+          io.to('tracking').emit('locationUpdate', {
+            ...location.toObject(),
+            markerColor: location.markerColor,
+            isOnPatrol: location.isOnPatrol
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error processing location change:', error);
+    }
+  });
+
+  // Add schedule change stream handler
+  scheduleChangeStream.on('change', async (change) => {
+    try {
+      if (change.operationType === 'update') {
+        const schedule = await Schedule.findById(change.documentKey._id);
+        
+        // Update location markers for affected tanods
+        const affectedTanods = schedule.patrolStatus
+          .filter(status => status.status === 'Started')
+          .map(status => status.tanodId);
+
+        for (const tanodId of affectedTanods) {
+          await TanodLocation.findOneAndUpdate(
+            { userId: tanodId, isActive: true },
+            { 
+              markerColor: schedule.patrolArea?.color || 'red',
+              isOnPatrol: true,
+              currentScheduleId: schedule._id
+            },
+            { new: true }
+          ).populate('userId', 'firstName lastName profilePicture');
+        }
+      }
+    } catch (error) {
+      console.error('Error processing schedule change:', error);
     }
   });
 
@@ -53,13 +135,24 @@ const initializeWebSocket = (server) => {
     // Join user's personal room for direct messages
     socket.join(`user_${socket.userId}`);
 
-    socket.on('joinTrackingRoom', () => {
+    socket.on('joinTrackingRoom', async () => {
       socket.join('tracking');
       console.log('Client joined tracking room:', socket.id);
       
       // Send current active locations to newly connected client
-      const locations = Array.from(activeLocations.values());
-      socket.emit('initializeLocations', locations);
+      try {
+        const locations = await TanodLocation.find({ isActive: true })
+          .populate('userId', 'firstName lastName profilePicture')
+          .populate({
+            path: 'currentScheduleId',
+            populate: {
+              path: 'patrolArea'
+            }
+          });
+        socket.emit('initializeLocations', locations);
+      } catch (error) {
+        console.error('Error fetching initial locations:', error);
+      }
     });
 
     socket.on('joinConversation', (conversationId) => {
@@ -79,16 +172,52 @@ const initializeWebSocket = (server) => {
       console.log(`Client ${socket.id} left conversation: ${conversationId}`);
     });
 
-    socket.on('locationUpdate', (location) => {
-      console.log('Location update received:', location);
-      activeLocations.set(location.userId, {
-        ...location,
-        lastUpdate: Date.now()
-      });
-      io.to('tracking').emit('locationUpdate', location);
+    socket.on('joinIncidentRoom', () => {
+      socket.join('incidents');
     });
 
-    // Remove the messageReceived event handler as it's now handled directly in the controller
+    socket.on('leaveIncidentRoom', () => {
+      socket.leave('incidents');
+    });
+
+    socket.on('locationUpdate', async (data) => {
+      try {
+        const { userId, latitude, longitude, currentScheduleId } = data;
+        
+        // Update location in database
+        const location = await TanodLocation.findOneAndUpdate(
+          { userId },
+          { 
+            userId,
+            latitude,
+            longitude,
+            currentScheduleId,
+            lastUpdate: new Date(),
+            isActive: true
+          },
+          { 
+            upsert: true, 
+            new: true,
+            setDefaultsOnInsert: true
+          }
+        ).populate('userId', 'firstName lastName profilePicture');
+    
+        // Broadcast to all clients in tracking room
+        socket.to('tracking').emit('locationUpdate', location);
+      } catch (error) {
+        console.error('Error processing location update:', error);
+      }
+    });
+
+    socket.on('joinScheduleRoom', () => {
+      socket.join('schedules');
+      console.log('Client joined schedule room:', socket.id);
+    });
+
+    socket.on('leaveScheduleRoom', () => {
+      socket.leave('schedules');
+      console.log('Client left schedule room:', socket.id);
+    });
 
     // Clean up stale locations periodically
     const cleanup = setInterval(() => {
@@ -105,6 +234,20 @@ const initializeWebSocket = (server) => {
     socket.on('disconnect', () => {
       clearInterval(cleanup);
       console.log('Client disconnected:', socket.id);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+      if (error.message === 'Authentication error') {
+        toast.error('Authentication failed. Please log in again.');
+        stopTracking();
+      } else {
+        // Add retry logic
+        setTimeout(() => {
+          socket.connect();
+        }, 1000);
+        toast.error('Connection error. Retrying...');
+      }
     });
   });
 };

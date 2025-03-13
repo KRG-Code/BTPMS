@@ -121,9 +121,9 @@ router.put('/schedules/update-status', protect, updateScheduleStatus); // Add th
 
 // Patrol routes
 router.put('/schedule/:scheduleId/start-patrol', protect, startPatrol);
-router.put('/schedule/:scheduleId/end-patrol', protect, endPatrol);
+router.put('/schedule/:id/end-patrol', protect, endPatrol); // Update this route to use controller
 router.post('/save-patrol-logs', protect, savePatrolLogs);
-router.get('/patrol-logs/:userId/:scheduleId', protect, getPatrolLogs); // Update this route
+router.get('/patrol-logs/:userId/:scheduleId', protect, getPatrolLogs);
 
 // Notification routes
 router.get('/notifications/unread', protect, getUnreadNotifications); // Ensure this route is defined

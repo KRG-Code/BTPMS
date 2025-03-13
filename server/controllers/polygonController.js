@@ -12,15 +12,28 @@ exports.getPolygons = async (req, res) => {
 
 // Fetch a single polygon by ID
 exports.getPolygonById = async (req, res) => {
-  const { id } = req.params;
   try {
-    const polygon = await Polygon.findById(id);
-    if (!polygon) {
-      return res.status(404).json({ message: "Polygon not found" });
+    const { id } = req.params;
+    
+    // Add validation for ObjectId
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: 'Invalid polygon ID' });
     }
-    res.status(200).json(polygon);
+
+    const polygon = await Polygon.findById(id);
+    
+    if (!polygon) {
+      return res.status(404).json({ message: 'Polygon not found' });
+    }
+
+    res.json(polygon);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve polygon", error: error.message });
+    console.error('Error fetching polygon:', error);
+    res.status(500).json({ 
+      message: 'Error fetching polygon',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 

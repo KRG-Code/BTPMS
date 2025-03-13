@@ -13,12 +13,48 @@ const incidentReportRoutes = require('./routes/incidentReportRoutes');
 const cctvLocationRoutes = require("./routes/cctvLocationRoutes");
 const assistanceRequestRoutes = require('./routes/assistanceRequestRoutes');
 const assistanceIntegrationRoutes = require('./routes/assistanceIntegrationRoutes');
+const locationRoutes = require('./routes/locationRoutes'); // Add this line
+const Schedule = require('./models/Schedule');
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
 const server = http.createServer(app);
 initializeWebSocket(server); // Initialize WebSocket server
-connectDB(); // Initialize MongoDB or other DB connection
+
+// Add this after your MongoDB connection is established
+const setupScheduleChangeStream = () => {
+  const scheduleChangeStream = Schedule.watch();
+  
+  scheduleChangeStream.on('change', async (change) => {
+    const io = require('./websocket').getIO();
+    
+    try {
+      if (change.operationType === 'update' || change.operationType === 'insert') {
+        const schedule = await Schedule.findById(change.documentKey._id)
+          .populate('patrolArea')
+          .populate('tanods');
+          
+        io.to('schedules').emit('scheduleUpdate', {
+          type: change.operationType,
+          schedule
+        });
+      }
+    } catch (error) {
+      console.error('Error processing schedule change:', error);
+    }
+  });
+
+  scheduleChangeStream.on('error', (error) => {
+    console.error('Schedule change stream error:', error);
+    setTimeout(setupScheduleChangeStream, 5000); // Retry connection after 5 seconds
+  });
+};
+
+// Call this after your MongoDB connection
+connectDB().then(() => {
+  setupScheduleChangeStream();
+  // ...rest of your server startup code...
+});
 
 // Firebase Admin Setup
 const serviceAccount = {
@@ -79,6 +115,12 @@ app.use((req, res, next) => {
 
 // Serve uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Fix location routes mounting - make sure it's mounted at /api/locations
+app.use('/api/locations', locationRoutes); // Update path
+
+// Remove or comment out any duplicate route mounting
+// app.use('/locations', locationRoutes); // Remove this if it exists
 
 // Auth Routes
 const authRoutes = require('./routes/authRoutes');

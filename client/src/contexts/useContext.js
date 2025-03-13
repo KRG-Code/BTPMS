@@ -62,6 +62,7 @@ export const CombinedProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userType'); // Clear userType on logout
+    localStorage.removeItem('isTracking'); // Add this line
     setToken(null);
     setUserType(null);
     navigate('/');

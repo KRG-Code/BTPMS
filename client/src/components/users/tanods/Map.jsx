@@ -30,6 +30,8 @@ const TanodMap = () => {
   // Add new refs for different layer types
   const patrolLayersRef = useRef({});
   const incidentLayersRef = useRef({});
+  const socketRef = useRef(null); // Add socketRef
+  const [prevUserLocation, setPrevUserLocation] = useState(null); // Add prevUserLocation state
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem('token');
@@ -422,6 +424,127 @@ const TanodMap = () => {
     return () => document.head.removeChild(style);
   }, []);
 
+  // Update user marker effect with debouncing
+  useEffect(() => {
+    if (!mapRef.current || !userLocation || !isTrackingVisible) {
+      if (userMarkerRef.current && mapRef.current) {
+        mapRef.current.removeLayer(userMarkerRef.current);
+        userMarkerRef.current = null;
+      }
+      return;
+    }
+  
+    try {
+      // Add debounce check
+      if (userLocation.lastUpdate && 
+          Date.now() - userLocation.lastUpdate < 1000) {
+        return;
+      }
+  
+      const { latitude, longitude, profilePicture } = userLocation;
+  
+      if (userMarkerRef.current) {
+        const currentPos = userMarkerRef.current.getLatLng();
+        if (currentPos.lat === latitude && currentPos.lng === longitude) {
+          return; // Skip update if position hasn't changed
+        }
+        mapRef.current.removeLayer(userMarkerRef.current);
+      }
+  
+      const userMarker = createUserMarker(
+        latitude, 
+        longitude, 
+        profilePicture || userProfile?.profilePicture,
+        userLocation.markerColor
+      );
+  
+      userMarker.addTo(mapRef.current);
+      userMarkerRef.current = userMarker;
+      
+      // Only update view if position has changed significantly
+      const currentCenter = mapRef.current.getCenter();
+      const distance = mapRef.current.distance([latitude, longitude], [currentCenter.lat, currentCenter.lng]);
+      if (distance > 50) { // Only pan if moved more than 50 meters
+        mapRef.current.setView([latitude, longitude], mapRef.current.getZoom() || 16);
+      }
+  
+    } catch (error) {
+      console.error('Error updating marker:', error);
+    }
+  }, [userLocation, isTrackingVisible, userProfile]);
+
+  // Update startTracking function
+  const startTracking = async () => {
+    const profile = await fetchUserProfile(); // Get profile first
+    if (!profile) {
+      toast.error("Failed to fetch user profile");
+      return;
+    }
+
+    // ...rest of startTracking implementation...
+
+    socketRef.current.on('locationUpdate', (data) => {
+      if (data.userId?._id === profile._id) {
+        const locationData = {
+          ...data,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          markerColor: data.markerColor || 'red',
+          isOnPatrol: data.isOnPatrol || false,
+          profilePicture: profile.profilePicture,
+          firstName: profile.firstName,
+          lastName: profile.lastName
+        };
+        
+        // Only update location if marker is meant to be shown
+        if (isTrackingVisible) {
+          setUserLocation(locationData);
+          
+          // Update marker immediately if it exists
+          if (userMarkerRef.current && mapRef.current) {
+            const newLatLng = [locationData.latitude, locationData.longitude];
+            userMarkerRef.current.setLatLng(newLatLng);
+          }
+        }
+        // Always update prevUserLocation
+        setPrevUserLocation(locationData);
+      }
+    });
+  };
+
+  // Update effect to handle tracking visibility
+  useEffect(() => {
+    if (!isTrackingVisible) {
+      // Remove marker when tracking is hidden
+      if (userMarkerRef.current && mapRef.current) {
+        mapRef.current.removeLayer(userMarkerRef.current);
+        userMarkerRef.current = null;
+      }
+      setUserLocation(null);
+    } else if (prevUserLocation) {
+      // Restore marker with previous location when showing
+      setUserLocation(prevUserLocation);
+    }
+
+    // Cleanup function
+    return () => {
+      if (userMarkerRef.current && mapRef.current) {
+        mapRef.current.removeLayer(userMarkerRef.current);
+        userMarkerRef.current = null;
+      }
+    };
+  }, [isTrackingVisible]);
+
+  // Add cleanup for socket events
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.off('locationUpdate');
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
   return (
     <div style={{ position: 'relative', height: '100%' }}>
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
@@ -434,6 +557,7 @@ const TanodMap = () => {
             setUserLocation={setUserLocation}
             setIncidentLocations={setIncidentLocations}
             incidentReports={incidentReports} // Pass incidentReports down
+            setIncidentReports={setIncidentReports} // Add this prop
             isTrackingVisible={isTrackingVisible}
             toggleTracking={toggleTracking}
             showReportIncident={showReportIncident}

@@ -62,6 +62,11 @@ const PatrolTracking = () => {
   };
 
   const fetchScheduleById = async (scheduleId) => {
+    // Skip fetching if scheduleId is null
+    if (!scheduleId) {
+      return null;
+    }
+
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('Please log in.');
@@ -109,47 +114,50 @@ const PatrolTracking = () => {
     }
   };
 
+  const fetchLocations = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/locations/active`, // Updated URL
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setTanodLocations(response.data);
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+      toast.error('Failed to fetch tanod locations');
+    }
+  };
+
   const createMarker = (location) => {
-    if (!mapRef.current) return null;
+    if (!mapRef.current || !location.userId) return null;
+
+    const userInfo = location.userId || {};
+    const profilePicture = userInfo.profilePicture || '/default-avatar.png';
+    const firstName = userInfo.firstName || 'Unknown';
+    const lastName = userInfo.lastName || 'User';
+
+    // Use the markerColor and isOnPatrol status
+    const markerColor = location.markerColor || 'red';
 
     const marker = L.marker([location.latitude, location.longitude], {
       icon: L.divIcon({
         className: 'custom-icon',
         html: `
           <div style="position: relative; width: 50px; height: 50px;">
-            <div class="pulse-ring" style="
-              position: absolute;
-              width: 50px;
-              height: 50px;
-              border-radius: 50%;
-              background-color: ${location.areaColor || 'red'};
-              opacity: 0.5;
-              animation: markerPulse 1.5s infinite;
-            "></div>
-            <div style="
-              position: absolute;
-              width: 50px;
-              height: 50px;
-              border-radius: 50%;
-              background-image: url('${location.profilePicture}');
-              background-size: cover;
-              border: 2px solid ${location.areaColor || 'red'};
-            "></div>
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                 border-radius: 50%; background-color: ${markerColor}; 
+                 opacity: 0.5; animation: pulse 2s ease-out infinite;"></div>
+            <div style="position: absolute; width: 50px; height: 50px; 
+                 border-radius: 50%; background-image: url('${profilePicture}');
+                 background-size: cover; border: 2px solid ${markerColor};"></div>
           </div>
-          <style>
-            @keyframes markerPulse {
-              0% { transform: scale(0.95); opacity: 0.8; }
-              50% { transform: scale(1.2); opacity: 0.3; }
-              100% { transform: scale(0.95); opacity: 0.8; }
-            }
-          </style>
         `,
         iconSize: [50, 50],
         iconAnchor: [25, 25]
       })
     });
 
-    marker.bindTooltip(`${location.firstName} ${location.lastName}`, {
+    marker.bindTooltip(`${firstName} ${lastName}`, {
       permanent: false,
       direction: 'bottom',
       offset: [0, 10],
@@ -220,7 +228,6 @@ const PatrolTracking = () => {
 
     // Add handler for initial locations
     socketRef.current.on('initializeLocations', (locations) => {
-      console.log('Received initial locations:', locations);
       setTanodLocations(locations.map(loc => ({
         ...loc,
         lastUpdate: Date.now()
@@ -228,51 +235,31 @@ const PatrolTracking = () => {
     });
 
     socketRef.current.on('locationUpdate', async (data) => {
-      console.log('Location update received:', data);
-      const { userId, latitude, longitude, profilePicture, firstName, lastName, currentScheduleId } = data;
-      
       try {
-        // Fetch schedule and patrol area data
-        const schedule = await fetchScheduleById(currentScheduleId);
-        const patrolAreaId = schedule?.patrolArea?._id || schedule?.patrolArea;
-        const patrolArea = patrolAreaId ? await fetchPatrolAreaById(patrolAreaId) : null;
-        const areaColor = patrolArea?.color || 'red';
+        const populatedData = { ...data };
+        
+        // Extract schedule ID correctly
+        if (data.currentScheduleId) {
+          // Check if currentScheduleId is an object or string
+          const scheduleId = typeof data.currentScheduleId === 'object' 
+            ? data.currentScheduleId._id 
+            : data.currentScheduleId;
 
-        // Update tanod locations state
-        setTanodLocations(prev => {
-          const others = prev.filter(loc => loc.userId !== userId);
-          const newLocation = {
-            userId,
-            latitude,
-            longitude,
-            profilePicture,
-            firstName,
-            lastName,
-            areaColor,
-            currentScheduleId,
-            patrolArea,
-            lastUpdate: Date.now()
-          };
-
-          // Create or update marker immediately
-          if (mapRef.current && isTrackingVisible) {
-            // Remove existing marker if it exists
-            if (userMarkerRefs.current[userId]) {
-              userMarkerRefs.current[userId].remove();
-            }
-
-            // Create new marker
-            const marker = createMarker(newLocation);
-            if (marker) {
-              marker.addTo(mapRef.current);
-              userMarkerRefs.current[userId] = marker;
+          if (scheduleId) {
+            const schedule = await fetchScheduleById(scheduleId);
+            if (schedule?.patrolArea) {
+              const patrolAreaId = schedule.patrolArea._id || schedule.patrolArea;
+              const patrolArea = await fetchPatrolAreaById(patrolAreaId);
+              populatedData.patrolArea = patrolArea;
             }
           }
+        }
 
-          return [...others, newLocation];
-        });
+        handleLocationUpdate(populatedData);
       } catch (error) {
         console.error('Error processing location update:', error);
+        // Still update with original data if population fails
+        handleLocationUpdate(data);
       }
     });
 
@@ -339,24 +326,18 @@ const PatrolTracking = () => {
   };
 
   useEffect(() => {
+    fetchLocations();
     fetchPatrolAreas();
     fetchIncidentReports();
-    fetchCctvLocations(); // Add this
-    initializeWebSocket(); // Always initialize WebSocket
+    fetchCctvLocations();
+    initializeWebSocket();
 
-    const intervalId = setInterval(() => {
-      if (socketRef.current && !socketRef.current.connected) {
-        console.log('Attempting to reconnect...');
-        socketRef.current.connect();
-      }
-    }, 5000);
+    const refreshInterval = setInterval(fetchLocations, 30000); // Refresh every 30 seconds
 
     return () => {
-      clearInterval(intervalId);
+      clearInterval(refreshInterval);
       if (socketRef.current) {
-        socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
-        socketRef.current = null;
       }
     };
   }, []);
@@ -380,19 +361,28 @@ const PatrolTracking = () => {
     const style = document.createElement('style');
     style.textContent = `
       @keyframes pulse {
-        0% { transform: scale(1); opacity: 0.5; }
-        50% { transform: scale(1.2); opacity: 0.3; }
-        100% { transform: scale(1); opacity: 0.5; }
+        0% { transform: scale(0.1); opacity: 1; }
+        50% { transform: scale(1); opacity: .5; }
+        100% { transform: scale(1.5); opacity: 0; }
+      }
+      
+      @keyframes markerPulse {
+        0% { transform: scale(0.1); opacity: 1; }
+        50% { transform: scale(1); opacity: 0.5; }
+        100% { transform: scale(1.5); opacity: 0; }
+      }
+
+      .pulse-animation {
+        animation: pulse 2s ease-out infinite;
       }
     `;
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
   }, []);
 
-  // Add this useEffect to handle cleanup of stale markers
-  const MARKER_TIMEOUT = 10000; // 10 seconds timeout for inactive markers
-
-  // Update the useEffect that handles cleanup of stale markers
+  // Remove these cleanup intervals as they're causing markers to disappear
+  // Remove or comment out this useEffect
+  /*
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       const now = Date.now();
@@ -411,31 +401,34 @@ const PatrolTracking = () => {
         
         return filtered;
       });
-    }, 5000); // Check every 5 seconds instead of every minute
+    }, 5000);
 
     return () => clearInterval(cleanupInterval);
   }, []);
+  */
 
-  // Remove or update the second cleanup interval since it's redundant now
-  // Remove this useEffect or merge it with the one above
+  // Remove this redundant cleanup interval
+  /*
   useEffect(() => {
     const cleanup = setInterval(() => {
       const now = Date.now();
       setTanodLocations(prev => 
         prev.filter(loc => now - loc.lastUpdate < MARKER_TIMEOUT)
       );
-    }, 5000); // Match the interval with the other cleanup
+    }, 5000);
 
     return () => clearInterval(cleanup);
   }, []);
+  */
 
+  // Only clear markers when explicitly stopping tracking
   const toggleTrackingVisibility = () => {
     const newVisibilityState = !isTrackingVisible;
     setIsTrackingVisible(newVisibilityState);
     localStorage.setItem("isTrackingVisible", newVisibilityState);
 
     if (!newVisibilityState) {
-      // Clear markers when turning off tracking
+      // Clear markers only when turning off tracking
       Object.values(userMarkerRefs.current).forEach(marker => {
         if (mapRef.current && mapRef.current.hasLayer(marker)) {
           marker.remove();
@@ -474,6 +467,10 @@ const PatrolTracking = () => {
         }
       });
       userMarkerRefs.current = {};
+      
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
   }, []);
 
@@ -623,6 +620,71 @@ const PatrolTracking = () => {
     }
   };
 
+  useEffect(() => {
+    const socketUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://barangaypatrol.lgu1.com'
+      : 'http://localhost:5000';
+
+    const token = localStorage.getItem('token');
+
+    socketRef.current = io(socketUrl, {
+      auth: { token },
+      withCredentials: true,
+      transports: ['websocket']
+    });
+
+    socketRef.current.on('connect', () => {
+      socketRef.current.emit('joinTrackingRoom');
+      socketRef.current.emit('joinScheduleRoom');
+    });
+
+    // Handle location updates
+    socketRef.current.on('locationUpdate', handleLocationUpdate);
+
+    // Handle incident updates
+    socketRef.current.on('incidentUpdate', ({ type, incident }) => {
+      setIncidentReports(prev => {
+        if (type === 'insert') {
+          return [...prev, incident];
+        }
+        return prev.map(inc => inc._id === incident._id ? incident : inc);
+      });
+    });
+
+    // Handle schedule updates
+    socketRef.current.on('scheduleUpdate', ({ type, schedule }) => {
+      if (type === 'update' || type === 'insert') {
+        fetchLocations();
+      }
+    });
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.emit('leaveTrackingRoom');
+        socketRef.current.emit('leaveScheduleRoom');
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  const handleLocationUpdate = async (data) => {
+    try {
+      setTanodLocations(prev => {
+        const others = prev.filter(loc => loc.userId?._id !== data.userId?._id);
+        return [...others, {
+          ...data,
+          lastUpdate: Date.now()
+        }];
+      });
+
+      if (isTrackingVisible && mapRef.current) {
+        updateMarker(data);
+      }
+    } catch (error) {
+      console.error('Error updating location:', error);
+    }
+  };
+
   return (
     <>
       <ToastContainer
@@ -647,9 +709,9 @@ const PatrolTracking = () => {
               <ViewLocation
                 key={key}
                 location={incidentLocations[key].location}
-                isVisible={!!incidentLocations[key]}
                 incidentType={incidentLocations[key].type}
                 markerId={key}
+                isVisible={!!incidentLocations[key]}
                 onMarkerClick={() => {
                   const incident = incidentReports.find(report => report._id === key);
                   setSelectedReport(incident);
@@ -662,17 +724,13 @@ const PatrolTracking = () => {
           <div className="w-full flex justify-between gap-2">
             <button 
               onClick={toggleTrackingVisibility} 
-              className={`flex-1 py-3 text-white text-lg rounded-lg shadow transition ${
-                isTrackingVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-              }`}
+              className={`flex-1 py-3 text-white text-lg rounded-lg shadow transition ${isTrackingVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
             >
               {isTrackingVisible ? 'Stop Tracking' : 'Track Tanods'}
             </button>
             <button 
               onClick={toggleCctvVisibility} 
-              className={`flex-1 py-3 text-white text-lg rounded-lg shadow transition ${
-                isCctvVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-              }`}
+              className={`flex-1 py-3 text-white text-lg rounded-lg shadow transition ${isCctvVisible ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
             >
               CCTV Location
             </button>
@@ -689,8 +747,8 @@ const PatrolTracking = () => {
               setIncidentLocations={setIncidentLocations} 
               selectedReport={selectedReport} 
               setSelectedReport={setSelectedReport}
-              mapRef={mapRef}
-              zoomToLocation={zoomToLocation}
+              mapRef={mapRef} 
+              zoomToLocation={zoomToLocation} 
             />
           </div>
         </div>

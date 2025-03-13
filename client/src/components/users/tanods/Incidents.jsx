@@ -12,7 +12,8 @@ const Incidents = ({
   fetchCurrentPatrolArea, 
   setUserLocation, 
   setIncidentLocations, 
-  incidentReports, 
+  incidentReports,
+  setIncidentReports, // Add this prop
   isTrackingVisible, 
   toggleTracking,
   showReportIncident,
@@ -41,6 +42,7 @@ const Incidents = ({
   const [intervalId, setIntervalId] = useState(null); // Add state to store intervalId
   const socketRef = useRef(null); // Add socketRef
   const watchPositionId = useRef(null);
+  const [prevUserLocation, setPrevUserLocation] = useState(null);  // Add this state
 
   // Add global animation styles
   useEffect(() => {
@@ -220,97 +222,190 @@ const Incidents = ({
     }
   };
 
-  const updateUserLocation = (position, profile) => {
-    if (!profile) return;
+  // Update the fetchPatrolAreaColor function
+const fetchPatrolAreaColor = async (scheduleId) => {
+  try {
+    const token = localStorage.getItem('token');
+    const schedule = await axios.get(
+      `${process.env.REACT_APP_API_URL}/auth/schedule/${scheduleId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-    const { latitude, longitude } = position.coords;
-    const locationData = { 
-      latitude, 
-      longitude, 
-      profilePicture: profile.profilePicture
-    };
+    // Extract patrol area ID properly
+    const patrolAreaId = schedule.data.patrolArea?._id || schedule.data.patrolArea;
     
-    setUserLocation(locationData);
-    
-    if (socketRef.current) {
-      socketRef.current.emit('locationUpdate', {
-        userId: profile._id,
-        ...locationData,
-        firstName: profile.firstName,
-        lastName: profile.lastName,
-        currentScheduleId
-      });
-    }
-  };
-
-  const startLocationTracking = async () => {
-    const profile = await fetchUserProfile();
-    if (!profile) {
-      toast.error("Failed to fetch user profile");
-      return;
-    }
-
-    if (navigator.geolocation) {
-      watchPositionId.current = navigator.geolocation.watchPosition(
-        (position) => {
-          const locationData = {
-            userId: profile._id,
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            profilePicture: profile.profilePicture,
-            firstName: profile.firstName,
-            lastName: profile.lastName,
-            currentScheduleId: currentScheduleId // Make sure this is defined in your state
-          };
-
-          // Update location in Map component
-          setUserLocation(locationData);
-
-          // Send location to server if socket is connected
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('locationUpdate', locationData);
-          }
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
-          toast.error('Error getting location. Please check your GPS settings.');
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 5000,
-          maximumAge: 0
-        }
+    if (patrolAreaId) {
+      const patrolArea = await axios.get(
+        `${process.env.REACT_APP_API_URL}/polygons/${patrolAreaId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-    } else {
-      toast.error('Geolocation is not supported by your browser');
+      return patrolArea.data.color;
     }
+    return 'red'; // default color
+  } catch (error) {
+    console.error('Error fetching patrol area color:', error);
+    return 'red'; // default color
+  }
+};
+
+// Update updateUserLocation to include better error logging
+const updateUserLocation = async (position, profile) => {
+  if (!profile || !position?.coords) return;
+
+  const { latitude, longitude } = position.coords;
+  
+  const newLocation = {
+    latitude,
+    longitude,
+    currentScheduleId,
+    markerColor: currentScheduleId ? await fetchPatrolAreaColor(currentScheduleId) : 'red',
+    isOnPatrol: !!currentScheduleId
   };
 
-  const startTracking = async () => {
-    const profile = await fetchUserProfile();
-    if (!profile) {
-      toast.error("Failed to fetch user profile");
-      return;
+  // Only update if location has actually changed
+  if (!hasLocationChanged(prevUserLocation, newLocation)) {
+    return;
+  }
+  
+  try {
+    const token = localStorage.getItem('token');
+    
+    await axios.post(
+      `${process.env.REACT_APP_API_URL}/locations/update`,
+      {
+        ...newLocation,
+        userId: profile._id
+      },
+      {
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    );
+    
+    const locationData = {
+      ...newLocation,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      profilePicture: profile.profilePicture,
+    };
+
+    setPrevUserLocation(locationData);
+    setUserLocation(locationData); // Always update location
+
+  } catch (error) {
+    console.error('Error updating location:', error?.response?.data || error.message);
+    toast.error('Failed to update location');
+  }
+};
+
+// Add helper function to check if location update is needed
+const shouldUpdateLocation = (newLocation) => {
+  if (!prevUserLocation) {
+    setPrevUserLocation(newLocation);
+    return true;
+  }
+  
+  const minDistanceChange = 5; // 5 meters minimum change
+  const distance = calculateDistance(
+    prevUserLocation.latitude,
+    prevUserLocation.longitude,
+    newLocation.latitude,
+    newLocation.longitude
+  );
+
+  const shouldUpdate = distance > minDistanceChange || 
+                       prevUserLocation.currentScheduleId !== newLocation.currentScheduleId ||
+                       prevUserLocation.areaColor !== newLocation.areaColor;
+  
+  if (shouldUpdate) {
+    setPrevUserLocation(newLocation);
+  }
+  
+  return shouldUpdate;
+};
+
+// Add distance calculation helper
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI/180;
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lon2-lon1) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+          Math.cos(φ1) * Math.cos(φ2) *
+          Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c;
+};
+
+const startLocationTracking = async () => {
+  const profile = await fetchUserProfile();
+  if (!profile) {
+    toast.error("Failed to fetch user profile");
+    return;
+  }
+
+  if (navigator.geolocation) {
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 5000, // Update this to cache positions for 5 seconds
+      distanceFilter: 5
+    };
+
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          updateUserLocation(position, profile);
+          
+          if (watchPositionId.current) {
+            navigator.geolocation.clearWatch(watchPositionId.current);
+          }
+          
+          watchPositionId.current = navigator.geolocation.watchPosition(
+            (position) => updateUserLocation(position, profile),
+            handleLocationError,
+            options
+          );
+        },
+        handleLocationError,
+        options
+      );
+    } catch (error) {
+      console.error('Geolocation error:', error);
+      toast.error('Error initializing location tracking');
     }
+  } else {
+    toast.error('Geolocation is not supported by your browser');
+  }
+};
 
-    setIsTracking(true);
-    toggleTracking();
-    localStorage.setItem("isTracking", "true");
+const startTracking = async () => {
+  const profile = await fetchUserProfile();
+  if (!profile) {
+    toast.error("Failed to fetch user profile");
+    return;
+  }
 
-    // Get the authentication token
+  setIsTracking(true);
+  toggleTracking();
+  localStorage.setItem("isTracking", "true");
+
+  // Only initialize socket if it doesn't exist
+  if (!socketRef.current) {
+    const socketUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://barangaypatrol.lgu1.com'
+      : 'http://localhost:5000';
+
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('Authentication required');
       return;
     }
 
-    // Initialize socket connection with auth token
-    const socketUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://barangaypatrol.lgu1.com'
-      : 'http://localhost:5000';
-
     socketRef.current = io(socketUrl, {
-      auth: { token }, // Add token to auth object
+      auth: { token },
       withCredentials: true,
       transports: ['websocket'],
       reconnection: true,
@@ -321,89 +416,238 @@ const Incidents = ({
 
     socketRef.current.on('connect', () => {
       console.log('Connected to socket server');
-      socketRef.current.emit('joinTrackingRoom', { token }); // Pass token in room join
-      startLocationTracking();
+      socketRef.current.emit('joinTrackingRoom');
+      startLocationTracking(); // Start location tracking after socket connects
+    });
+
+    socketRef.current.on('locationUpdate', (data) => {
+      if (data.userId?._id === profile._id) {
+        const locationData = {
+          ...data,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          markerColor: data.markerColor || 'red',
+          isOnPatrol: data.isOnPatrol || false,
+          profilePicture: profile.profilePicture,
+          firstName: profile.firstName,
+          lastName: profile.lastName
+        };
+        setUserLocation(locationData);
+      }
+    });
+  } else {
+    // If socket exists, just start location tracking
+    startLocationTracking();
+  }
+};
+
+const stopTracking = async () => {
+  try {
+    // Clear the watch position first
+    if (watchPositionId.current) {
+      navigator.geolocation.clearWatch(watchPositionId.current);
+      watchPositionId.current = null;
+    }
+
+    const token = localStorage.getItem('token');
+    await axios.post(
+      `${process.env.REACT_APP_API_URL}/locations/deactivate`,
+      {},
+      {
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    );
+
+    setIsTracking(false);
+    toggleTracking();
+    localStorage.setItem("isTracking", "false");
+    setUserLocation(null);
+  } catch (error) {
+    console.error('Error deactivating tracking:', error);
+    toast.error('Failed to stop tracking');
+  }
+};
+
+const handleLocationError = (error) => {
+  let errorMessage = '';
+  
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      errorMessage = "Location access denied. Please enable location services in your browser settings.";
+      break;
+    case error.POSITION_UNAVAILABLE:
+      errorMessage = "Location information is unavailable. Please check your device's GPS settings.";
+      break;
+    case error.TIMEOUT:
+      errorMessage = "Location request timed out. Please try again.";
+      break;
+    case error.UNKNOWN_ERROR:
+    default:
+      errorMessage = "An unknown error occurred while getting location.";
+      break;
+  }
+
+  console.error('Geolocation error:', error.code, error.message);
+  toast.error(errorMessage);
+
+  // Stop tracking if there's a critical error
+  if (error.code === error.PERMISSION_DENIED) {
+    stopTracking();
+  }
+};
+
+// Add this helper function at the top level of your component
+const hasLocationChanged = (prevLoc, newLoc) => {
+  if (!prevLoc) return true;
+  
+  return (
+    prevLoc.latitude !== newLoc.latitude ||
+    prevLoc.longitude !== newLoc.longitude ||
+    prevLoc.currentScheduleId !== newLoc.currentScheduleId ||
+    prevLoc.markerColor !== newLoc.markerColor ||
+    prevLoc.isOnPatrol !== newLoc.isOnPatrol
+  );
+};
+
+  // Add effect to start tracking on component mount
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      startTracking();
+    }
+    
+    return () => {
+      // Cleanup tracking on unmount
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+      if (watchPositionId.current) {
+        navigator.geolocation.clearWatch(watchPositionId.current);
+      }
+      localStorage.setItem("isTracking", "false");
+      setIsTracking(false);
+      setUserLocation(null);
+    };
+  }, []);
+
+  // Replace the tracking initialization effect with this updated version
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeTracking = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const wasTracking = JSON.parse(localStorage.getItem("isTracking") || "false");
+
+        if (token && wasTracking && isMounted) {
+          const profile = await fetchUserProfile();
+          if (profile && isMounted) {
+            setUserProfile(profile);
+            setIsTracking(true);
+            toggleTracking();
+
+            // Initialize socket connection first
+            if (!socketRef.current) {
+              const socketUrl = process.env.NODE_ENV === 'production' 
+                ? 'https://barangaypatrol.lgu1.com'
+                : 'http://localhost:5000';
+
+              socketRef.current = io(socketUrl, {
+                auth: { token },
+                withCredentials: true,
+                transports: ['websocket'],
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                timeout: 20000
+              });
+
+              socketRef.current.on('connect', () => {
+                socketRef.current.emit('joinTrackingRoom');
+                // Start location tracking only after socket connects
+                startLocationTracking();
+              });
+
+              // Set up socket event handlers
+              setupSocketHandlers(profile);
+            }
+
+            // If socket exists but not connected, connect it
+            if (socketRef.current && !socketRef.current.connected) {
+              socketRef.current.connect();
+            }
+
+            // Start location tracking if socket is already connected
+            if (socketRef.current && socketRef.current.connected) {
+              startLocationTracking();
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing tracking:', error);
+        toast.error('Failed to initialize tracking');
+      }
+    };
+
+    initializeTracking();
+
+    return () => {
+      isMounted = false;
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+      if (watchPositionId.current) {
+        navigator.geolocation.clearWatch(watchPositionId.current);
+      }
+    };
+  }, []);
+
+  // Add this new function to setup socket handlers
+  const setupSocketHandlers = (profile) => {
+    if (!socketRef.current) return;
+
+    socketRef.current.on('locationUpdate', (data) => {
+      if (data.userId?._id === profile._id) {
+        const locationData = {
+          ...data,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          markerColor: data.markerColor || 'red',
+          isOnPatrol: data.isOnPatrol || false,
+          profilePicture: profile.profilePicture,
+          firstName: profile.firstName,
+          lastName: profile.lastName
+        };
+        setUserLocation(locationData);
+      }
     });
 
     socketRef.current.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
-      if (error.message === 'Authentication error') {
-        toast.error('Authentication failed. Please log in again.');
-        stopTracking();
-      } else {
-        toast.error('Connection error. Retrying...');
-      }
-    });
-
-    // Add error handler
-    socketRef.current.on('error', (error) => {
-      console.error('Socket error:', error);
       toast.error('Connection error occurred');
-      stopTracking();
     });
   };
 
-  const stopTracking = () => {
-    setIsTracking(false);
-    toggleTracking(); // Call this first to ensure map cleanup
-    localStorage.setItem("isTracking", "false");
-    
-    // Clear tracking data
-    setUserLocation(null);
-    
-    // Clear geolocation watchers
-    if (navigator.geolocation && watchId !== null) {
-      navigator.geolocation.clearWatch(watchId);
-      setWatchId(null);
-    }
-    if (intervalId !== null) {
-      clearInterval(intervalId);
-      setIntervalId(null);
-    }
+  // Update the handleLocationUpdate function
+  const handleLocationUpdate = (data) => {
+    if (!socketRef.current) return;
 
-    // Disconnect socket
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-      socketRef.current = null;
+    if (data.userId?._id === userProfile?._id) {
+      const locationData = {
+        ...data,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        markerColor: data.markerColor || 'red',
+        isOnPatrol: data.isOnPatrol || false,
+        profilePicture: userProfile.profilePicture,
+        firstName: userProfile.firstName,
+        lastName: userProfile.lastName
+      };
+      
+      setUserLocation(locationData);
+      setPrevUserLocation(locationData);
     }
   };
-
-  const handleLocationError = (error) => {
-    switch (error.code) {
-      case error.PERMISSION_DENIED:
-        toast.error("User denied the request for Geolocation.");
-        break;
-      case error.POSITION_UNAVAILABLE:
-        toast.error("Location information is unavailable. Retrying...");
-        setTimeout(() => {
-          navigator.geolocation.getCurrentPosition(updateUserLocation, handleLocationError);
-        }, 5000);
-        break;
-      case error.TIMEOUT:
-        toast.error("The request to get user location timed out. Retrying...");
-        setTimeout(() => {
-          navigator.geolocation.getCurrentPosition(updateUserLocation, handleLocationError);
-        }, 5000);
-        break;
-      case error.UNKNOWN_ERROR:
-        toast.error("An unknown error occurred.");
-        break;
-      default:
-        toast.error("An error occurred while fetching location.");
-    }
-    console.error("Error getting user's location:", error);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (watchPositionId.current) {
-        navigator.geolocation.clearWatch(watchPositionId.current);
-      }
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
-  }, []);
 
   return (
     <div className="p-2 sm:p-4 max-w-4xl mx-auto bg-white bg-opacity-75 shadow-lg rounded-lg TopNav border border-blue-600">
@@ -413,46 +657,32 @@ const Incidents = ({
       
       {isDropdownOpen && (
         <div className="dropdown-content space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
-            <button
-              onClick={() => setShowTodaySchedule(true)}
-              className="w-full bg-blue-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-blue-700 transition"
-            >
-              Today's Schedule
-            </button>
-            <div className="flex gap-2">
+          {/* Replace the grid layout with this new responsive layout */}
+          <div className="flex flex-col sm:flex-row gap-2 w-full">
+            <div className="flex flex-col sm:flex-row gap-2 flex-grow">
+              <button
+                onClick={() => setShowTodaySchedule(true)}
+                className="w-full sm:flex-1 bg-blue-600 text-white px-3 py-2 text-sm sm:text-base rounded-lg shadow hover:bg-blue-700 transition flex items-center justify-center"
+              >
+                Today's Schedule
+              </button>
               <button
                 onClick={() => setShowReportedIncidents(true)}
-                className="w-full bg-yellow-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-yellow-700 transition"
+                className="w-full sm:flex-1 bg-yellow-600 text-white px-3 py-2 text-sm sm:text-base rounded-lg shadow hover:bg-yellow-700 transition flex items-center justify-center"
               >
                 View Reports
               </button>
-              {selectedIncidentForResponse && selectedIncidentForResponse.status === 'In Progress' && (
-                <button
-                  onClick={() => setShowReportIncident(true)}
-                  className="w-full bg-green-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-green-700 transition"
-                >
-                  Respond to Incident
-                </button>
-              )}
             </div>
-            {isTracking ? (
-              <button 
-                onClick={stopTracking} 
-                className="w-full bg-red-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-red-700 transition"
+            {selectedIncidentForResponse && selectedIncidentForResponse.status === 'In Progress' && (
+              <button
+                onClick={() => setShowReportIncident(true)}
+                className="w-full sm:w-auto bg-green-600 text-white px-3 py-2 text-sm sm:text-base rounded-lg shadow hover:bg-green-700 transition flex items-center justify-center"
               >
-                Stop Tracker
-              </button>
-            ) : (
-              <button 
-                onClick={startTracking} 
-                className="w-full bg-green-600 text-white text-sm sm:text-base px-3 py-2 rounded-lg shadow hover:bg-green-700 transition"
-              >
-                Turn On Tracker
+                Respond to Incident
               </button>
             )}
           </div>
-
+          
           {hasStartedPatrol && (
             <div className="space-y-2 sm:space-y-4">
               <h2 className="text-lg sm:text-xl md:text-2xl mb-2">Log Patrol Report</h2>

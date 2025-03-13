@@ -62,78 +62,74 @@ const TanodPatrolSchedule = ({ todayPatrols, setShowTodaySchedule, fetchUpcoming
   };
 
   const endPatrol = async (patrolId) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast.error("Please log in.");
-      return;
-    }
-
-    try {
-      const now = new Date();
-      const schedule = todayPatrols.find(s => s._id === patrolId);
-      const endTime = new Date(schedule.endTime);
-
-      if (now < endTime) {
-        toast.info(
-          <div>
-            <p>Are you sure you want to end the patrol before the scheduled end time?</p>
+    // Show confirmation toast
+    toast.info(
+      ({ closeToast }) => (
+        <div>
+          <p className="mb-4">Are you sure you want to end this patrol?</p>
+          <div className="flex justify-end space-x-2">
             <button
-              className="bg-green-500 text-white p-2 rounded m-2"
-              onClick={() => confirmEndPatrol(patrolId)}
+              onClick={async () => {
+                closeToast();
+                try {
+                  const token = localStorage.getItem('token');
+                  
+                  // First end the patrol in the schedule
+                  await axios.put(
+                    `${process.env.REACT_APP_API_URL}/auth/schedule/${patrolId}/end-patrol`,
+                    {},
+                    { headers: { Authorization: `Bearer ${token}` } }
+                  );
+
+                  // Then update the location marker status
+                  await axios.post(
+                    `${process.env.REACT_APP_API_URL}/locations/patrol-status`,
+                    { endedPatrolId: patrolId },
+                    { headers: { Authorization: `Bearer ${token}` } }
+                  );
+
+                  // Upload patrol logs first
+                  await uploadPatrolLogs(patrolId);
+
+                  // Clear local patrol logs after successful upload
+                  localStorage.removeItem("patrolLogs");
+
+                  // Update UI states
+                  await fetchUpcomingPatrols();
+                  await fetchCurrentPatrolArea();
+
+                  // Show success message
+                  toast.success('Patrol ended successfully');
+                  
+                  // Close the schedule modal
+                  setShowTodaySchedule(false);
+
+                } catch (error) {
+                  console.error('Error ending patrol:', error);
+                  toast.error('Failed to end patrol');
+                }
+              }}
+              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
             >
-              Yes
+              Yes, End Patrol
             </button>
             <button
-              className="bg-red-500 text-white p-2 rounded m-2"
-              onClick={() => toast.dismiss()}
+              onClick={closeToast}
+              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
             >
-              No
+              Cancel
             </button>
-          </div>,
-          { autoClose: false }
-        );
-      } else {
-        await confirmEndPatrol(patrolId);
+          </div>
+        </div>
+      ),
+      {
+        position: "top-right",
+        autoClose: false,
+        closeOnClick: false,
+        draggable: false,
+        closeButton: false,
       }
-    } catch (error) {
-      console.error("Error ending patrol:", error);
-      toast.error("Failed to end patrol.");
-    }
-  };
-
-  const confirmEndPatrol = async (patrolId) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast.error("Please log in.");
-      return;
-    }
-
-    try {
-      // Upload patrol logs to the database
-      await uploadPatrolLogs(patrolId);
-
-      await axios.put(
-        `${process.env.REACT_APP_API_URL}/auth/schedule/${patrolId}/end-patrol`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      toast.dismiss();
-      toast.success("Patrol has ended.");
-      fetchUpcomingPatrols(); // Refresh the patrols list
-      fetchCurrentPatrolArea(); // Update the map to remove the current patrol area
-
-      // Clear local patrol logs
-      localStorage.removeItem("patrolLogs");
-
-      // Disconnect from WebSocket
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    } catch (error) {
-      console.error("Error ending patrol:", error);
-      toast.error("Failed to end patrol.");
-    }
+    );
   };
 
   const formatTime = (dateString) => {
