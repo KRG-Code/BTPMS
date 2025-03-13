@@ -33,19 +33,47 @@ const assistanceRequestSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Pending', 'Approved', 'Rejected', 'Completed'],
+    enum: ['Pending', 'Processing', 'Rejected', 'Completed'],
     default: 'Pending'
   },
-  approvedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  approvedAt: {
-    type: Date
-  },
-  notes: {
-    type: String
-  }
+  approvedDetails: [{
+    department: {
+      type: String,
+      default: 'BTPMS'
+    },
+    approverName: {
+      type: String,
+      required: true
+    },
+    approvedDateTime: {
+      type: Date,
+      default: Date.now
+    },
+    notes: {
+      type: String
+    }
+  }],
+  rejectedDetails: [{
+    department: {
+      type: String,
+      default: 'BTPMS'
+    },
+    rejectorName: {
+      type: String,
+      required: true
+    },
+    rejectedDateTime: {
+      type: Date,
+      default: Date.now
+    },
+    reason: {
+      type: String,
+      required: true
+    },
+    notes: {
+      type: String
+    }
+  }]
 });
 
 module.exports = mongoose.model('AssistanceRequest', assistanceRequestSchema);

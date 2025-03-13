@@ -59,23 +59,33 @@ exports.getAssistanceStatus = async (req, res) => {
 exports.updateAssistanceStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, adminId, notes } = req.body;
+    const { status, notes, approverName, reason } = req.body;
 
     const updateData = {
       status,
-      notes
+      $push: status === 'Rejected' ? {
+        rejectedDetails: {
+          department: 'BTPMS',
+          rejectorName: approverName,
+          rejectedDateTime: new Date(),
+          reason: reason,
+          notes: notes
+        }
+      } : {
+        approvedDetails: {
+          department: 'BTPMS',
+          approverName: approverName,
+          approvedDateTime: new Date(),
+          notes: notes
+        }
+      }
     };
-
-    if (status === 'Approved') {
-      updateData.approvedBy = adminId;
-      updateData.approvedAt = new Date();
-    }
 
     const updatedRequest = await AssistanceRequest.findByIdAndUpdate(
       id,
       updateData,
       { new: true }
-    );
+    ).populate('requesterId');
 
     if (!updatedRequest) {
       return res.status(404).json({ message: 'Assistance request not found' });
@@ -83,7 +93,7 @@ exports.updateAssistanceStatus = async (req, res) => {
 
     // Notify the requester about the status update
     await Notification.create({
-      userId: updatedRequest.requesterId,
+      userId: updatedRequest.requesterId._id,
       message: `Your assistance request has been ${status.toLowerCase()}`,
       type: 'ASSISTANCE_UPDATE'
     });
@@ -102,7 +112,6 @@ exports.getAllAssistanceRequests = async (req, res) => {
         select: '_id type location description'
       })
       .populate('requesterId', 'firstName lastName')
-      .populate('approvedBy', 'firstName lastName')
       .sort({ dateRequested: -1 });
 
     res.status(200).json(requests);
@@ -117,7 +126,6 @@ exports.getAssistanceRequestsByUser = async (req, res) => {
     const { userId } = req.params;
     const requests = await AssistanceRequest.find({ requesterId: userId })
       .populate('incidentId', 'type location description')
-      .populate('approvedBy', 'firstName lastName')
       .sort({ dateRequested: -1 });
 
     res.status(200).json(requests);

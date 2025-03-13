@@ -12,6 +12,9 @@ const RespondToIncident = ({
     return savedLog || "";
   });
   const [assistanceStatus, setAssistanceStatus] = useState(null);
+  const [showApprovalDetails, setShowApprovalDetails] = useState(false);
+  const [approvalDetails, setApprovalDetails] = useState(null);
+  const [assistanceRequest, setAssistanceRequest] = useState(null);
 
   const handleLogChange = (e) => {
     const newValue = e.target.value;
@@ -148,6 +151,96 @@ const RespondToIncident = ({
     }
   };
 
+  const handleAssistanceClick = () => {
+    if (assistanceRequest) {
+      setApprovalDetails(assistanceRequest);
+      setShowApprovalDetails(true);
+    }
+  };
+
+  const ApprovalDetailsModal = ({ details, onClose }) => {
+    if (!details) return null;
+
+    const getStatusStyle = (status) => {
+      switch (status) {
+        case 'Pending':
+          return 'text-yellow-500';
+        case 'Processing':
+          return 'text-blue-500';
+        case 'Rejected':
+          return 'text-red-500';
+        case 'Completed':
+          return 'text-green-500';
+        default:
+          return 'text-gray-500';
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div className="bg-white p-6 rounded-lg w-11/12 max-w-lg relative TopNav">
+          <h3 className="text-xl font-bold mb-4 text-black">Assistance Status Details</h3>
+          <button
+            onClick={onClose}
+            className="absolute top-2 right-2 text-gray-600 hover:text-gray-800"
+          >
+            ✕
+          </button>
+          <div className="space-y-4 text-black">
+            <div className="mb-4">
+              <p className="font-semibold text-lg mb-2">
+                Current Status: 
+                <span className={`ml-2 ${getStatusStyle(details.status)}`}>
+                  {details.status}
+                </span>
+              </p>
+            </div>
+
+            {details.status === 'Rejected' && details.rejectedDetails && details.rejectedDetails.length > 0 ? (
+              <div>
+                <h4 className="font-semibold mb-2">Rejection Details</h4>
+                {details.rejectedDetails.map((detail, index) => (
+                  <div key={index} className="bg-red-50 p-3 rounded-lg mb-3 border border-red-200">
+                    <p><strong>Department:</strong> {detail.department}</p>
+                    <p><strong>Rejected By:</strong> {detail.rejectorName}</p>
+                    <p><strong>Date/Time:</strong> {new Date(detail.rejectedDateTime).toLocaleString()}</p>
+                    <p><strong>Reason:</strong> {detail.reason}</p>
+                    <p><strong>Additional Notes:</strong> {detail.notes || 'N/A'}</p>
+                  </div>
+                ))}
+              </div>
+            ) : details.status === 'Processing' && details.approvedDetails && details.approvedDetails.length > 0 ? (
+              <div>
+                <h4 className="font-semibold mb-2">Approval History</h4>
+                {details.approvedDetails.map((detail, index) => (
+                  <div key={index} className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200">
+                    <p><strong>Department:</strong> {detail.department}</p>
+                    <p><strong>Approved By:</strong> {detail.approverName}</p>
+                    <p><strong>Date/Time:</strong> {new Date(detail.approvedDateTime).toLocaleString()}</p>
+                    {detail.notes && (
+                      <p><strong>Notes:</strong> {detail.notes}</p>
+                    )}
+                  </div>
+                ))}
+                <div className="text-center p-4 bg-yellow-50 rounded-lg mt-4">
+                  <p className="text-yellow-600">
+                    Waiting for emergency response team to process the request...
+                  </p>
+                </div>
+              </div>
+            ) : details.status === 'Pending' ? (
+              <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                <p className="text-yellow-600">
+                  Waiting for admin approval...
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -164,7 +257,7 @@ const RespondToIncident = ({
           localStorage.setItem(`incident_log_${selectedIncident._id}`, incidentResponse.data.log);
         }
 
-        // Check assistance status
+        // Check assistance status and get request details
         const assistanceResponse = await axios.get(
           `${process.env.REACT_APP_API_URL}/assistance-requests/${selectedIncident._id}/status`,
           { headers: { Authorization: `Bearer ${token}` } }
@@ -172,6 +265,7 @@ const RespondToIncident = ({
         
         if (assistanceResponse.data) {
           setAssistanceStatus(assistanceResponse.data.status);
+          setAssistanceRequest(assistanceResponse.data); // Store the full assistance request data
         }
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -195,12 +289,17 @@ const RespondToIncident = ({
           Respond to Incident
           <div className="flex gap-2">
             {assistanceStatus ? (
-              <span className={`px-3 py-1 rounded ${
-                assistanceStatus === 'Pending' ? 'bg-yellow-500' :
-                assistanceStatus === 'Approved' ? 'bg-green-500' :
-                assistanceStatus === 'Completed' ? 'bg-blue-500' :
-                'bg-gray-500'
-              } text-white`}>
+              <span 
+                className={`px-3 py-1 rounded cursor-pointer ${
+                  assistanceStatus === 'Pending' ? 'bg-yellow-500' :
+                  assistanceStatus === 'Processing' ? 'bg-blue-500' :
+                  assistanceStatus === 'Rejected' ? 'bg-red-500' :
+                  assistanceStatus === 'Completed' ? 'bg-blue-500' :
+                  'bg-gray-500'
+                } text-white`}
+                onClick={handleAssistanceClick}
+                title={assistanceStatus === 'Approved' ? 'Click to view approval details' : ''}
+              >
                 Assistance: {assistanceStatus}
               </span>
             ) : (
@@ -254,6 +353,13 @@ const RespondToIncident = ({
           </div>
         </div>
       </div>
+
+      {showApprovalDetails && (
+        <ApprovalDetailsModal
+          details={approvalDetails}
+          onClose={() => setShowApprovalDetails(false)}
+        />
+      )}
     </div>
   );
 };
