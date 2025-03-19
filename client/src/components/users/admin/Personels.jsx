@@ -4,6 +4,7 @@ import "react-toastify/dist/ReactToastify.css";
 import TanodTable from "./PersonelsComponents/TanodTable";
 import AddTanodModal from "./PersonelsComponents/AddTanodModal";
 import EditTanodModal from "./PersonelsComponents/EditTanodModal";
+import { io } from 'socket.io-client';
 
 export default function TanodPersonels() {
   const [tanods, setTanods] = useState([]);
@@ -12,7 +13,6 @@ export default function TanodPersonels() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedTanod, setSelectedTanod] = useState(null);
 
-  // Fetch tanods list
   useEffect(() => {
     const fetchTanods = async () => {
       const token = localStorage.getItem("token");
@@ -41,8 +41,14 @@ export default function TanodPersonels() {
         const users = await response.json();
 
         if (Array.isArray(users)) {
-          const tanodsList = users.filter((user) => user.userType === "tanod");
-          setTanods(tanodsList); // Update the state with fetched tanods
+          // Filter and map the tanods with isOnline property
+          const tanodsList = users
+            .filter((user) => user.userType === "tanod")
+            .map(tanod => ({
+              ...tanod,
+              isOnline: tanod.isOnline || false
+            }));
+          setTanods(tanodsList);
         } else {
           toast.error("Unexpected response format.");
         }
@@ -54,6 +60,30 @@ export default function TanodPersonels() {
       }
     };
     fetchTanods();
+
+    // Set up socket connection for real-time updates
+    const socket = io(process.env.REACT_APP_API_URL, {
+      auth: { token: localStorage.getItem('token') },
+      withCredentials: true
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to socket for tanod status updates');
+    });
+
+    socket.on('userStatusUpdate', ({ userId, isOnline }) => {
+      setTanods(prevTanods => 
+        prevTanods.map(tanod => 
+          tanod._id === userId 
+            ? { ...tanod, isOnline } 
+            : tanod
+        )
+      );
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   const handleAddTanod = async (newTanodData) => {

@@ -21,7 +21,18 @@ const userSchema = new mongoose.Schema({
   gender: { type: String, enum: ['Male', 'Female', 'Others', 'None'], default: 'None' },
   profilePicture: { type: String },
   userType: { type: String, enum: ['resident', 'tanod', 'admin'], required: true },
+  isOnline: {
+    type: Boolean,
+    default: false
+  },
+  lastActive: {
+    type: Date,
+    default: Date.now
+  }
 });
+
+// Add compound index for online status queries
+userSchema.index({ userType: 1, isOnline: 1, lastActive: 1 });
 
 // Update the pre-save middleware
 userSchema.pre('save', async function(next) {

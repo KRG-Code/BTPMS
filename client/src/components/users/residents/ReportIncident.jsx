@@ -3,7 +3,7 @@ import EmergencyReportForm from "./EmergencyReportForm"; // Import the new compo
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const ReportIncidents = () => {
+const ReportIncidents = ({ onClose, setShowEmergencyForm, setShowReportModal }) => {
   const [formData, setFormData] = useState({
     type: "",
     location: "",
@@ -14,7 +14,7 @@ const ReportIncidents = () => {
     incidentClassification: "Normal Incident", // Added incident classification
   });
 
-  const [showEmergencyForm, setShowEmergencyForm] = useState(false);
+  const [showEmergencyFormLocal, setShowEmergencyFormLocal] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -56,13 +56,19 @@ const ReportIncidents = () => {
 
   const submitReport = async () => {
     try {
+      // Use rawLocation for database submission if it exists
+      const reportData = {
+        ...formData,
+        location: formData.rawLocation || formData.location // Use coordinates for database
+      };
+
       const response = await fetch(`${process.env.REACT_APP_API_URL}/incident-reports`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(reportData),
       });
 
       if (response.ok) {
@@ -74,6 +80,7 @@ const ReportIncidents = () => {
           description: "",
           date: "",
           time: "",
+          rawLocation: "",
           incidentClassification: "Normal Incident",
         });
       } else {
@@ -87,12 +94,31 @@ const ReportIncidents = () => {
 
   const setCurrentLocation = () => {
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((position) => {
+      navigator.geolocation.getCurrentPosition(async (position) => {
         const { latitude, longitude } = position.coords;
-        setFormData((prevData) => ({
-          ...prevData,
-          location: `Lat: ${latitude}, Lon: ${longitude}`, // Update the location field
-        }));
+        const rawLocation = `Lat: ${latitude}, Lon: ${longitude}`;
+        
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
+          );
+          const data = await response.json();
+          
+          // Set the display name in the input field but keep the coordinates for submission
+          setFormData((prevData) => ({
+            ...prevData,
+            location: data.display_name, // Show friendly address to user
+            rawLocation: rawLocation // Keep coordinates for database
+          }));
+        } catch (error) {
+          console.error("Error getting location details:", error);
+          // Fallback to coordinates if reverse geocoding fails
+          setFormData((prevData) => ({
+            ...prevData,
+            location: rawLocation
+          }));
+          toast.warn("Could not get detailed location. Using coordinates instead.");
+        }
       }, (error) => {
         console.error("Error getting location:", error);
         toast.error("Could not get current location.");
@@ -115,153 +141,167 @@ const ReportIncidents = () => {
 
   const handleEmergencyClick = () => {
     setShowEmergencyForm(true);
+    setShowReportModal(false);
   };
 
   const handleEmergencyClose = () => {
-    setShowEmergencyForm(false);
+    setShowEmergencyFormLocal(false);
   };
 
   return (
-    <div className="p-8 min-h-screen">
-      <h1 className="text-4xl font-bold  mb-8 text-center">
-        Report an Incident
-      </h1>
-      <div className="max-w-lg mx-auto bg-white p-6 rounded-lg shadow-md TopNav">
-        <form onSubmit={handleSubmit}>
-        <button
-              type="button"
-              onClick={handleEmergencyClick}
-              className="mt-2 bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600 w-full"
-            >
-              Emergency Report
-            </button>
-        <div className="relative overflow-hidden h-6 mt-2">
-              <p className="absolute text-red-500 text-sm flex items-center animate-slide-infinite whitespace-nowrap">
-                <span role="img" aria-label="warning" className="mr-2">⚠️</span>
-                Use this button to report an emergency situation that requires immediate attention.
-                If the situation does not require immediate action, please use the form below.
-              </p>
-            </div>
-          <div className="mb-4">
-            <label htmlFor="type" className="block font-bold mb-2">
-              Incident Type
-            </label>
-            <select
-              name="type"
-              value={formData.type}
-              onChange={handleChange}
-              className="w-full p-3 border rounded-md text-black"
-              required
-            >
-              <option value="">Select Type</option>
-              <option value="Robbery">Robbery</option>
-              <option value="Vandalism">Vandalism</option>
-              <option value="Noise Disturbance">Noise Disturbance</option>
-              <option value="Public Intoxication">Public Intoxication</option>
-              <option value="Traffic Violation">Traffic Violation</option>
-              <option value="Trespassing">Trespassing</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
+    <>
+      <div className="rounded-lg shadow-xl max-w-xl max-h-full flex items-center justify-center modal-container form-container">
+        <div className="p-8 w-full">
+          <h1 className="text-4xl font-bold mb-8 text-center theme-transition">
+            Report an Incident
+          </h1>
+          <div className="max-w-lg mx-auto">
+            <form onSubmit={handleSubmit} className="space-y-4 ">
+              <button
+                type="button"
+                onClick={handleEmergencyClick}
+                className="mt-2 bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600 w-full"
+              >
+                Emergency Report
+              </button>
+              <div className="relative overflow-hidden h-6 mt-2">
+                <p className="absolute text-red-500 text-sm flex items-center animate-slide-infinite whitespace-nowrap">
+                  <span role="img" aria-label="warning" className="mr-2">⚠️</span>
+                  Use this button to report an emergency situation that requires immediate attention.
+                  If the situation does not require immediate action, please use the form below.
+                </p>
+              </div>
+              <div className="mb-4">
+                <label htmlFor="type" className="block font-bold mb-2 theme-transition">
+                  Incident Type
+                </label>
+                <select
+                  name="type"
+                  value={formData.type}
+                  onChange={handleChange}
+                  className="w-full p-3 border rounded-md form-input"
+                  required
+                >
+                  <option value="">Select Type</option>
+                  <option value="Robbery">Robbery</option>
+                  <option value="Vandalism">Vandalism</option>
+                  <option value="Noise Disturbance">Noise Disturbance</option>
+                  <option value="Public Intoxication">Public Intoxication</option>
+                  <option value="Traffic Violation">Traffic Violation</option>
+                  <option value="Trespassing">Trespassing</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
 
-          <div className="mb-4">
-            <label htmlFor="location" className="block font-bold mb-2">
-              Location
-            </label>
-            <input
-              type="text"
-              name="location"
-              value={formData.location}
-              onChange={handleChange}
-              className="w-full p-3 border rounded-md text-black"
-              placeholder="Enter the location"
-              required
-            />
-            <button
-              type="button"
-              onClick={setCurrentLocation}
-              className="mt-2 text-blue-500 hover:underline"
-            >
-              Use Current Location
-            </button>
-          </div>
+              <div className="mb-4">
+                <label htmlFor="location" className="block font-bold mb-2 dark:text-white theme-transition">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleChange}
+                  className="w-full p-3 border rounded-md text-black"
+                  placeholder="Enter the location"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={setCurrentLocation}
+                  className="mt-2 text-blue-500 hover:underline"
+                >
+                  Use Current Location
+                </button>
+              </div>
 
-          <div className="mb-4">
-            <label htmlFor="locationNote" className="block font-bold mb-2">
-              Location Note
-            </label>
-            <textarea
-              name="locationNote"
-              value={formData.locationNote}
-              onChange={handleChange}
-              className="w-full p-3 border rounded-md text-black"
-              rows="2"
-              placeholder="Provide additional details to help find the location"
-            ></textarea>
-          </div>
+              <div className="mb-4">
+                <label htmlFor="locationNote" className="block font-bold mb-2 dark:text-white theme-transition">
+                  Location Note
+                </label>
+                <textarea
+                  name="locationNote"
+                  value={formData.locationNote}
+                  onChange={handleChange}
+                  className="w-full p-3 border rounded-md text-black"
+                  rows="2"
+                  placeholder="Provide additional details to help find the location"
+                ></textarea>
+              </div>
 
-          <div className="mb-4">
-            <label htmlFor="description" className="block font-bold mb-2">
-              Description
-            </label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              className="w-full p-3 border rounded-md text-black"
-              rows="4"
-              placeholder="Provide a detailed description of the incident"
-              required
-            ></textarea>
-          </div>
+              <div className="mb-4">
+                <label htmlFor="description" className="block font-bold mb-2 dark:text-white theme-transition">
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  className="w-full p-3 border rounded-md text-black"
+                  rows="4"
+                  placeholder="Provide a detailed description of the incident"
+                  required
+                ></textarea>
+              </div>
 
-          <div className="mb-4">
-            <label htmlFor="date" className="block font-bold mb-2">
-              Date
-            </label>
-            <input
-              type="date"
-              name="date"
-              value={formData.date}
-              onChange={handleChange}
-              className="w-full p-3 border rounded-md text-black"
-              required
-            />
-            <button
-              type="button"
-              onClick={setCurrentDateTime}
-              className="mt-2 text-blue-500 hover:underline"
-            >
-              Set Current Date & Time
-            </button>
-          </div>
+              <div className="mb-4">
+                <label htmlFor="date" className="block font-bold mb-2 dark:text-white theme-transition">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  name="date"
+                  value={formData.date}
+                  onChange={handleChange}
+                  className="w-full p-3 border rounded-md theme-transition text-black"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={setCurrentDateTime}
+                  className="mt-2 text-blue-500 hover:underline"
+                >
+                  Set Current Date & Time
+                </button>
+              </div>
 
-          <div className="mb-4">
-            <label htmlFor="time" className="block font-bold mb-2">
-              Time
-            </label>
-            <input
-              type="time"
-              name="time"
-              value={formData.time}
-              onChange={handleChange}
-              className="w-full p-3 border rounded-md text-black"
-              required
-            />
-          </div>
+              <div className="mb-4">
+                <label htmlFor="time" className="block font-bold mb-2 dark:text-white theme-transition">
+                  Time
+                </label>
+                <input
+                  type="time"
+                  name="time"
+                  value={formData.time}
+                  onChange={handleChange}
+                  className="w-full p-3 border rounded-md text-black"
+                  required
+                />
+              </div>
 
-          <div className="flex justify-center">
-            <button
-              type="submit"
-              className="bg-blue-500 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-600"
-            >
-              Submit Report
-            </button>
+              <div className="flex justify-center gap-4">
+                <button
+                  type="submit"
+                  className="bg-blue-500 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-600"
+                >
+                  Submit Report
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       </div>
-      {showEmergencyForm && (
-        <EmergencyReportForm onClose={handleEmergencyClose} />
+      {showEmergencyFormLocal && (
+        <div className="fixed inset-0 z-50">
+          <EmergencyReportForm onClose={handleEmergencyClose} />
+        </div>
       )}
       <ToastContainer />
       <style>
@@ -280,7 +320,7 @@ const ReportIncidents = () => {
           }
         `}
       </style>
-    </div>
+    </>
   );
 };
 

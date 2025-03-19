@@ -76,6 +76,11 @@ const incidentReportSchema = new mongoose.Schema({
   respondedAt: {
     type: Date,
     default: null
+  },
+  reporter: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
   }
 });
 

@@ -1,31 +1,33 @@
 // models/TanodRating.js
 const mongoose = require('mongoose');
 
-const tanodRatingSchema = new mongoose.Schema({
+const ratingSchema = new mongoose.Schema({
   tanodId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User', // Reference to the User model
+    ref: 'User',
     required: true,
+    unique: true // Ensure one document per tanod
   },
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User', // User who rated
-    required: false, // Make this field optional
-  },
-  rating: {
-    type: Number,
-    min: 1,
-    max: 5,
-    required: true,
-  },
-  comment: {
-    type: String,
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
+  ratings: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    rating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      required: true
+    },
+    comment: {
+      type: String,
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 });
 
-module.exports = mongoose.model('TanodRating', tanodRatingSchema);
+module.exports = mongoose.model('TanodRating', ratingSchema);

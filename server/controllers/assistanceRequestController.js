@@ -1,6 +1,7 @@
 const AssistanceRequest = require('../models/AssistanceRequest');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+const { saveBackupRequest } = require('../Emergency_Response/controllers/emergencyController');
 
 exports.createAssistanceRequest = async (req, res) => {
   try {
@@ -85,10 +86,35 @@ exports.updateAssistanceStatus = async (req, res) => {
       id,
       updateData,
       { new: true }
-    ).populate('requesterId');
+    ).populate('requesterId incidentId');
 
     if (!updatedRequest) {
       return res.status(404).json({ message: 'Assistance request not found' });
+    }
+
+    // If request is approved (Processing), save to emergency database
+    if (status === 'Processing') {
+      try {
+        const fullIncident = await updatedRequest.populate('incidentId');
+        const requester = await User.findById(updatedRequest.requesterId).select('firstName lastName contactNumber');
+        
+        if (!fullIncident.incidentId || !fullIncident.incidentId.location) {
+          throw new Error('Missing incident location data');
+        }
+
+        await saveBackupRequest({
+          incidentType: updatedRequest.incidentType || fullIncident.incidentId.type,
+          location: fullIncident.incidentId.location,
+          rawLocation: updatedRequest.location,
+          description: fullIncident.incidentId.description,
+          tanodName: requester ? `${requester.firstName} ${requester.lastName}` : 'Unknown',
+          tanodContact: requester?.contactNumber || 'N/A',
+          assistanceRequestId: updatedRequest._id // Add this field
+        });
+      } catch (error) {
+        console.error('Error saving to emergency database:', error);
+        // Don't throw, but log the error and continue
+      }
     }
 
     // Notify the requester about the status update
@@ -100,6 +126,7 @@ exports.updateAssistanceStatus = async (req, res) => {
 
     res.status(200).json(updatedRequest);
   } catch (error) {
+    console.error('Controller error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

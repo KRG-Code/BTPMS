@@ -24,6 +24,7 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
     notes: '',
     incidentId: null
   });
+  const [friendlyLocation, setFriendlyLocation] = useState('');
 
   const rejectionReasons = [
     'Insufficient details provided',
@@ -134,12 +135,34 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
     }
   };
 
+  const reverseGeocode = async (location) => {
+    const latLngMatch = location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
+    if (latLngMatch) {
+      const [, latitude, longitude] = latLngMatch;
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
+        );
+        const data = await response.json();
+        return data.display_name;
+      } catch (error) {
+        console.error("Error getting location details:", error);
+        return location; // Return original coordinates if reverse geocoding fails
+      }
+    }
+    return location;
+  };
+
   const handleViewDetails = async (report) => {
     const details = await fetchIncidentDetails(report._id);
     if (details) {
+      const friendlyLocationName = await reverseGeocode(details.location);
+      setFriendlyLocation(friendlyLocationName);
       setSelectedReport(details);
       setActivePanel('details');
     } else {
+      const friendlyLocationName = await reverseGeocode(report.location);
+      setFriendlyLocation(friendlyLocationName);
       setSelectedReport(report);
       setActivePanel('details');
     }
@@ -640,7 +663,17 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
             </p>
             <p><strong>Date:</strong> {formatDate(selectedReport.date)}</p>
             <p><strong>Time:</strong> {selectedReport.time || 'N/A'}</p>
-            <p><strong>Location:</strong> {selectedReport.location || 'N/A'}</p>
+            <p>
+              <strong>Location:</strong>{' '}
+              <span className="block mt-1 ml-4 text-sm">
+                {friendlyLocation || selectedReport.location}
+                {friendlyLocation && selectedReport.location.startsWith('Lat:') && (
+                  <span className="block text-gray-500 text-xs mt-1">
+                    ({selectedReport.location})
+                  </span>
+                )}
+              </span>
+            </p>
             <p><strong>Location Note:</strong> {selectedReport.locationNote || 'N/A'}</p>
             <p><strong>Description:</strong> {selectedReport.description || 'N/A'}</p>
             <p><strong>Full Name:</strong> {selectedReport.fullName || 'Anonymous'}</p>

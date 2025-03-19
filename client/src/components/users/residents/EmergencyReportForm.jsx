@@ -7,11 +7,12 @@ const EmergencyReportForm = ({ onClose }) => {
     fullName: "",
     contactNumber: "",
     location: "",
-    type: "", // Added type state
-    description: "N/A", // Default description to "N/A"
-    date: "", // Added date state
-    time: "", // Added time state
-    incidentClassification: "Emergency Incident", // Added incident classification
+    rawLocation: "", // Add this field
+    type: "",
+    description: "N/A",
+    date: "",
+    time: "",
+    incidentClassification: "Emergency Incident",
   });
 
   const [errors, setErrors] = useState({});
@@ -71,6 +72,7 @@ const EmergencyReportForm = ({ onClose }) => {
 
     const reportData = {
       ...formData,
+      location: formData.rawLocation || formData.location, // Use coordinates if available
       date: dateString,
       time: timeString,
       description: formData.description || "N/A", // Default to "N/A" if empty
@@ -92,6 +94,7 @@ const EmergencyReportForm = ({ onClose }) => {
           fullName: "",
           contactNumber: "",
           location: "",
+          rawLocation: "", // Reset rawLocation
           type: "",
           description: "N/A",
           date: "",
@@ -110,12 +113,31 @@ const EmergencyReportForm = ({ onClose }) => {
 
   const setCurrentLocation = () => {
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((position) => {
+      navigator.geolocation.getCurrentPosition(async (position) => {
         const { latitude, longitude } = position.coords;
-        setFormData((prevData) => ({
-          ...prevData,
-          location: `Lat: ${latitude}, Lon: ${longitude}`,
-        }));
+        const rawLocation = `Lat: ${latitude}, Lon: ${longitude}`;
+        
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
+          );
+          const data = await response.json();
+          
+          // Set the display name in the input field but keep the coordinates for submission
+          setFormData((prevData) => ({
+            ...prevData,
+            location: data.display_name, // Show friendly address to user
+            rawLocation: rawLocation // Keep coordinates for database
+          }));
+        } catch (error) {
+          console.error("Error getting location details:", error);
+          // Fallback to coordinates if reverse geocoding fails
+          setFormData((prevData) => ({
+            ...prevData,
+            location: rawLocation
+          }));
+          toast.warn("Could not get detailed location. Using coordinates instead.");
+        }
       }, (error) => {
         console.error("Error getting location:", error);
         toast.error("Could not get current location.");
@@ -136,12 +158,12 @@ const EmergencyReportForm = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-md TopNav">
-        <h2 className="text-2xl font-bold mb-4">Emergency Report</h2>
+    <div className="fixed inset-0 flex items-center justify-center bg-black/50">
+      <div className="p-6 rounded-lg shadow-xl w-full max-w-md modal-container form-container">
+        <h2 className="text-2xl font-bold mb-4 text-red-500 theme-transition">Emergency Report</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor="fullName" className="block font-bold mb-2">
+            <label htmlFor="fullName" className="block font-bold mb-2 theme-transition">
               Full Name
             </label>
             <input
@@ -149,7 +171,7 @@ const EmergencyReportForm = ({ onClose }) => {
               name="fullName"
               value={formData.fullName}
               onChange={handleChange}
-              className="w-full p-3 border rounded-md text-black"
+              className="w-full p-3 rounded-md form-input text-black"
               required
             />
             {errors.fullName && (
@@ -157,11 +179,11 @@ const EmergencyReportForm = ({ onClose }) => {
             )}
           </div>
           <div className="mb-4">
-            <label htmlFor="contactNumber" className="block font-bold mb-2">
+            <label htmlFor="contactNumber" className="block font-bold mb-2 theme-transition">
               Contact Number
             </label>
-            <div className="flex">
-              <span className="bg-gray-200 p-3 rounded-l-md">+63</span>
+            <div className="flex theme-transition">
+              <span className="bg-gray-200 p-3 rounded-l-md text-black">+63</span>
               <input
                 type="text"
                 name="contactNumber"
@@ -177,7 +199,7 @@ const EmergencyReportForm = ({ onClose }) => {
             )}
           </div>
           <div className="mb-4">
-            <label htmlFor="location" className="block font-bold mb-2">
+            <label htmlFor="location" className="block font-bold mb-2 theme-transition">
               Location / Address
             </label>
             <input
@@ -201,7 +223,7 @@ const EmergencyReportForm = ({ onClose }) => {
             </button>
           </div>
           <div className="mb-4">
-            <label htmlFor="type" className="block font-bold mb-2">
+            <label htmlFor="type" className="block font-bold mb-2 theme-transition">
               Incident Type
             </label>
             <select

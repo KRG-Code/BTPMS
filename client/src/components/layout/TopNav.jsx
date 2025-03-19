@@ -6,6 +6,7 @@ import ThemeToggle from "../forms/ThemeToggle";
 import { useCombinedContext } from "../../contexts/useContext";
 import NotificationList from "../notifications/NotificationList";
 import MessageList from "../messages/MessageList";
+import { io } from "socket.io-client";
 
 export default function TopNav() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -74,6 +75,41 @@ export default function TopNav() {
     };
   }, [handleClickOutside, navigate]);
 
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const userType = localStorage.getItem("userType");
+    
+    if (token && userType !== "resident") {
+      const socketUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://barangaypatrol.lgu1.com' 
+        : 'http://localhost:5000';
+
+      const socket = io(socketUrl, {
+        auth: { token },
+        withCredentials: true,
+        transports: ['websocket']
+      });
+
+      socket.on('connect', () => {
+        socket.emit('joinNotificationRoom');
+      });
+
+      socket.on('notificationUpdate', ({ type, notification }) => {
+        if (type === 'new') {
+          setHasUnreadNotifications(true);
+          setNotifications(prev => [...prev, notification]);
+        }
+      });
+
+      // Initial fetch of notifications
+      checkUnreadNotifications();
+
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, []);
+
   const checkUnreadNotifications = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -113,17 +149,6 @@ export default function TopNav() {
       console.error("Error checking unread messages:", error);
     }
   };
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      checkUnreadMessages();
-    }, 1000); // Check every second
-
-    // Initial check
-    checkUnreadMessages();
-
-    return () => clearInterval(interval);
-  }, []);
 
   const toggleDropdown = () => setIsDropdownOpen(!isDropdownOpen);
   const toggleMessagesDropdown = () => {
@@ -167,8 +192,19 @@ export default function TopNav() {
     navigate("/");
   };
 
-  const handleLogout = () => {
-    logout(); // Use the logout function from the context
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(
+        `${process.env.REACT_APP_API_URL}/auth/logout`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+    
+    logout(); // Call existing logout function
     closeAllDropdowns();
     navigate("/");
   };

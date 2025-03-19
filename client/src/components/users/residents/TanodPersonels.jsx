@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
+import { FaArrowLeft } from "react-icons/fa";
 import "react-toastify/dist/ReactToastify.css";
-import TanodCard from "./TanodCard"; // Import the new component
-import { FaUserCircle } from "react-icons/fa"; // Import FaUserCircle
+import TanodCard from "./TanodCard";
 
 export default function TanodPersonels() {
   const [tanods, setTanods] = useState([]);
-  const [selectedTanod, setSelectedTanod] = useState("");
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState("");
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   // Fetch tanods list
   useEffect(() => {
@@ -49,184 +47,49 @@ export default function TanodPersonels() {
     fetchTanods();
   }, []);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedTanod || rating === 0 || comment.trim() === "") {
-      toast.error(
-        "Please select a tanod, provide a rating, and leave a comment"
-      );
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/auth/tanods/${selectedTanod}/rate`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            rating,
-            comment,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.ok) {
-        toast.success("Rating and comment submitted successfully");
-
-        // Reset the form
-        setSelectedTanod("");
-        setRating(0);
-        setComment("");
-      } else {
-        toast.error(data.message || "Failed to submit rating");
-      }
-    } catch (error) {
-      toast.error("An error occurred while submitting rating");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="container mx-auto p-4">
-      <ToastContainer />
-      <h1 className="text-2xl font-bold mb-4 text-center">Rate a Tanod</h1>
+    <div className="min-h-screen bg-gradient-to-r from-blue-500 to-indigo-600 p-8">
+      <div className="container mx-auto">
+        <button
+          onClick={() => navigate('/Home')}
+          className="bg-white text-blue-600 px-4 py-2 rounded-lg mb-8 flex items-center gap-2 hover:bg-blue-50 transition-colors"
+        >
+          <FaArrowLeft /> Back to Home
+        </button>
 
-      {/* Display Tanod List */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full TopNav">
-          <thead>
-            <tr>
-              <th className="py-2 px-4 border text-center">Profile Picture</th>
-              <th className="py-2 px-4 border text-center">Name</th>
-              <th className="py-2 px-4 border text-center">Action</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white text-black">
-            {tanods.map((tanod) => (
-              <tr key={tanod._id} className="hover:cursor-pointer">
-                <td className="py-2 px-4 border text-center">
-                  {tanod.profilePicture ? (
-                    <img
-                      src={tanod.profilePicture}
-                      alt={`${tanod.firstName} ${tanod.lastName}`}
-                      className="w-12 h-12 rounded-full mx-auto"
-                    />
-                  ) : (
-                    <FaUserCircle className="w-12 h-12 rounded-full mx-auto text-gray-300" />
-                  )}
-                </td>
-                <td className="py-2 px-4 border text-center">
-                  {tanod.firstName} {tanod.lastName}
-                </td>
-                <td className="py-2 px-4 border text-center">
-                  <button
-                    onClick={() => setSelectedTanod(tanod._id)}
-                    className="bg-blue-500 text-white px-2 py-1 rounded"
-                  >
-                    Rate
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Rating Form */}
-      {selectedTanod && (
-        <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow-md w-full max-w-lg border-2 border-gray-300 TopNav">
-            <div className="flex flex-col items-center mb-4">
-              {tanods.find(t => t._id === selectedTanod).profilePicture ? (
-                <img
-                  src={tanods.find(t => t._id === selectedTanod).profilePicture}
-                  alt={`${tanods.find(t => t._id === selectedTanod).firstName} ${tanods.find(t => t._id === selectedTanod).lastName}`}
-                  className="w-24 h-24 rounded-full mb-2 border-2 border-gray-300"
-                />
-              ) : (
-                <FaUserCircle className="w-24 h-24 rounded-full mb-2 text-gray-300" />
-              )}
-              <h2 className="text-xl font-bold text-center">
-                {tanods.find(t => t._id === selectedTanod).firstName} {tanods.find(t => t._id === selectedTanod).lastName}
-              </h2>
+        <div className="bg-white rounded-xl p-8 mb-12 animate__animated animate__fadeIn">
+          <h1 className="text-4xl font-bold mb-6 text-center text-blue-600">
+            Our Tanod Personnel
+          </h1>
+          <div className="max-w-3xl mx-auto text-center text-gray-600 space-y-4">
+            <p>
+              Our dedicated Tanod Personnel serve as the backbone of community safety and security. 
+              These trained individuals work tirelessly to maintain peace and order in our community.
+            </p>
+            <p>
+              Available 24/7, they respond to various situations from emergency calls to routine patrols, 
+              ensuring the safety and well-being of all residents.
+            </p>
+            <div className="grid grid-cols-2 gap-4 mt-8 text-center">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-bold text-blue-600 text-xl mb-2">24/7 Service</h3>
+                <p>Round-the-clock availability for emergency response</p>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-bold text-blue-600 text-xl mb-2">Trained Professionals</h3>
+                <p>Certified in emergency response and community safety</p>
+              </div>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label htmlFor="rating" className="block text-lg font-semibold mb-2">
-                  Rating (1 to 5):
-                </label>
-                <select
-                  id="rating"
-                  value={rating}
-                  onChange={(e) => setRating(Number(e.target.value))}
-                  className="border border-gray-300 p-2 rounded w-full text-black"
-                  required
-                >
-                  <option value={0}>Select rating</option>
-                  {[1, 2, 3, 4, 5].map((num) => (
-                    <option key={num} value={num}>
-                      {num}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mb-4">
-                <label htmlFor="comment" className="block text-lg font-semibold mb-2">
-                  Comment:
-                </label>
-                <textarea
-                  id="comment"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  className="border border-gray-300 p-2 rounded w-full text-black"
-                  required
-                  placeholder="Leave a comment..."
-                />
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                  disabled={loading}
-                >
-                  {loading ? "Submitting..." : "Submit Rating"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedTanod("");
-                    setRating(0);
-                    setComment("");
-                  }}
-                  className="bg-gray-500 text-white px-4 py-2 rounded ml-2 hover:bg-gray-600"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
           </div>
         </div>
-      )}
 
-      {/* Display Tanod Cards */}
-      <h1 className="text-center text-black text-2xl font-bold mt-6">Tanod Personel's</h1>
-      <div className="mt-6 grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {tanods.map((tanod) => (
-          <TanodCard key={tanod._id} tanod={tanod} />
-        ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate__animated animate__fadeIn">
+          {tanods.map((tanod) => (
+            <TanodCard key={tanod._id} tanod={tanod} />
+          ))}
+        </div>
       </div>
+      <ToastContainer />
     </div>
   );
 }

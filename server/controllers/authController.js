@@ -280,24 +280,29 @@ exports.loginTanod = async (req, res) => {
     }
 
     const isMatch = await user.comparePassword(password);
-
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid username or password" });
     }
 
+    // Update online status and last active time
+    user.isOnline = true;
+    user.lastActive = new Date();
+    await user.save();
+
     if (user.userType !== "tanod" && user.userType !== "admin") {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ message: "Access denied: User type not authorized" });
     }
 
-    const token = generateToken(user._id);
-    const userResponse = user.toObject();
-    delete userResponse.password;
-
-    res.json({
-      ...userResponse,
-      token
+    return res.json({
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      userType: user.userType,
+      token: generateToken(user._id),
+      profilePicture: user.profilePicture,
+      id: user._id
     });
-
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
@@ -398,6 +403,20 @@ exports.loginUser = async (req, res) => {
   }
 };
 
+// Add new logout function
+exports.logout = async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.user._id, {
+      isOnline: false,
+      lastActive: new Date()
+    });
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout Error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // Function to add equipment
 exports.addEquipment = async (req, res) => {
   const { name, borrowDate, returnDate, imageUrl } = req.body;
@@ -473,47 +492,101 @@ exports.updateEquipment = async (req, res) => {
 //Rate and edit rating tanod
 exports.rateTanod = async (req, res) => {
   const { tanodId } = req.params;
-  const { rating, comment, ratingId } = req.body; // Accept `ratingId` for editing
+  const { rating, comment } = req.body;
 
   if (!rating || !comment || rating < 1 || rating > 5) {
     return res.status(400).json({ message: "Invalid rating or comment" });
   }
 
   try {
-    // If `ratingId` is provided, update the existing rating
-    if (ratingId) {
-      const existingRating = await TanodRating.findById(ratingId);
-      if (!existingRating) {
-        return res.status(404).json({ message: "Rating not found" });
-      }
-      existingRating.rating = rating;
-      existingRating.comment = comment;
-      await existingRating.save();
-      return res.status(200).json({
-        message: "Rating updated successfully",
-        updatedRating: existingRating,
+    // Find or create rating document for this tanod
+    let tanodRating = await TanodRating.findOne({ tanodId });
+    
+    if (!tanodRating) {
+      tanodRating = new TanodRating({
+        tanodId,
+        ratings: []
       });
     }
 
-    // Create a new rating if `ratingId` is not provided
-    const newRating = new TanodRating({
-      tanodId,
-      rating,
-      comment,
-    });
+    // If user has already rated, update their rating
+    const ratingIndex = tanodRating.ratings.findIndex(
+      r => r.userId && r.userId.toString() === req.user?._id?.toString()
+    );
 
-    // Only set userId if available
-    if (req.user && req.user._id) {
-      newRating.userId = req.user._id;
+    if (ratingIndex > -1) {
+      tanodRating.ratings[ratingIndex] = {
+        ...tanodRating.ratings[ratingIndex],
+        rating,
+        comment,
+        createdAt: new Date()
+      };
+    } else {
+      // Add new rating
+      tanodRating.ratings.push({
+        userId: req.user?._id,
+        rating,
+        comment,
+        createdAt: new Date()
+      });
     }
 
-    await newRating.save();
-    return res
-      .status(201)
-      .json({ message: "Rating submitted successfully", newRating });
+    await tanodRating.save();
+    
+    return res.status(200).json({ 
+      message: ratingIndex > -1 ? "Rating updated successfully" : "Rating submitted successfully",
+      rating: tanodRating
+    });
   } catch (error) {
-    console.error("Error saving rating:", error); // Add logging here
+    console.error("Error saving rating:", error);
     res.status(500).json({ message: "Error submitting rating" });
+  }
+};
+
+exports.getTanodRatings = async (req, res) => {
+  const { tanodId } = req.params;
+
+  try {
+    const tanodRating = await TanodRating.findOne({ tanodId })
+      .populate('ratings.userId', 'firstName lastName');
+
+    if (!tanodRating) {
+      return res.status(200).json({
+        overallRating: "0.0",
+        ratingCounts: [0, 0, 0, 0, 0],
+        comments: []
+      });
+    }
+
+    const ratings = tanodRating.ratings;
+    const overallRating = ratings.length > 0
+      ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+      : 0;
+
+    const ratingCounts = [0, 0, 0, 0, 0];
+    ratings.forEach(r => {
+      ratingCounts[r.rating - 1]++;
+    });
+
+    const comments = ratings.map(r => ({
+      userId: r.userId?._id,
+      fullName: r.userId ? `${r.userId.firstName} ${r.userId.lastName}` : "Anonymous",
+      comment: r.comment,
+      rating: r.rating,
+      createdAt: r.createdAt
+    }));
+
+    res.json({
+      overallRating: overallRating.toFixed(1),
+      ratingCounts,
+      comments
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ 
+      message: "Error fetching ratings",
+      error: error.message 
+    });
   }
 };
 
@@ -551,50 +624,6 @@ exports.deleteRating = async (req, res) => {
   } catch (error) {
     console.error("Error deleting rating:", error);
     res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-// Get Tanod ratings
-exports.getTanodRatings = async (req, res) => {
-  const { tanodId } = req.params;
-
-  try {
-    const ratings = await TanodRating.find({ tanodId })
-      .populate("userId", "firstName lastName") // Populate userId with firstName and lastName
-      .select("rating comment createdAt userId"); // Select fields
-
-    if (!ratings.length) {
-      return res
-        .status(404)
-        .json({ message: "No ratings found for this Tanod." });
-    }
-    const overallRating =
-      ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
-    const ratingCounts = [0, 0, 0, 0, 0]; // For ratings 1-5
-
-    ratings.forEach((r) => {
-      ratingCounts[r.rating - 1]++;
-    });
-
-    // Map the ratings to include userId, comment, and createdAt
-    const commentsWithUser = ratings.map((r) => ({
-      userId: r.userId ? r.userId._id : null, // Include the user's ID if available
-      fullName: r.userId ? `${r.userId.firstName} ${r.userId.lastName}` : "Anonymous", // Construct full name if available
-      comment: r.comment, // Comment
-      rating: r.rating, // Rating
-      createdAt: r.createdAt, // Created date
-    }));
-
-    res.json({
-      overallRating: overallRating.toFixed(1), // Round to one decimal
-      ratingCounts,
-      comments: commentsWithUser, // Return the structured comments
-    });
-  } catch (error) {
-    console.error(error);
-    res
-      .status(500)
-      .json({ message: "Error fetching ratings", error: error.message });
   }
 };
 

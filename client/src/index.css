@@ -382,3 +382,57 @@ body.dark-mode .TopNav {
   z-index: 1000 !important;
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Theme Transitions */
+.theme-transition {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Form Elements - Light Mode */
+.light-mode .form-container {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: var(--text-light);
+}
+
+.light-mode .form-input {
+  background-color: white;
+  color: var(--text-light);
+  border: 1px solid #e2e8f0;
+}
+
+/* Form Elements - Dark Mode */
+.dark-mode .form-container {
+  background-color: rgba(17, 24, 39, 0.9);
+  color: var(--text-dark);
+}
+
+.dark-mode .form-input {
+  background-color: #1f2937;
+  color: var(--text-dark);
+  border: 1px solid #374151;
+}
+
+/* Modal Backgrounds */
+.light-mode .modal-background {
+  background-color: rgba(255, 255, 255, 0.95);
+  color: var(--text-light);
+}
+
+.dark-mode .modal-background {
+  background-color: rgba(17, 24, 39, 0.95);
+  color: var(--text-dark);
+}
+
+/* Replace TopNav styles */
+.modal-container {
+  @apply theme-transition rounded-lg shadow-xl;
+}
+

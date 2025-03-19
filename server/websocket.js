@@ -4,6 +4,7 @@ const TanodLocation = require('./models/TanodLocation');
 const mongoose = require('mongoose');
 const IncidentReport = require('./models/IncidentReport');
 const Schedule = require('./models/Schedule'); // Add this import
+const Notification = require('./models/Notification'); // Add this line
 
 let io;
 let activeLocations = new Map();
@@ -42,6 +43,7 @@ const initializeWebSocket = (server) => {
   const incidentChangeStream = IncidentReport.watch();
   const locationChangeStream = TanodLocation.watch();
   const scheduleChangeStream = Schedule.watch();
+  const notificationChangeStream = Notification.watch(); // Add this line
 
   // Handle incident changes
   incidentChangeStream.on('change', async (change) => {
@@ -113,6 +115,24 @@ const initializeWebSocket = (server) => {
       }
     } catch (error) {
       console.error('Error processing schedule change:', error);
+    }
+  });
+
+  // Add notification change stream handler
+  notificationChangeStream.on('change', async (change) => {
+    try {
+      if (change.operationType === 'insert') {
+        const notification = await Notification.findById(change.documentKey._id);
+        if (notification) {
+          // Emit to specific user's room
+          io.to(`user_${notification.userId}`).emit('notificationUpdate', {
+            type: 'new',
+            notification
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error processing notification change:', error);
     }
   });
 
@@ -217,6 +237,12 @@ const initializeWebSocket = (server) => {
     socket.on('leaveScheduleRoom', () => {
       socket.leave('schedules');
       console.log('Client left schedule room:', socket.id);
+    });
+
+    // Add this handler for notifications
+    socket.on('joinNotificationRoom', () => {
+      socket.join(`user_${socket.userId}`);
+      console.log('Client joined notification room:', socket.id);
     });
 
     // Clean up stale locations periodically

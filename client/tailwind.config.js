@@ -1,4 +1,5 @@
 module.exports = {
+  darkMode: 'class', // Add this line if not already present
   content: [
     "./src/**/*.{js,jsx,ts,tsx}",
   ],
@@ -16,4 +17,4 @@ module.exports = {
   plugins: [
     require('tailwind-scrollbar-hide'),
   ],
-} 
+}

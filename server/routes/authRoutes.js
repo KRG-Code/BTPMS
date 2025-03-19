@@ -34,6 +34,7 @@ const {
   generatePublicToken,
   getUnreadNotifications, // Import the getUnreadNotifications function
   markNotificationsAsRead, // Import the markNotificationsAsRead function
+  logout, // Add logout to the destructured imports
 } = require('../controllers/authController');
 
 const { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem } = require("../controllers/inventoryController");
@@ -64,6 +65,9 @@ router.post('/registertanod', protect, async (req, res, next) => {
 
 router.post('/login/resident', loginResident); // For residents
 router.post('/login/tanod', loginTanod);       // For Tanods
+
+// Update the logout route to use the imported function
+router.post('/logout', protect, logout);
 
 // User Profile & Ratings Routes
 router.put('/update', protect, updateUserProfile);          // Update user profile - for all users

@@ -215,7 +215,7 @@ const PatrolTracking = () => {
       if (error.message === 'xhr poll error') {
         return; // Ignore polling errors since we're using websocket only
       }
-      toast.error('Connection error. Retrying...');
+      //toast.error('Connection error. Retrying...');
     });
 
     socketRef.current.on('connect', () => {

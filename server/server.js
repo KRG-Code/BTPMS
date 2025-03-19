@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { initializeWebSocket } = require('./websocket'); // Import WebSocket initialization function
@@ -15,6 +16,8 @@ const assistanceRequestRoutes = require('./routes/assistanceRequestRoutes');
 const assistanceIntegrationRoutes = require('./routes/assistanceIntegrationRoutes');
 const locationRoutes = require('./routes/locationRoutes'); // Add this line
 const Schedule = require('./models/Schedule');
+const dashboardRoutes = require('./routes/dashboardRoutes');
+const noteRoutes = require('./routes/noteRoutes');
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
@@ -151,6 +154,12 @@ app.use('/api/assistance-requests', assistanceRequestRoutes);
 
 // Add assistance integration routes
 app.use('/api/integration', assistanceIntegrationRoutes);
+
+// Add dashboard routes
+app.use('/api/dashboard', dashboardRoutes);
+
+// Add note routes
+app.use('/api/notes', noteRoutes);
 
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {
