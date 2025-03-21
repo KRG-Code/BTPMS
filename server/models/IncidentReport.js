@@ -43,10 +43,6 @@ const incidentReportSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
-  logs: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'IncidentLog'
-  }],
   log: {
     type: String,
     default: null

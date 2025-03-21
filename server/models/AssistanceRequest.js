@@ -33,8 +33,8 @@ const assistanceRequestSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Pending', 'Processing', 'Rejected', 'Completed'],
-    default: 'Pending'
+    enum: ["Pending", "Processing", "Deployed", "Rejected", "Completed"],
+    default: "Pending",
   },
   approvedDetails: [{
     department: {
@@ -73,7 +73,31 @@ const assistanceRequestSchema = new mongoose.Schema({
     notes: {
       type: String
     }
-  }]
+  }],
+  responderDetails: [
+    {
+      department: {
+        type: String,
+        default: "ERDMS",
+      },
+      responderName: {
+        type: String,
+      },
+      responderAddress: {
+        type: String,
+      },
+      responderContact: {
+        type: String,
+      },
+      responderType: {
+        type: String,
+      },
+      responseDateTime: {
+        type: Date,
+        default: Date.now,
+      },
+    },
+  ],
 });
 
 module.exports = mongoose.model('AssistanceRequest', assistanceRequestSchema);

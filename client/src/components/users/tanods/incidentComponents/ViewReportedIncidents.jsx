@@ -370,7 +370,7 @@ const ViewReportedIncidents = ({
                             {visibleLocations[incident._id] ? 'Hide Location' : 'View Location'}
                           </button>
                           <button 
-                            className={`text-white px-2 py-1 rounded text-sm w-32 ${getResponseButtonState(incident).className}`}
+                            className={`text-white px-2 py-1 rounded text-sm w-24 ${getResponseButtonState(incident).className}`}
                             onClick={() => handleRespond(incident)}
                             disabled={getResponseButtonState(incident).disabled}
                             title={incident.status === 'In Progress' ? `Currently being handled by ${incident.responderName}` : ''}

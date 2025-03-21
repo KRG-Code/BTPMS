@@ -3,7 +3,7 @@ import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { FaExclamationTriangle, FaInfoCircle } from 'react-icons/fa';
 
-const ViewLocation = ({ location, isVisible, incidentType, markerId, onMarkerClick }) => {
+const ViewLocation = ({ location, isVisible, incidentType, markerId, onMarkerClick, incident }) => {
   const map = useMap();
   const markerRef = useRef({});
 
@@ -42,8 +42,14 @@ const ViewLocation = ({ location, isVisible, incidentType, markerId, onMarkerCli
                      }
                    </style>`,
           });
-          const newMarker = L.marker([lat, lng], { icon }).addTo(map);
-          newMarker.on('click', () => onMarkerClick(markerId)); // Add click event listener
+          const newMarker = L.marker([lat, lng], { icon })
+            .addTo(map)
+            .on('click', () => {
+              if (onMarkerClick) {
+                onMarkerClick(markerId);
+              }
+            });
+
           markerRef.current[markerId] = newMarker;
           map.setView([lat, lng], 15); // Zoom to the location
         } else {

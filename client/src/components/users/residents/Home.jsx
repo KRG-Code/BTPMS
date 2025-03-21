@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaBars, FaTimes, FaExclamationTriangle, FaShieldAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import ReportIncidents from "./ReportIncident";
-import EmergencyReportForm from "./EmergencyReportForm"; // Add this import
+import EmergencyReportForm from "./EmergencyReportForm";
 
 const Home = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -10,15 +10,57 @@ const Home = () => {
   const [showEmergencyForm, setShowEmergencyForm] = useState(false);
   const navigate = useNavigate();
 
+  // Function to fetch and set the public token
+  const fetchPublicToken = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/public-token`);
+      const data = await response.json();
+      const token = data.token;
+      const expirationTime = Date.now() + 3600 * 1000; // Token expires in 1 hour (adjust as needed)
+
+      // Save token and expiration time in local storage
+      localStorage.setItem("userType", "resident");
+      localStorage.setItem("token", token);
+      localStorage.setItem("tokenExpiration", expirationTime.toString());
+    } catch (error) {
+      console.error('Error fetching public token:', error);
+    }
+  };
+
+  // Function to check if the token is expired
+  const isTokenExpired = () => {
+    const expirationTime = localStorage.getItem("tokenExpiration");
+    if (!expirationTime) return true; // No expiration time means token is invalid
+    return Date.now() > parseInt(expirationTime, 10);
+  };
+
+  // Function to ensure a valid token is available
+  const ensureValidToken = async () => {
+    const token = localStorage.getItem("token");
+    const userType = localStorage.getItem("userType");
+
+    // If token or userType is missing, or token is expired, fetch a new token
+    if (!token || !userType || isTokenExpired()) {
+      await fetchPublicToken();
+    }
+  };
+
+  // Check and set token on component mount
+  useEffect(() => {
+    ensureValidToken();
+  }, []); // Runs only once on mount
+
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
   };
 
-  const handleReportClick = () => {
+  const handleReportClick = async () => {
+    await ensureValidToken(); // Ensure token is valid before opening the modal
     setShowReportModal(true);
   };
 
-  const handleTanodClick = () => {
+  const handleTanodClick = async () => {
+    await ensureValidToken(); // Ensure token is valid before navigating
     navigate('/Tanodevaluation');
   };
 
@@ -27,12 +69,16 @@ const Home = () => {
     setShowEmergencyForm(false);
   };
 
+  const handleEmergencyFormClose = () => {
+    setShowEmergencyForm(false);
+  };
+
   return (
-    <div className="bg-gradient-to-r from-green-400 via-blue-500 to-indigo-600 min-h-screen text-white overflow-x-hidden">
-      {/* Header - Remove buttons from here */}
-      <header className="fixed w-full bg-black bg-opacity-70 backdrop-blur-md flex justify-between items-center p-6 z-50">
+    <div className="ml-0 bg-gradient-to-r from-green-400 via-blue-500 to-indigo-600 min-h-screen text-white overflow-x-hidden">
+      {/* Header */}
+      <header className="fixed w-full max-w-full bg-black bg-opacity-70 backdrop-blur-md flex justify-between items-center p-6 z-50">
         <div className="text-2xl font-bold tracking-wider text-yellow-300">LGU</div>
-        
+
         {/* Mobile Menu Button */}
         <button className="md:hidden text-white" onClick={toggleMenu}>
           {isMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
@@ -66,7 +112,7 @@ const Home = () => {
         </nav>
       </header>
 
-      {/* Hero Section - Updated with new button placement */}
+      {/* Hero Section */}
       <section className="h-screen flex justify-center items-center text-center bg-cover bg-center bg-no-repeat relative animate__animated animate__fadeIn animate__delay-1s" 
         style={{ backgroundImage: 'url("https://source.unsplash.com/random/landscape")' }}>
         <div className="bg-black bg-opacity-50 p-8 rounded-lg shadow-lg animate__animated animate__fadeIn animate__delay-1s max-w-4xl w-full mx-4">
@@ -376,7 +422,7 @@ const Home = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto">
           <div className="min-h-screen px-4 flex items-center justify-center">
             <div className="relative my-8" onClick={(e) => e.stopPropagation()}>
-              <EmergencyReportForm onClose={() => setShowEmergencyForm(false)} />
+              <EmergencyReportForm onClose={handleEmergencyFormClose} />
             </div>
           </div>
         </div>

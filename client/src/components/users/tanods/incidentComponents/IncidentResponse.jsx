@@ -167,12 +167,112 @@ const RespondToIncident = ({
           return 'text-yellow-500';
         case 'Processing':
           return 'text-blue-500';
+        case 'Deployed':
+          return 'text-green-500';
         case 'Rejected':
           return 'text-red-500';
         case 'Completed':
           return 'text-green-500';
         default:
           return 'text-gray-500';
+      }
+    };
+
+    const renderStatusContent = () => {
+      switch (details.status) {
+        case 'Rejected':
+          return (
+            <div>
+              <h4 className="font-semibold mb-2">Rejection Details</h4>
+              {details.rejectedDetails && details.rejectedDetails.length > 0 ? (
+                details.rejectedDetails.map((detail, index) => (
+                  <div key={index} className="bg-red-50 p-3 rounded-lg mb-3 border border-red-200">
+                    <p><strong>Department:</strong> {detail.department}</p>
+                    <p><strong>Rejected By:</strong> {detail.rejectorName}</p>
+                    <p><strong>Date/Time:</strong> {new Date(detail.rejectedDateTime).toLocaleString()}</p>
+                    <p><strong>Reason:</strong> {detail.reason}</p>
+                    <p><strong>Additional Notes:</strong> {detail.notes || 'N/A'}</p>
+                  </div>
+                ))
+              ) : (
+                <p>No rejection details available</p>
+              )}
+            </div>
+          );
+
+        case 'Processing':
+          return (
+            <div>
+              <h4 className="font-semibold mb-2">Approval History</h4>
+              {details.approvedDetails && details.approvedDetails.map((detail, index) => (
+                <div key={index} className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200">
+                  <p><strong>Department:</strong> {detail.department}</p>
+                  <p><strong>Approved By:</strong> {detail.approverName}</p>
+                  <p><strong>Date/Time:</strong> {new Date(detail.approvedDateTime).toLocaleString()}</p>
+                  <p><strong>Notes:</strong> {detail.notes || 'N/A'}</p>
+                </div>
+              ))}
+              <div className="text-center p-4 bg-yellow-50 rounded-lg mt-4">
+                <p className="text-yellow-600">
+                  {details.approvedDetails?.some(detail => detail.department === "ERDMS")
+                    ? "Waiting for assigned responder to deploy..."
+                    : "Waiting for emergency response team to process the request..."}
+                </p>
+              </div>
+            </div>
+          );
+
+        case 'Deployed':
+        case 'Completed':
+          return (
+            <div>
+              <h4 className="font-semibold mb-2">Approval History</h4>
+              {details.approvedDetails && details.approvedDetails.map((detail, index) => (
+                <div key={index} className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200">
+                  <p><strong>Department:</strong> {detail.department}</p>
+                  <p><strong>Approved By:</strong> {detail.approverName}</p>
+                  <p><strong>Date/Time:</strong> {new Date(detail.approvedDateTime).toLocaleString()}</p>
+                  <p><strong>Notes:</strong> {detail.notes || 'N/A'}</p>
+                </div>
+              ))}
+              
+              {details.responderDetails && details.responderDetails.length > 0 && (
+                <>
+                  <h4 className="font-semibold mb-2 mt-4">Responder Details</h4>
+                  {details.responderDetails.map((responder, index) => (
+                    <div key={index} className="bg-green-50 p-3 rounded-lg mb-3 border border-green-200">
+                      <p><strong>Department:</strong> {responder.department}</p>
+                      <p><strong>Responder Name:</strong> {responder.responderName}</p>
+                      <p><strong>Contact:</strong> {responder.responderContact || 'N/A'}</p>
+                      <p><strong>Address:</strong> {responder.responderAddress || 'N/A'}</p>
+                      <p><strong>Type:</strong> {responder.responderType || 'N/A'}</p>
+                      <p><strong>Response Time:</strong> {new Date(responder.responseDateTime).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </>
+              )}
+              
+              {details.status === 'Completed' && (
+                <div className="text-center p-4 bg-green-50 rounded-lg mt-4">
+                  <p className="text-green-600">
+                    Response completed successfully
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+
+        case 'Pending':
+          return (
+            <div className="text-center p-4 bg-yellow-50 rounded-lg">
+              <p className="text-yellow-600">
+                Waiting for admin approval...
+              </p>
+            </div>
+          );
+
+        default:
+          return null;
       }
     };
 
@@ -195,46 +295,7 @@ const RespondToIncident = ({
                 </span>
               </p>
             </div>
-
-            {details.status === 'Rejected' && details.rejectedDetails && details.rejectedDetails.length > 0 ? (
-              <div>
-                <h4 className="font-semibold mb-2">Rejection Details</h4>
-                {details.rejectedDetails.map((detail, index) => (
-                  <div key={index} className="bg-red-50 p-3 rounded-lg mb-3 border border-red-200">
-                    <p><strong>Department:</strong> {detail.department}</p>
-                    <p><strong>Rejected By:</strong> {detail.rejectorName}</p>
-                    <p><strong>Date/Time:</strong> {new Date(detail.rejectedDateTime).toLocaleString()}</p>
-                    <p><strong>Reason:</strong> {detail.reason}</p>
-                    <p><strong>Additional Notes:</strong> {detail.notes || 'N/A'}</p>
-                  </div>
-                ))}
-              </div>
-            ) : details.status === 'Processing' && details.approvedDetails && details.approvedDetails.length > 0 ? (
-              <div>
-                <h4 className="font-semibold mb-2">Approval History</h4>
-                {details.approvedDetails.map((detail, index) => (
-                  <div key={index} className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200">
-                    <p><strong>Department:</strong> {detail.department}</p>
-                    <p><strong>Approved By:</strong> {detail.approverName}</p>
-                    <p><strong>Date/Time:</strong> {new Date(detail.approvedDateTime).toLocaleString()}</p>
-                    {detail.notes && (
-                      <p><strong>Notes:</strong> {detail.notes}</p>
-                    )}
-                  </div>
-                ))}
-                <div className="text-center p-4 bg-yellow-50 rounded-lg mt-4">
-                  <p className="text-yellow-600">
-                    Waiting for emergency response team to process the request...
-                  </p>
-                </div>
-              </div>
-            ) : details.status === 'Pending' ? (
-              <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                <p className="text-yellow-600">
-                  Waiting for admin approval...
-                </p>
-              </div>
-            ) : null}
+            {renderStatusContent()}
           </div>
         </div>
       </div>
@@ -290,13 +351,14 @@ const RespondToIncident = ({
           <div className="flex gap-2">
             {assistanceStatus ? (
               <span 
-                className={`px-3 py-1 rounded cursor-pointer ${
-                  assistanceStatus === 'Pending' ? 'bg-yellow-500' :
-                  assistanceStatus === 'Processing' ? 'bg-blue-500' :
-                  assistanceStatus === 'Rejected' ? 'bg-red-500' :
-                  assistanceStatus === 'Completed' ? 'bg-blue-500' :
-                  'bg-gray-500'
-                } text-white`}
+              className={`px-3 py-1 rounded cursor-pointer ${
+                assistanceStatus === 'Pending' ? 'bg-yellow-500' :
+                assistanceStatus === 'Processing' ? 'bg-blue-500' :
+                assistanceStatus === 'Deployed' ? 'bg-indigo-500' :
+                assistanceStatus === 'Rejected' ? 'bg-red-500' :
+                assistanceStatus === 'Completed' ? 'bg-green-500' :
+                'bg-gray-500'
+              } text-white`}              
                 onClick={handleAssistanceClick}
                 title={assistanceStatus === 'Approved' ? 'Click to view approval details' : ''}
               >

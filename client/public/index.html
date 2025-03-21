@@ -33,6 +33,15 @@
       crossorigin="anonymous"
     ></script>
     <script src="https://www.google.com/recaptcha/enterprise.js" async defer></script>
+    <script>
+      window.viewIncidentDetails = function(incidentId) {
+        if (window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('viewIncidentDetails', { 
+            detail: { incidentId } 
+          }));
+        }
+      }
+    </script>
     <title>Barangay Tanod Patrol Management System</title>
   </head>
   <body>

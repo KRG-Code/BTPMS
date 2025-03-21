@@ -6,14 +6,22 @@ import ResolvedIncidentsModal from './ResolvedIncidentsModal';
 import ViewLocation from './ViewLocation';
 import CctvReviewPanel from './CctvReviewPanel';
 
-const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedReport, mapRef, zoomToLocation }) => {
+const IncidentReports = ({ 
+  setIncidentLocations, 
+  selectedReport, 
+  setSelectedReport, 
+  mapRef, 
+  zoomToLocation,
+  activePanel,       // Add this line
+  setActivePanel    // Add this line
+}) => {
   const [incidentReports, setIncidentReports] = useState([]);
   const [visibleLocations, setVisibleLocations] = useState({});
   const [showAll, setShowAll] = useState(false);
   const [showResolvedModal, setShowResolvedModal] = useState(false);
   const [resolvedIncidents, setResolvedIncidents] = useState([]);
   const [showCctvReview, setShowCctvReview] = useState(false);
-  const [activePanel, setActivePanel] = useState(null); // 'details' or 'cctv'
+
   const [assistanceRequests, setAssistanceRequests] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [showAssistanceModal, setShowAssistanceModal] = useState(false);
@@ -171,6 +179,14 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
   const handleCctvReview = (report) => {
     setSelectedReport(report);
     setActivePanel('cctv');
+    // Clear all other incident locations, only show the selected one
+    setIncidentLocations({
+      [report._id]: {
+        location: report.location,
+        type: getIncidentType(report.incidentClassification),
+        status: report.status
+      }
+    });
   };
 
   const handleCloseDetails = () => {
@@ -272,6 +288,8 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
         return 'text-yellow-500';
       case 'Processing':
         return 'text-blue-500';
+      case 'Deployed': // Make sure this case is handled
+        return 'text-indigo-500'; // Changed to indigo to make it distinct from Processing
       case 'Rejected':
         return 'text-red-500';
       case 'Completed':
@@ -309,6 +327,8 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
   const handleCloseCctvReview = () => {
     setShowCctvReview(false);
     setActivePanel(null);
+    // Clear all incident locations
+    setIncidentLocations({});
   };
 
   const handleAssistanceAction = async (incidentId, action) => {
@@ -416,35 +436,119 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
 
   // Add this new component for the assistance modal
   const AssistanceDetailsModal = ({ details, onClose }) => {
+    const renderStatusContent = () => {
+      switch (details.status) {
+        case 'Rejected':
+          return (
+            <div>
+              <h4 className="font-semibold mb-2">Rejection Details</h4>
+              {details.rejectedDetails && details.rejectedDetails.length > 0 ? (
+                details.rejectedDetails.map((detail, index) => (
+                  <div key={index} className="bg-red-50 p-3 rounded-lg mb-3 border border-red-200 text-black">
+                    <p><strong>Department:</strong> {detail.department}</p>
+                    <p><strong>Rejected By:</strong> {detail.rejectorName}</p>
+                    <p><strong>Date/Time:</strong> {new Date(detail.rejectedDateTime).toLocaleString()}</p>
+                    <p><strong>Reason:</strong> {detail.reason}</p>
+                    <p><strong>Additional Notes:</strong> {detail.notes || 'N/A'}</p>
+                  </div>
+                ))
+              ) : (
+                <p>No rejection details available</p>
+              )}
+            </div>
+          );
+
+        case 'Processing':
+          return (
+            <div>
+              <h4 className="font-semibold mb-2">Approval History</h4>
+              {details.approvedDetails && details.approvedDetails.map((detail, index) => (
+                <div key={index} className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200 text-black">
+                  <p><strong>Department:</strong> {detail.department}</p>
+                  <p><strong>Approved By:</strong> {detail.approverName}</p>
+                  <p><strong>Date/Time:</strong> {new Date(detail.approvedDateTime).toLocaleString()}</p>
+                  <p><strong>Notes:</strong> {detail.notes || 'N/A'}</p>
+                </div>
+              ))}
+              <div className="text-center p-4 bg-yellow-50 rounded-lg mt-4">
+                <p className="text-yellow-600">
+                  {details.approvedDetails?.some(detail => detail.department === "ERDMS")
+                    ? "Waiting for assigned responder to deploy..."
+                    : "Waiting for emergency response team to process the request..."}
+                </p>
+              </div>
+            </div>
+          );
+
+        case 'Deployed':
+        case 'Completed':
+          return (
+            <div>
+              <h4 className="font-semibold mb-2">Approval History</h4>
+              {details.approvedDetails && details.approvedDetails.map((detail, index) => (
+                <div key={index} className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200 text-black">
+                  <p><strong>Department:</strong> {detail.department}</p>
+                  <p><strong>Approved By:</strong> {detail.approverName}</p>
+                  <p><strong>Date/Time:</strong> {new Date(detail.approvedDateTime).toLocaleString()}</p>
+                  <p><strong>Notes:</strong> {detail.notes || 'N/A'}</p>
+                </div>
+              ))}
+              
+              {details.responderDetails && details.responderDetails.length > 0 && (
+                <>
+                  <h4 className="font-semibold mb-2 mt-4">Responder Details</h4>
+                  {details.responderDetails.map((responder, index) => (
+                    <div key={index} className="bg-green-50 p-3 rounded-lg mb-3 border border-green-200 text-black">
+                      <p><strong>Department:</strong> {responder.department}</p>
+                      <p><strong>Responder Name:</strong> {responder.responderName}</p>
+                      <p><strong>Contact:</strong> {responder.responderContact || 'N/A'}</p>
+                      <p><strong>Address:</strong> {responder.responderAddress || 'N/A'}</p>
+                      <p><strong>Type:</strong> {responder.responderType || 'N/A'}</p>
+                      <p><strong>Response Time:</strong> {new Date(responder.responseDateTime).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </>
+              )}
+              
+              {details.status === 'Completed' && (
+                <div className="text-center p-4 bg-green-50 rounded-lg mt-4">
+                  <p className="text-green-600">Response completed successfully</p>
+                </div>
+              )}
+            </div>
+          );
+
+        case 'Pending':
+          return (
+            <div className="bg-yellow-50 p-4 rounded-lg text-black">
+              <p className="text-yellow-600">Waiting for approval</p>
+              <p className="mt-2"><strong>Requester:</strong> {details.requesterName}</p>
+              <p><strong>Requested At:</strong> {new Date(details.dateRequested).toLocaleString()}</p>
+              <p><strong>Incident Type:</strong> {details.incidentType}</p>
+              <p><strong>Classification:</strong> {details.incidentClassification}</p>
+            </div>
+          );
+
+        default:
+          return null;
+      }
+    };
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
         <div className="bg-white p-6 rounded-lg w-11/12 max-w-lg relative TopNav">
-          <h3 className="text-xl font-bold mb-4 text-black">Assistance Status Details</h3>
-          <button
-            onClick={onClose}
-            className="absolute top-2 right-2 text-gray-600 hover:text-gray-800"
-          >
-            ✕
-          </button>
-          <div className="space-y-4 text-black">
+          <h3 className="text-xl font-bold mb-4">Assistance Request Details</h3>
+          <button onClick={onClose} className="absolute top-2 right-2 text-gray-600 hover:text-gray-800">✕</button>
+          <div className="space-y-4 ">
             <div className="mb-4">
-              <p className="font-medium mb-2">
-                <strong>Requester:</strong> {details.requesterName}
-              </p>
-              <p className="font-semibold text-lg">
+              <p className="font-semibold text-lg mb-2">
                 Current Status: 
                 <span className={`ml-2 ${getStatusColor(details.status)}`}>
                   {details.status}
                 </span>
               </p>
             </div>
-            <div className="text-center p-4 bg-yellow-50 rounded-lg">
-              <p className="text-yellow-600">
-                {details.status === 'Pending' ? 
-                  'Waiting for admin approval...' : 
-                  'Waiting for emergency response team to process the request...'}
-              </p>
-            </div>
+            {renderStatusContent()}
           </div>
         </div>
       </div>
@@ -539,6 +643,7 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
         className={`text-sm font-medium cursor-pointer ${
           assistanceRequest.status === 'Pending' ? 'text-yellow-500' :
           assistanceRequest.status === 'Processing' ? 'text-blue-500' :
+          assistanceRequest.status === 'Deployed' ? 'text-indigo-500' :  // added for 'Deployed' status
           assistanceRequest.status === 'Rejected' ? 'text-red-500' :
           assistanceRequest.status === 'Completed' ? 'text-green-500' :
           'text-gray-500'
@@ -665,14 +770,12 @@ const IncidentReports = ({ setIncidentLocations, selectedReport, setSelectedRepo
             <p><strong>Time:</strong> {selectedReport.time || 'N/A'}</p>
             <p>
               <strong>Location:</strong>{' '}
-              <span className="block mt-1 ml-4 text-sm">
-                {friendlyLocation || selectedReport.location}
-                {friendlyLocation && selectedReport.location.startsWith('Lat:') && (
-                  <span className="block text-gray-500 text-xs mt-1">
-                    ({selectedReport.location})
-                  </span>
-                )}
-              </span>
+              {friendlyLocation || selectedReport.location}
+              {friendlyLocation && selectedReport.location.startsWith('Lat:') && (
+                <span className="block text-gray-500 text-xs mt-1">
+                  ({selectedReport.location})
+                </span>
+              )}
             </p>
             <p><strong>Location Note:</strong> {selectedReport.locationNote || 'N/A'}</p>
             <p><strong>Description:</strong> {selectedReport.description || 'N/A'}</p>

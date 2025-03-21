@@ -24,6 +24,7 @@ const PatrolTracking = () => {
   const [isCctvVisible, setIsCctvVisible] = useState(JSON.parse(localStorage.getItem("isCctvVisible")) || false);
   const [showCctvModal, setShowCctvModal] = useState(false); // Add state for modal visibility
   const [cctvLocations, setCctvLocations] = useState([]); // Add state for CCTV locations
+  const [activePanel, setActivePanel] = useState(null); // Add this line with the other state declarations
 
   const fetchPatrolAreas = async () => {
     const token = localStorage.getItem('token');
@@ -551,39 +552,59 @@ const PatrolTracking = () => {
 
   const createIncidentMarker = (lat, lng, data, id) => {
     const getMarkerColor = (status) => {
-      switch (status) {
-        case 'Resolved':
-          return 'rgba(34, 197, 94, 0.5)'; // green
-        case 'In Progress':
+      switch (data.assistanceStatus) {
+        case 'Rejected':
+          return 'rgba(239, 68, 68, 0.5)'; // red
+        case 'Processing':
           return 'rgba(59, 130, 246, 0.5)'; // blue
+        case 'Deployed':
+          return 'rgba(99, 102, 241, 0.5)'; // indigo
+        case 'Completed':
+          return 'rgba(34, 197, 94, 0.5)'; // green
         case 'Pending':
-          return data.type === 'Emergency' ? 'rgba(255, 0, 0, 0.5)' : 'rgba(0, 0, 255, 0.5)';
+          return data.type === 'Emergency' ? 'rgba(255, 0, 0, 0.5)' : 'rgba(234, 179, 8, 0.5)';
         default:
           return data.type === 'Emergency' ? 'rgba(255, 0, 0, 0.5)' : 'rgba(0, 0, 255, 0.5)';
+      }
+    };
+
+    const getMarkerIcon = (status) => {
+      switch (data.assistanceStatus) {
+        case 'Rejected':
+          return '<i class="fas fa-times-circle"></i>';
+        case 'Processing':
+          return '<i class="fas fa-sync fa-spin"></i>';
+        case 'Deployed':
+          return '<i class="fas fa-truck"></i>';
+        case 'Completed':
+          return '<i class="fas fa-check-circle"></i>';
+        case 'Pending':
+          return data.type === 'Emergency' ? 
+            '<i class="fas fa-exclamation-triangle"></i>' : 
+            '<i class="fas fa-clock"></i>';
+        default:
+          return data.type === 'Emergency' ? 
+            '<i class="fas fa-exclamation-triangle"></i>' : 
+            '<i class="fas fa-info-circle"></i>';
       }
     };
 
     return L.marker([lat, lng], {
       icon: L.divIcon({
         className: 'custom-icon',
-        html: `<div style="position: relative; width: 36px; height: 36px;">
-                 <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                      border-radius: 50%; 
-                      background-color: ${getMarkerColor(data.status)}; 
-                      animation: ${data.status !== 'Resolved' ? 'pulse 1.5s infinite' : 'none'};"></div>
-                 <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                      display: flex; align-items: center; justify-content: center;">
-                   ${data.status === 'Resolved' 
-                     ? '<i class="fas fa-check-circle" style="color: green; font-size: 20px;"></i>'
-                     : data.type === 'Emergency'
-                     ? '<i class="fas fa-exclamation-triangle" style="color: red; font-size: 20px;"></i>'
-                     : '<i class="fas fa-info-circle" style="color: blue; font-size: 20px;"></i>'}
-                 </div>
-               </div>`,
+        html: `
+          <div style="position: relative; width: 36px; height: 36px;">
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                 border-radius: 50%; background-color: ${getMarkerColor(data.status)}; 
+                 animation: ${data.status !== 'Completed' ? 'pulse 1.5s infinite' : 'none'};"></div>
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                 display: flex; align-items: center; justify-content: center; font-size: 20px; color: white;">
+              ${getMarkerIcon(data.status)}
+            </div>
+          </div>`,
         iconSize: [36, 36],
         iconAnchor: [18, 18]
-      }),
-      zIndexOffset: data.status === 'Resolved' ? 500 : 1000
+      })
     });
   };
 
@@ -669,6 +690,12 @@ const PatrolTracking = () => {
 
   const handleLocationUpdate = async (data) => {
     try {
+      // Check if current user is admin - don't track their location
+      const currentUserId = localStorage.getItem('userId');
+      if (data.userId?._id === currentUserId) {
+        return; // Skip updating location for admin user
+      }
+
       setTanodLocations(prev => {
         const others = prev.filter(loc => loc.userId?._id !== data.userId?._id);
         return [...others, {
@@ -705,19 +732,23 @@ const PatrolTracking = () => {
           <MapContainer center={[14.7356, 121.0498]} zoom={13} style={{ height: '100%', width: '100%' }} ref={mapRef}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <MapEvents />
-            {Object.keys(incidentLocations).map((key) => (
-              <ViewLocation
-                key={key}
-                location={incidentLocations[key].location}
-                incidentType={incidentLocations[key].type}
-                markerId={key}
-                isVisible={!!incidentLocations[key]}
-                onMarkerClick={() => {
-                  const incident = incidentReports.find(report => report._id === key);
-                  setSelectedReport(incident);
-                }} // Pass the click handler
-              />
-            ))}
+            {Object.keys(incidentLocations).map((key) => {
+              const incident = incidentReports.find(report => report._id === key);
+              return (
+                <ViewLocation
+                  key={key}
+                  location={incidentLocations[key].location}
+                  incidentType={incidentLocations[key].type} 
+                  markerId={key}
+                  isVisible={!!incidentLocations[key]}
+                  incident={incident}
+                  onMarkerClick={() => {
+                    setSelectedReport(incident);
+                    setActivePanel('details'); // Add this line to show details panel
+                  }}
+                />
+              );
+            })}
           </MapContainer>
         </div>
         <div className="w-1/3 h-full flex flex-col items-center bg-gray-100 p-4 space-y-4 rounded-lg TopNav">
@@ -748,7 +779,9 @@ const PatrolTracking = () => {
               selectedReport={selectedReport} 
               setSelectedReport={setSelectedReport}
               mapRef={mapRef} 
-              zoomToLocation={zoomToLocation} 
+              zoomToLocation={zoomToLocation}
+              activePanel={activePanel}       // Add this line
+              setActivePanel={setActivePanel} // Add this line
             />
           </div>
         </div>

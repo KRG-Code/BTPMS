@@ -6,6 +6,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
   const [nearestCctv, setNearestCctv] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [friendlyLocation, setFriendlyLocation] = useState('');
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; // Earth's radius in kilometers
@@ -31,40 +32,31 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
       let nearest = null;
       let shortestDistance = Infinity;
 
-      // Add debug logs
-      console.log('Incident location:', incident.location);
-      
-      // Modified coordinate extraction to handle different formats
+      // Extract coordinates from location string
       let incidentLat, incidentLon;
       
-      // Try different possible formats
+      // Try to match both 'Lat: X, Lon: Y' and 'X, Y' formats
       const locationMatch = incident.location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/i) ||
-                          incident.location.match(/([0-9.-]+),\s*([0-9.-]+)/);
+                           incident.location.match(/([0-9.-]+),\s*([0-9.-]+)/);
 
-      if (locationMatch) {
-        [, incidentLat, incidentLon] = locationMatch.map(Number);
-      } else {
+      if (!locationMatch) {
         console.error('Could not parse location:', incident.location);
+        setError('Invalid incident location format');
         setLoading(false);
         return;
       }
 
-      // Validate coordinates
+      [, incidentLat, incidentLon] = locationMatch.map(Number);
+
       if (isNaN(incidentLat) || isNaN(incidentLon)) {
         console.error('Invalid coordinates:', incidentLat, incidentLon);
+        setError('Invalid coordinates');
         setLoading(false);
         return;
       }
 
-      // Add debug logs
-      console.log('Parsed coordinates:', { incidentLat, incidentLon });
-      console.log('Available CCTV locations:', cctvLocations);
-
       cctvLocations.forEach(cctv => {
-        if (!cctv.latitude || !cctv.longitude) {
-          console.warn('CCTV missing coordinates:', cctv);
-          return;
-        }
+        if (!cctv.latitude || !cctv.longitude) return;
 
         const distance = calculateDistance(
           incidentLat,
@@ -73,9 +65,6 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
           cctv.longitude
         );
 
-        // Add debug log
-        console.log(`Distance to ${cctv.name}:`, distance);
-
         if (distance < shortestDistance) {
           shortestDistance = distance;
           nearest = { ...cctv, distance };
@@ -83,18 +72,46 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
       });
 
       if (nearest) {
-        console.log('Found nearest CCTV:', nearest);
         setNearestCctv(nearest);
       } else {
-        console.log('No suitable CCTV found');
+        setError('No CCTV cameras found');
       }
       
       setLoading(false);
     } catch (error) {
       console.error('Error finding nearest CCTV:', error);
+      setError('Error finding nearest CCTV');
       setLoading(false);
     }
   };
+
+  const reverseGeocode = async (location) => {
+    const latLngMatch = location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
+    if (latLngMatch) {
+      const [, latitude, longitude] = latLngMatch;
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
+        );
+        const data = await response.json();
+        return data.display_name;
+      } catch (error) {
+        console.error("Error getting location details:", error);
+        return location;
+      }
+    }
+    return location;
+  };
+
+  useEffect(() => {
+    const getFriendlyLocation = async () => {
+      if (incident?.location) {
+        const friendly = await reverseGeocode(incident.location);
+        setFriendlyLocation(friendly);
+      }
+    };
+    getFriendlyLocation();
+  }, [incident]);
 
   useEffect(() => {
     if (incident) {
@@ -170,7 +187,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
       className: 'custom-cctv-icon',
       html: `
         <div class="relative">
-          <div class="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-75"></div>
+          <div class="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-75"></div>
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
             fill="none" 
@@ -230,6 +247,13 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
 
   useEffect(() => {
     if (mapRef.current && nearestCctv) {
+      // Clear all existing layers first
+      mapRef.current.eachLayer((layer) => {
+        if (!(layer instanceof L.TileLayer)) {
+          mapRef.current.removeLayer(layer);
+        }
+      });
+
       const incidentCoords = getIncidentCoordinates();
       if (!incidentCoords) return;
 
@@ -240,7 +264,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
         icon: createIncidentMarker()
       }).addTo(reviewLayerGroup);
 
-      // Find and update nearest CCTV marker
+      // Add nearest CCTV marker
       const nearestCctvMarker = L.marker(
         [nearestCctv.latitude, nearestCctv.longitude],
         { icon: createNearestCctvMarker() }
@@ -252,7 +276,9 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
 
       // Cleanup function
       return () => {
-        mapRef.current.removeLayer(reviewLayerGroup);
+        if (mapRef.current) {
+          reviewLayerGroup.remove();
+        }
       };
     }
   }, [nearestCctv]);
@@ -306,7 +332,14 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
             <p><strong>Name:</strong> {nearestCctv.name}</p>
             <p><strong>Description:</strong> {nearestCctv.description}</p>
             <p><strong>Distance:</strong> {nearestCctv.distance.toFixed(2)} meters away</p>
-            <p><strong>Location:</strong> {nearestCctv.latitude}, {nearestCctv.longitude}</p>
+            <p><strong>Location:</strong> {' '}
+              {friendlyLocation}
+              {friendlyLocation !== incident.location && (
+                <span className="block text-gray-500 text-xs mt-1">
+                  ({incident.location})
+                </span>
+              )}
+            </p>
           </div>
 
           {timeWindow && (

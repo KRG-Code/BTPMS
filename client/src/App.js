@@ -31,7 +31,7 @@ const Home= lazy(() => import("./components/users/residents/Home"));
 const ReportIncident= lazy(() => import("./components/users/residents/ReportIncident"));
 function App() {
   return (
-    <div className="flex-1 p-6 bg-background text-text">
+    <div className="flex-1 p-0 bg-background text-text">
       <BrowserRouter>
         <CombinedProvider>
           <Suspense fallback={<div className="flex items-center justify-center min-h-screen" ><Loading type="spinner" /></div>}>
@@ -69,7 +69,7 @@ function App() {
               </Route>
 
               {/* Protected Routes for Residents */}
-              <Route element={<Layout />}>
+              <Route>
                 <Route
                   path="/Home"
                   element={<Home />}
