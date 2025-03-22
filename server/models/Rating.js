@@ -13,6 +13,14 @@ const ratingSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
+    // New fields for anonymous ratings
+    fullName: {
+      type: String,
+      default: "Anonymous"
+    },
+    identifier: {
+      type: String // To track anonymous users across sessions
+    },
     rating: {
       type: Number,
       min: 1,

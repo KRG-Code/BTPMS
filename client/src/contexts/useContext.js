@@ -1,11 +1,15 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom'; // Add useLocation
 import { toast } from 'react-toastify'; 
 
 export const CombinedContext = createContext();
 
+// Define public routes that don't need authentication
+const PUBLIC_ROUTES = ["/Home", "/Tanodevaluation", "/Reportincidents"];
+
 export const CombinedProvider = ({ children }) => {
   const navigate = useNavigate();
+  const location = useLocation(); // Add location to check current route
   
   // State for token and userType
   const [token, setToken] = useState(() => localStorage.getItem('token'));
@@ -14,10 +18,21 @@ export const CombinedProvider = ({ children }) => {
   // State for side nav only - remove dark mode state
   const [isOpen, setIsOpen] = useState(false);
   
+  // Check if current route is public
+  const isPublicRoute = PUBLIC_ROUTES.some(route => 
+    location.pathname === route || location.pathname.startsWith(route)
+  );
+  
   // Fetch user data to get userType
   const fetchData = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
+      
+      // Skip token validation for public routes
+      if (isPublicRoute) {
+        return;
+      }
+      
       if (!token) {
         setUserType(null);
         return;
@@ -41,16 +56,20 @@ export const CombinedProvider = ({ children }) => {
         navigate('/'); // Redirect to login if session expired
       }
     } catch (error) {
-      toast.error('Error fetching user data');
+      // Only show error for non-public routes
+      if (!isPublicRoute) {
+        toast.error('Error fetching user data');
+      }
       setUserType(null);
     }
-  }, [navigate]);
+  }, [navigate, isPublicRoute]);
 
   useEffect(() => {
-    if (token) {
+    // Only fetch data if we have a token AND we're not on a public route
+    if (token && !isPublicRoute) {
       fetchData();
     }
-  }, [token, fetchData]);
+  }, [token, fetchData, isPublicRoute]);
 
   const login = async (newToken) => {
     localStorage.setItem('token', newToken);
@@ -71,8 +90,6 @@ export const CombinedProvider = ({ children }) => {
     await fetchData();
   };
 
-  // Remove theme-related code and effects
-
   const toggleSideNav = () => setIsOpen((prev) => !prev);
   const closeSideNav = () => setIsOpen(false);
 
@@ -83,11 +100,11 @@ export const CombinedProvider = ({ children }) => {
         userType,
         login,
         logout,
-        // Remove isDarkMode and toggleTheme
         isOpen,
         toggleSideNav,
         closeSideNav,
         refetchUserProfile,
+        isPublicRoute, // Expose this to components
       }}
     >
       {children}

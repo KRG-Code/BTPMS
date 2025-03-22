@@ -2,25 +2,19 @@ const mongoose = require('mongoose');
 const emergencyDbConnection = require('../config/emergencyDb');
 
 const citizenEmergencySchema = new mongoose.Schema({
-  emergencyId: {
-    type: Number,
-    unique: true,
-  },
-  citizenId: {
-    type: mongoose.Schema.Types.ObjectId,
-  },
   profilePicture: {
     type: String,
     default: 'N/A'
   },
   name: {
     type: String,
-    required: true,
+    required: true
   },
   gender: {
     type: String,
     default: 'N/A'
   },
+  // Flatten address fields instead of nested object
   street: {
     type: String,
     default: 'N/A'
@@ -37,17 +31,15 @@ const citizenEmergencySchema = new mongoose.Schema({
     type: String,
     default: 'N/A'
   },
+  // Direct coordinate fields instead of array
   latitude: {
     type: Number,
-    required: true
   },
   longitude: {
     type: Number,
-    required: true
   },
   phone: {
     type: String,
-    default: 'N/A'
   },
   emergencyType: {
     type: String,
@@ -110,6 +102,9 @@ const citizenEmergencySchema = new mongoose.Schema({
   timestamp: {
     type: Date,
     default: Date.now,
+  },
+  emergencyId: {
+    type: Number
   }
 });
 

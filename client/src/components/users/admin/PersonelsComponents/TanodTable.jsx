@@ -1,15 +1,24 @@
 import React, { useState } from 'react';
-import { FaEdit, FaTrash, FaSortUp, FaSortDown, FaSort, FaEnvelope, FaUserTag, FaPhone, FaUserCircle } from 'react-icons/fa';
+import { FaEdit, FaTrash, FaSortUp, FaSortDown, FaSort, FaEnvelope, FaUserTag, FaPhone, FaUserCircle, FaChartLine } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import Loading from '../../../../utils/Loading';
 import { useTheme } from '../../../../contexts/ThemeContext'; // Import useTheme hook
+import TanodPerformance from './TanodPerformance'; // Import the new component
 
 export default function TanodTable({ tanods, loading, handleDeleteTanod, handleEditClick }) {
   const { isDarkMode } = useTheme(); // Use theme context
   const [sortField, setSortField] = useState('firstName');
   const [sortDirection, setSortDirection] = useState('asc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showPerformance, setShowPerformance] = useState(false);
+  const [selectedTanodForPerformance, setSelectedTanodForPerformance] = useState(null);
   const itemsPerPage = 8;
+
+  // Function to handle viewing tanod performance
+  const handleViewPerformance = (tanod) => {
+    setSelectedTanodForPerformance(tanod);
+    setShowPerformance(true);
+  };
 
   // Sort tanods
   const sortedTanods = [...tanods].sort((a, b) => {
@@ -136,7 +145,8 @@ export default function TanodTable({ tanods, loading, handleDeleteTanod, handleE
               key={tanod._id} 
               tanod={tanod} 
               handleEditClick={handleEditClick} 
-              handleDeleteTanod={handleDeleteTanod} 
+              handleDeleteTanod={handleDeleteTanod}
+              handleViewPerformance={handleViewPerformance}
               variants={cardVariants}
               isDarkMode={isDarkMode}
             />
@@ -216,12 +226,21 @@ export default function TanodTable({ tanods, loading, handleDeleteTanod, handleE
           </div>
         </div>
       )}
+
+      {/* Performance Modal */}
+      {showPerformance && selectedTanodForPerformance && (
+        <TanodPerformance
+          tanod={selectedTanodForPerformance}
+          onClose={() => setShowPerformance(false)}
+          isDarkMode={isDarkMode}
+        />
+      )}
     </div>
   );
 }
 
 // Tanod Card Component
-function TanodCard({ tanod, handleEditClick, handleDeleteTanod, variants, isDarkMode }) {
+function TanodCard({ tanod, handleEditClick, handleDeleteTanod, handleViewPerformance, variants, isDarkMode }) {
   return (
     <motion.div
       variants={variants}
@@ -309,6 +328,15 @@ function TanodCard({ tanod, handleEditClick, handleDeleteTanod, variants, isDark
             title="Edit"
           >
             <FaEdit className="h-5 w-5" />
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className={`p-2 ${isDarkMode ? 'text-[#989ce6] hover:bg-[#191f8a]' : 'text-purple-600 hover:bg-purple-50'} rounded-full transition-colors`}
+            onClick={() => handleViewPerformance(tanod)}
+            title="View Performance"
+          >
+            <FaChartLine className="h-5 w-5" />
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.1 }}

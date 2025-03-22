@@ -36,7 +36,7 @@ const getAddressFromCoordinates = async (latitude, longitude) => {
 // Create a new incident report
 exports.createIncidentReport = async (req, res) => {
   try {
-    const { incidentClassification, type, location, locationNote, description, date, time, fullName, contactNumber } = req.body;
+    const { incidentClassification, type, location, locationNote, address, description, date, time, fullName, contactNumber, ticketId } = req.body;
 
     console.log("Incoming request data:", req.body); // Log the incoming request data
 
@@ -45,18 +45,20 @@ exports.createIncidentReport = async (req, res) => {
       type,
       location,
       locationNote,
+      address, // Add the address field here
       description,
       date,
       time,
       fullName,
       contactNumber,
-      status: 'Pending' // This is optional since we set the default in the schema
+      status: 'Pending', // This is optional since we set the default in the schema
+      ticketId // Include ticketId in the new report
     });
 
     await newIncidentReport.save();
 
     // Get human-readable address from coordinates if available
-    let locationDisplay = location;
+    let locationDisplay = address || location; // Use the provided address when available
     if (location && location.latitude && location.longitude) {
       locationDisplay = await getAddressFromCoordinates(location.latitude, location.longitude);
     }

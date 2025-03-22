@@ -106,33 +106,21 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
     }
   };
 
-  const reverseGeocode = async (location) => {
-    const latLngMatch = location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
-    if (latLngMatch) {
-      const [, latitude, longitude] = latLngMatch;
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
-        );
-        const data = await response.json();
-        return data.display_name;
-      } catch (error) {
-        console.error("Error getting location details:", error);
-        return location;
-      }
-    }
-    return location;
-  };
-
   useEffect(() => {
     const getFriendlyLocation = async () => {
       if (incident?.location) {
-        const friendly = await reverseGeocode(incident.location);
+        // Use the address field if available, otherwise use location
+        const friendly = incident.address || incident.location;
         setFriendlyLocation(friendly);
       }
     };
     getFriendlyLocation();
   }, [incident]);
+
+  // You can keep this as a fallback or remove it
+  const reverseGeocode = async (location) => {
+    return location;
+  };
 
   useEffect(() => {
     if (incident) {
@@ -437,7 +425,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
                       <FaMapMarkedAlt className="mr-2 mt-1 flex-shrink-0" />
                       <span>
                         {friendlyLocation}
-                        {friendlyLocation !== incident.location && (
+                        {friendlyLocation !== incident.location && !incident.address && (
                           <span className={`block text-xs mt-1 ${
                             isDarkMode ? 'text-gray-400' : 'text-gray-500'
                           }`}>

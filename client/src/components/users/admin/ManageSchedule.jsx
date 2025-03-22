@@ -132,7 +132,7 @@ export default function ScheduleMaker() {
               resetForm();
               setShowForm(true);
             }}
-            className={`flex items-center px-4 py-2 rounded-lg ${
+            className={`flex items-center px-4 py-2 rounded-lg mr-5 ${
               isDarkMode 
               ? 'bg-[#4750eb] hover:bg-[#191f8a] text-white' 
               : 'bg-[#141db8] hover:bg-[#191d67] text-white'
@@ -142,21 +142,7 @@ export default function ScheduleMaker() {
             Create Schedule
           </motion.button>
           
-          <motion.button
-            variants={buttonScale}
-            whileHover="hover"
-            whileTap="tap"
-            onClick={handleRefresh}
-            className={`flex items-center px-4 py-2 rounded-lg ${
-              isDarkMode 
-              ? 'bg-[#080917] hover:bg-[#0e1022] text-[#989ce6] border border-[#1e2048]' 
-              : 'bg-white hover:bg-gray-100 text-[#141db8] border border-gray-200'
-            } transition-all duration-300 shadow-md`}
-            disabled={loadingSchedules}
-          >
-            <FaSyncAlt className={`mr-2 ${loadingSchedules ? 'animate-spin' : ''}`} />
-            Refresh
-          </motion.button>
+          
         </div>
       </motion.div>
 

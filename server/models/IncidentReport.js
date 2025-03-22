@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const incidentReportSchema = new mongoose.Schema({
   incidentClassification: {
     type: String,
-    required: true,
+    enum: ['Normal Incident', 'Emergency Incident'],
+    default: 'Normal Incident',
   },
   type: {
     type: String,
@@ -12,6 +13,11 @@ const incidentReportSchema = new mongoose.Schema({
   location: {
     type: String,
     required: true,
+  },
+  // Add human-readable address field
+  address: {
+    type: String,
+    default: null
   },
   locationNote: {
     type: String,
@@ -36,7 +42,7 @@ const incidentReportSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Pending', 'In Progress', 'Resolved'],
+    enum: ['Pending', 'In Progress', 'Resolved', 'Rejected'],
     default: 'Pending'
   },
   createdAt: {
@@ -77,6 +83,15 @@ const incidentReportSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: null
+  },
+  // Add ticket ID field
+  ticketId: {
+    type: String,
+    unique: true
+  },
+  // Updated field for additional incident details
+  otherType: {
+    type: String
   }
 });
 

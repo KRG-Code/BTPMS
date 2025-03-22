@@ -2,6 +2,7 @@ const emergencyDbConnection = require('../config/emergencyDb');
 const UserEmergency = require('../Model/model_for_emergency_popup');
 const CitizenEmergency = require('../Model/model_for_citizen_emergency_report');
 const axios = require('axios');
+const { parseAddressString } = require('../../utils/addressParser'); // Import the address parser
 
 const extractCoordinates = (location) => {
   if (!location) return null;
@@ -37,6 +38,7 @@ const extractCoordinates = (location) => {
   return null;
 };
 
+// This function is kept for backward compatibility but isn't our primary method anymore
 async function reverseGeocode(lat, lon) {
   try {
     const response = await axios.get(
@@ -61,7 +63,7 @@ async function reverseGeocode(lat, lon) {
   }
 }
 
-// Modify saveBackupRequest to include address lookup
+// Modified saveBackupRequest to include address parameter
 const saveBackupRequest = async (data) => {
   try {
     console.log('Received data for backup request:', data);
@@ -75,16 +77,29 @@ const saveBackupRequest = async (data) => {
       coordinates = { latitude: 0, longitude: 0 };
     }
 
-    // Get address data
-    const address = coordinates.latitude !== 0 ? 
-      await reverseGeocode(coordinates.latitude, coordinates.longitude) :
-      { street: 'N/A', barangay: 'N/A', city: 'N/A', province: 'N/A' };
+    // Use the provided address if available, otherwise fall back to reverse geocoding
+    let address;
+    if (data.address) {
+      // Parse the address string to get components
+      address = parseAddressString(data.address);
+    } else {
+      // Fall back to reverse geocoding only if no address is provided
+      address = coordinates.latitude !== 0 ? 
+        await reverseGeocode(coordinates.latitude, coordinates.longitude) :
+        { street: 'N/A', barangay: 'N/A', city: 'N/A', province: 'N/A' };
+    }
 
     // Create base emergency data with address
     const emergencyData = {
       name: `Backup request by Tanod ${data.tanodName}`,
       emergencyType: data.incidentType,
       status: 'new',
+      // Flat address fields for both models
+      street: address.street,
+      barangay: address.barangay,
+      city: address.city,
+      province: address.province,
+      // Direct latitude and longitude for both models  
       latitude: coordinates.latitude,
       longitude: coordinates.longitude,
       description: data.description || 'N/A',
@@ -92,12 +107,17 @@ const saveBackupRequest = async (data) => {
       locationNote: coordinates.latitude === 0 ? 'Coordinates not available' : 'N/A',
       phone: data.tanodContact,
       backup: true,
+      assistanceRequestId: data.assistanceRequestId,
+    };
+
+    console.log('Creating emergency records with data:', {
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
       street: address.street,
       barangay: address.barangay,
       city: address.city,
-      province: address.province,
-      assistanceRequestId: data.assistanceRequestId // Add this field
-    };
+      province: address.province
+    });
 
     // Create both emergency records
     const userEmergency = new UserEmergency({
@@ -110,7 +130,8 @@ const saveBackupRequest = async (data) => {
     const citizenEmergency = new CitizenEmergency({
       ...emergencyData,
       gender: 'N/A',
-      profilePicture: 'N/A'
+      profilePicture: 'N/A',
+      // No need for nested address or coordinates array anymore
     });
 
     await Promise.all([
@@ -124,6 +145,28 @@ const saveBackupRequest = async (data) => {
     throw error;
   }
 };
+
+// Helper function to parse address components
+function parseAddress(addressString) {
+  if (!addressString || addressString === '') {
+    return {
+      street: 'N/A',
+      barangay: 'N/A',
+      city: 'N/A',
+      province: 'N/A'
+    };
+  }
+  
+  // Simple parsing logic - split by commas and take parts
+  const parts = addressString.split(',').map(part => part.trim());
+  
+  return {
+    street: parts[0] || 'N/A',
+    barangay: parts[1] || 'N/A',
+    city: parts[2] || 'N/A',
+    province: parts[3] || 'N/A'
+  };
+}
 
 module.exports = {
   saveBackupRequest

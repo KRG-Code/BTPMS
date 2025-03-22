@@ -457,7 +457,18 @@ const ViewReportedIncidents = ({
             </div>
           </div>
 
-          {/* Replace location section with incident classification */}
+          {/* Add address information if available */}
+          {incident.address && (
+            <div className="mb-3 flex items-start space-x-2">
+              <FaMapMarkerAlt className={`mt-0.5 ${subTextColor} flex-shrink-0`} />
+              <div>
+                <p className={`text-xs font-medium ${subTextColor}`}>Address</p>
+                <p className={`${textColor} text-sm`}>{incident.address}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Classification section remains unchanged */}
           <div className="mb-3 flex items-start space-x-2">
             {isEmergency ? 
               <FaExclamationTriangle className={`mt-0.5 ${isDarkMode ? 'text-red-400' : 'text-red-500'} flex-shrink-0`} /> : 
@@ -848,7 +859,7 @@ const ViewReportedIncidents = ({
                 </motion.button>
               </div>
 
-              {/* Modal body */}
+              {/* Modal body - fixed display of incident details */}
               <div className="p-6">
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -901,7 +912,11 @@ const ViewReportedIncidents = ({
                     <FaMapMarkerAlt className={`mt-1 mr-2 ${subTextColor}`} />
                     <div>
                       <p className={`text-xs font-medium ${subTextColor}`}>Location</p>
-                      <p className={textColor}>{selectedIncidentState.location}</p>
+                      {selectedIncidentState.address ? (
+                        <p className={textColor}>{selectedIncidentState.address}</p>
+                      ) : (
+                        <p className={textColor}>{selectedIncidentState.location}</p>
+                      )}
                       
                       {selectedIncidentState.locationNote && (
                         <div className="mt-2">

@@ -3,6 +3,9 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const axios = require('axios');
 const { saveBackupRequest } = require('../Emergency_Response/controllers/emergencyController');
+const IncidentReport = require('../models/IncidentReport');
+const mongoose = require('mongoose');
+const { parseAddressString } = require('../utils/addressParser');
 
 // Helper function for reverse geocoding
 const getAddressFromCoordinates = async (latitude, longitude) => {
@@ -37,47 +40,71 @@ const getAddressFromCoordinates = async (latitude, longitude) => {
 // Create a new assistance request
 exports.createAssistanceRequest = async (req, res) => {
   try {
-    const { userId, location, description, emergency, imageUrls } = req.body;
+    const { 
+      incidentId, 
+      requesterId, 
+      location, 
+      incidentType, 
+      incidentClassification, 
+      requesterName 
+    } = req.body;
     
-    // Create the assistance request
-    const newRequest = new AssistanceRequest({
-      userId,
-      location,
-      description,
-      emergency,
-      status: 'Pending',
-      imageUrls
+    // Validate required fields
+    if (!incidentId || !requesterId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Incident ID and requester ID are required' 
+      });
+    }
+    
+    // Use a default name if requesterName is not provided
+    const finalRequesterName = requesterName || 'Unknown Responder';
+    
+    // Create new assistance request
+    const newAssistanceRequest = new AssistanceRequest({
+      incidentId,
+      requesterId,
+      requesterName: finalRequesterName,
+      location: location || 'Unknown location',
+      incidentType: incidentType || 'Not specified',
+      incidentClassification: incidentClassification || 'Normal Incident',
+      dateRequested: new Date(),
+      status: 'Pending'
     });
     
-    await newRequest.save();
+    await newAssistanceRequest.save();
     
-    // Get user details for notification
-    const user = await User.findById(userId).select('firstName lastName');
+    // Create notification for admins
+    try {
+      const admins = await User.find({ userType: 'admin' });
+      
+      // Create notifications for all admins
+      if (admins.length > 0) {
+        const notifications = admins.map(admin => ({
+          userId: admin._id,
+          message: `New assistance request from ${finalRequesterName} for incident: ${incidentType}`,
+          type: 'ASSISTANCE_REQUEST'
+        }));
+        
+        await Notification.insertMany(notifications);
+      }
+    } catch (notificationError) {
+      console.error('Error creating admin notifications:', notificationError);
+      // Continue even if notification creation fails
+    }
     
-    // Get human-readable address from coordinates
-    const address = await getAddressFromCoordinates(location.latitude, location.longitude);
-    
-    // Notify all tanods and admins
-    const tanodsAndAdmins = await User.find({ userType: { $in: ['tanod', 'admin'] }});
-    
-    const notifications = tanodsAndAdmins.map(recipient => ({
-      userId: recipient._id,
-      message: `New assistance request from ${user.firstName} ${user.lastName} for incident at ${address}`
-    }));
-    
-    await Notification.insertMany(notifications);
-
     res.status(201).json({
       success: true,
       message: 'Assistance request created successfully',
-      request: newRequest
+      request: newAssistanceRequest
     });
+    
   } catch (error) {
     console.error('Error creating assistance request:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Server error',
-      error: error.message
+      message: 'Server error creating assistance request',
+      error: error.message 
     });
   }
 };
@@ -91,6 +118,86 @@ exports.getAssistanceStatus = async (req, res) => {
     res.status(200).json(request);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.updateAssistanceRequestStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes, approverName, department } = req.body;
+
+    // Find the assistance request
+    const assistanceRequest = await AssistanceRequest.findById(id)
+      .populate('incidentId');
+    
+    if (!assistanceRequest) {
+      return res.status(404).json({ message: 'Assistance request not found' });
+    }
+
+    // If request is being approved, prepare data for emergency database
+    if (status === 'Processing' || status === 'Approved') {
+      // Get incident details
+      const incidentReport = assistanceRequest.incidentId;
+      
+      // Use the address field from the incident report instead of reverse geocoding
+      const address = incidentReport.address || '';
+      
+      // Parse the address string into components
+      const parsedAddress = parseAddressString(address);
+      
+      // Prepare data for emergency database
+      const emergencyData = {
+        incidentId: incidentReport._id.toString(),
+        ticketId: incidentReport.ticketId || `ER-${Date.now()}`,
+        incidentType: incidentReport.type,
+        incidentClassification: incidentReport.incidentClassification,
+        description: incidentReport.description,
+        // Location data
+        coordinates: {
+          latitude: incidentReport.location.match(/Lat:\s*([0-9.-]+)/)?.[1] || null,
+          longitude: incidentReport.location.match(/Lon:\s*([0-9.-]+)/)?.[1] || null
+        },
+        // Address components from the parsed address
+        address: {
+          street: parsedAddress.street,
+          barangay: parsedAddress.barangay,
+          city: parsedAddress.city, 
+          province: parsedAddress.province
+        },
+        // Reporter info
+        reporterName: incidentReport.fullName,
+        reporterContact: incidentReport.contactNumber,
+        // Processing info
+        approverName: approverName,
+        approvingDepartment: department || 'BTPMS',
+        approvalDateTime: new Date(),
+        // Status tracking
+        status: 'Pending',
+        updatedAt: new Date()
+      };
+
+      // Send to emergency database
+      try {
+        // Connect to emergencyDb and save data
+        const emergencyDb = mongoose.connection.useDb('emergencyDb');
+        const EmergencyRequest = emergencyDb.model('EmergencyRequest');
+        
+        await new EmergencyRequest(emergencyData).save();
+        
+        console.log('Assistance request forwarded to emergency database');
+      } catch (emergencyDbError) {
+        console.error('Error saving to emergency database:', emergencyDbError);
+        // Continue with the request even if emergency DB fails
+      }
+    }
+
+    // Update the assistance request status and save
+    // ...existing code for updating the request...
+
+    return res.status(200).json({ message: 'Assistance request updated', assistanceRequest });
+  } catch (error) {
+    console.error('Error updating assistance request status:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
@@ -146,7 +253,9 @@ exports.updateAssistanceStatus = async (req, res) => {
           description: fullIncident.incidentId.description,
           tanodName: requester ? `${requester.firstName} ${requester.lastName}` : 'Unknown',
           tanodContact: requester?.contactNumber || 'N/A',
-          assistanceRequestId: updatedRequest._id // Add this field
+          assistanceRequestId: updatedRequest._id,
+          // Include the address field from the incident
+          address: fullIncident.incidentId.address || ''
         });
       } catch (error) {
         console.error('Error saving to emergency database:', error);

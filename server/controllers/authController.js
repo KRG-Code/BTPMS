@@ -572,7 +572,8 @@ exports.getTanodRatings = async (req, res) => {
 
     const comments = ratings.map(r => ({
       userId: r.userId?._id,
-      fullName: r.userId ? `${r.userId.firstName} ${r.userId.lastName}` : "Anonymous",
+      // Fix: Use stored fullName when available, otherwise construct from userId or use "Anonymous"
+      fullName: r.fullName || (r.userId ? `${r.userId.firstName} ${r.userId.lastName}` : "Anonymous"),
       comment: r.comment,
       rating: r.rating,
       createdAt: r.createdAt

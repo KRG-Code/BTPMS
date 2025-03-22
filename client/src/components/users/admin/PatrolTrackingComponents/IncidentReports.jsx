@@ -6,7 +6,7 @@ import {
   FaExclamationTriangle, FaInfoCircle, FaMapMarkerAlt, FaCalendarAlt, 
   FaClock, FaUserAlt, FaPhone, FaSearch, FaFilter, FaEye, 
   FaVideo, FaTimes, FaCheck, FaSpinner, FaSyncAlt, FaArchive, 
-  FaChevronDown, FaChevronUp, FaMapMarked, FaUserShield 
+  FaChevronDown, FaChevronUp, FaMapMarked, FaUserShield, FaSync 
 } from 'react-icons/fa';
 import ResolvedIncidentsModal from './ResolvedIncidentsModal';
 import ViewLocation from './ViewLocation';
@@ -218,40 +218,30 @@ const IncidentReports = ({
     }
   };
 
-  const reverseGeocode = async (location) => {
-    const latLngMatch = location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
-    if (latLngMatch) {
-      const [, latitude, longitude] = latLngMatch;
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
-        );
-        const data = await response.json();
-        return data.display_name;
-      } catch (error) {
-        console.error("Error getting location details:", error);
-        return location; // Return original coordinates if reverse geocoding fails
-      }
-    }
-    return location;
-  };
-
-  // ... existing helper functions ...
-
   const handleViewDetails = async (report) => {
     const details = await fetchIncidentDetails(report._id);
     if (details) {
-      const friendlyLocationName = await reverseGeocode(details.location);
+      // Use address field if available, otherwise use location
+      const friendlyLocationName = details.address || details.location;
       setFriendlyLocation(friendlyLocationName);
       setSelectedReport(details);
       setActivePanel('details');
     } else {
-      const friendlyLocationName = await reverseGeocode(report.location);
+      // Use address field if available, otherwise use location
+      const friendlyLocationName = report.address || report.location;
       setFriendlyLocation(friendlyLocationName);
       setSelectedReport(report);
       setActivePanel('details');
     }
   };
+
+  // You can either remove this function or keep it as a fallback
+  const reverseGeocode = async (location) => {
+    // Just return the location - we're not using reverse geocoding anymore
+    return location;
+  };
+
+  // ... existing helper functions ...
 
   const handleCctvReview = (report) => {
     setSelectedReport(report);
@@ -1503,8 +1493,9 @@ const IncidentReports = ({
                       <div>
                         <div className="font-medium">Location</div>
                         <div className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                          {/* Use address field if available */}
                           {friendlyLocation}
-                          {friendlyLocation !== selectedReport.location && (
+                          {friendlyLocation !== selectedReport.location && !selectedReport.address && (
                             <span className={`block text-xs mt-1 ${
                               isDarkMode ? 'text-gray-400' : 'text-gray-500'
                             }`}>

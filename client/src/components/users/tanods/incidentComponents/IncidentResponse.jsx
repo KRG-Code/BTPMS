@@ -192,6 +192,14 @@ const RespondToIncident = ({
               onClick={async () => {
                 toast.dismiss();
                 try {
+                  // Get the user profile to ensure we have the responder's name
+                  const profileResponse = await axios.get(
+                    `${process.env.REACT_APP_API_URL}/auth/me`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                  );
+                  
+                  const responderName = `${profileResponse.data.firstName} ${profileResponse.data.lastName}`;
+                  
                   const response = await axios.post(
                     `${process.env.REACT_APP_API_URL}/assistance-requests/create`,
                     {
@@ -201,7 +209,7 @@ const RespondToIncident = ({
                       incidentType: selectedIncident.type,
                       incidentClassification: selectedIncident.incidentClassification,
                       dateRequested: new Date(),
-                      requesterName: selectedIncident.responderName,
+                      requesterName: responderName, // Use the name from the user profile
                     },
                     {
                       headers: { Authorization: `Bearer ${token}` }
@@ -215,13 +223,16 @@ const RespondToIncident = ({
                   }
                 } catch (error) {
                   console.error('Error requesting assistance:', error);
-                  toast.error(error.response?.data?.message || 'Failed to request assistance');
+                  // More descriptive error message
+                  const errorMsg = error.response?.data?.message || 'Failed to request assistance';
+                  toast.error(`Request failed: ${errorMsg}`);
                 }
               }}
               className={`${isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'} text-white py-2 px-4 rounded-lg`}
             >
               <FaHandsHelping className="mr-2 inline" /> Yes, Request Help
             </motion.button>
+            
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -745,8 +756,10 @@ const RespondToIncident = ({
           localStorage.setItem(`incident_log_${selectedIncident._id}`, incidentResponse.data.log);
         }
 
-        // Attempt to reverse geocode the location
-        if (selectedIncident.location) {
+        // Use the address from the incident data if available, otherwise try reverse geocoding
+        if (incidentResponse.data.address) {
+          setHumanReadableLocation(incidentResponse.data.address);
+        } else if (selectedIncident.location) {
           reverseGeocode(selectedIncident.location);
         }
 
@@ -898,14 +911,18 @@ const RespondToIncident = ({
                     <FaMapMarkerAlt className={`mt-1 mr-2 ${subTextColor}`} />
                     <div>
                       <p className={`text-xs font-medium ${subTextColor}`}>Location</p>
-                      <p className={textColor}>{selectedIncident.location}</p>
-                      {humanReadableLocation && (
+                      {selectedIncident.address ? (
+                        <p className={textColor}>{selectedIncident.address}</p>
+                      ) : (
+                        <p className={textColor}>{selectedIncident.location}</p>
+                      )}
+                      {humanReadableLocation && !selectedIncident.address && (
                         <div className="mt-1">
                           <p className={`text-xs font-medium ${subTextColor}`}>Address</p>
                           <p className={`text-sm ${textColor}`}>{humanReadableLocation}</p>
                         </div>
                       )}
-                      {loading && !humanReadableLocation && (
+                      {loading && !humanReadableLocation && !selectedIncident.address && (
                         <p className={`text-xs italic mt-1 ${subTextColor}`}>
                           <FaSpinner className="inline-block mr-1 animate-spin" /> Loading address...
                         </p>

@@ -253,33 +253,21 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
     }
   }, [isOpen]);
 
-  const reverseGeocode = async (location) => {
-    const latLngMatch = location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
-    if (latLngMatch) {
-      const [, latitude, longitude] = latLngMatch;
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
-        );
-        const data = await response.json();
-        return data.display_name;
-      } catch (error) {
-        console.error("Error getting location details:", error);
-        return location;
-      }
-    }
-    return location;
-  };
-
   useEffect(() => {
     const getFriendlyLocation = async () => {
-      if (selectedIncident?.location) {
-        const friendly = await reverseGeocode(selectedIncident.location);
+      if (selectedIncident) {
+        // Use the address field if available, otherwise use location
+        const friendly = selectedIncident.address || selectedIncident.location;
         setFriendlyLocation(friendly);
       }
     };
     getFriendlyLocation();
   }, [selectedIncident]);
+
+  // You can keep this as a fallback or remove it
+  const reverseGeocode = async (location) => {
+    return location;
+  };
 
   const renderAssistanceStatus = (status) => {
     const statusColors = {
@@ -338,7 +326,7 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
               <div>
                 <h4 className="font-semibold mb-2">Approval History</h4>
                 {details.approvedDetails?.map((detail, index) => (
-                  <div key={index} className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200">
+                  <div key={index} className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200 text-black">
                     <p><strong>Department:</strong> {detail.department}</p>
                     <p><strong>Approved By:</strong> {detail.approverName}</p>
                     <p><strong>Date/Time:</strong> {new Date(detail.approvedDateTime).toLocaleString()}</p>
@@ -350,7 +338,7 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
                 <div className="mt-4">
                   <h4 className="font-semibold mb-2">Responder Details</h4>
                   {details.responderDetails.map((responder, index) => (
-                    <div key={index} className="bg-green-50 p-3 rounded-lg mb-3 border border-green-200">
+                    <div key={index} className="bg-green-50 p-3 rounded-lg mb-3 border border-green-200 text-black">
                       <p><strong>Department:</strong> {responder.department}</p>
                       <p><strong>Responder Name:</strong> {responder.responderName}</p>
                       <p><strong>Contact:</strong> {responder.responderContact || 'N/A'}</p>
@@ -490,7 +478,7 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
                 value={
                   <>
                     {friendlyLocation}
-                    {friendlyLocation !== selectedIncident.location && (
+                    {friendlyLocation !== selectedIncident.location && !selectedIncident.address && (
                       <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         ({selectedIncident.location})
                       </div>

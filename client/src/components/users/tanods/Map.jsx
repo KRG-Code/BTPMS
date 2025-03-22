@@ -292,7 +292,7 @@ const TanodMap = () => {
       }
     }, [patrolAreas, currentPatrolArea]);
 
-    // Handle incident markers
+    // Handle incident markers - update to include address in tooltip
     useEffect(() => {
       if (!map) return;
 
@@ -306,20 +306,23 @@ const TanodMap = () => {
         if (latLngMatch) {
           const [_, lat, lng] = latLngMatch.map(Number);
           if (!isNaN(lat) && !isNaN(lng)) {
-            const marker = createIncidentMarker(lat, lng, data.type, id);
+            // Get the full incident report to access the address
+            const incident = incidentReports.find(report => report._id === id);
+            const marker = createIncidentMarker(lat, lng, data.type, id, incident?.address);
             marker.addTo(map);
             incidentLayersRef.current[id] = marker;
             map.setView([lat, lng], 16);
           }
         }
       });
-    }, [incidentLocations]);
+    }, [incidentLocations, incidentReports]);
 
     return null;
   };
 
-  const createIncidentMarker = (lat, lng, type, id) => {
-    return L.marker([lat, lng], {
+  // Update the marker creation function to include address
+  const createIncidentMarker = (lat, lng, type, id, address) => {
+    const marker = L.marker([lat, lng], {
       icon: L.divIcon({
         className: 'custom-icon',
         html: `
@@ -337,10 +340,51 @@ const TanodMap = () => {
         iconAnchor: [18, 18]
       }),
       zIndexOffset: 1000
-    }).on('click', () => {
+    });
+    
+    // Add tooltip with address info if available
+    if (address) {
+      marker.bindTooltip(address, { 
+        permanent: false, 
+        direction: 'top', 
+        className: 'custom-tooltip'
+      });
+    }
+    
+    // Bind popup with incident details
+    marker.bindPopup((layer) => {
+      const incident = incidentReports.find(report => report._id === id);
+      if (incident) {
+        return `
+          <div class="incident-popup">
+            <h4 class="font-bold">${incident.type}</h4>
+            <p><strong>Status:</strong> ${incident.status}</p>
+            <p><strong>Address:</strong> ${incident.address || 'Not provided'}</p>
+            <p><strong>Date:</strong> ${new Date(incident.date).toLocaleDateString()}</p>
+            <button class="view-details px-2 py-1 bg-blue-500 text-white rounded mt-2">View Details</button>
+          </div>
+        `;
+      }
+      return 'Loading...';
+    }).on('popupopen', (e) => {
+      const popup = e.popup;
+      const viewButton = popup._contentNode.querySelector('.view-details');
+      if (viewButton) {
+        viewButton.addEventListener('click', () => {
+          const incident = incidentReports.find(report => report._id === id);
+          if (incident) setSelectedIncident(incident);
+          popup.close();
+        });
+      }
+    });
+    
+    // Also handle direct marker clicks
+    marker.on('click', () => {
       const incident = incidentReports.find(report => report._id === id);
       if (incident) setSelectedIncident(incident);
     });
+    
+    return marker;
   };
 
   // Update toggle tracking function
@@ -348,7 +392,6 @@ const TanodMap = () => {
     const newTrackingState = !isTrackingVisible;
     setIsTrackingVisible(newTrackingState);
     localStorage.setItem("isTrackingVisible", JSON.stringify(newTrackingState));
-    
     if (!newTrackingState) {
       // Cleanup when stopping tracking
       if (userMarkerRef.current && mapRef.current) {
@@ -421,7 +464,7 @@ const TanodMap = () => {
         100% { transform: scale(2); opacity: 0; }
       }
       .pulse-animation {
-      animation: pulse 3s ease-out infinite;
+        animation: pulse 3s ease-out infinite;
       }
     `;
     document.head.appendChild(style);
@@ -437,7 +480,7 @@ const TanodMap = () => {
       }
       return;
     }
-  
+
     try {
       // Add debounce check
       if (userLocation.lastUpdate && 
@@ -458,7 +501,7 @@ const TanodMap = () => {
       const userMarker = createUserMarker(
         latitude, 
         longitude, 
-        profilePicture || userProfile?.profilePicture,
+        profilePicture || userProfile?.profilePicture, 
         userLocation.markerColor
       );
   
@@ -507,7 +550,7 @@ const TanodMap = () => {
           // Update marker immediately if it exists
           if (userMarkerRef.current && mapRef.current) {
             const newLatLng = [locationData.latitude, locationData.longitude];
-            userMarkerRef.current.setLatLng(newLatLng);
+            userMarkerRef.current.setLatLng(newLatLng); 
           }
         }
         // Always update prevUserLocation
@@ -555,7 +598,7 @@ const TanodMap = () => {
     if (!token) return null;
     
     const socketUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://barangaypatrol.lgu1.com'
+      ? 'https://barangaypatrol.lgu1.com' 
       : 'http://localhost:5000';
     
     const socket = io(socketUrl, {
@@ -567,11 +610,11 @@ const TanodMap = () => {
       reconnectionDelay: 1000,
       timeout: 20000
     });
-    
+
     socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
     });
-    
+
     return socket;
   };
 
@@ -614,8 +657,8 @@ const TanodMap = () => {
       >
         <Incidents 
           fetchCurrentPatrolArea={fetchCurrentPatrolArea} 
-          setUserLocation={setUserLocation}
-          setIncidentLocations={setIncidentLocations}
+          setUserLocation={setUserLocation} 
+          setIncidentLocations={setIncidentLocations} 
           incidentReports={incidentReports}
           setIncidentReports={setIncidentReports}
           isTrackingVisible={isTrackingVisible}
@@ -635,15 +678,15 @@ const TanodMap = () => {
       {/* Incident details modal - using portal container for better stacking */}
       {selectedIncident && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center p-4 overflow-y-auto incident-popup z-[1900]">
-          <div className="bg-blue-50 p-6 rounded-lg w-11/12 max-w-lg relative">
+          <div className={`${isDarkMode ? 'bg-gray-800 text-gray-100' : 'bg-blue-50 text-gray-800'} p-6 rounded-lg w-11/12 max-w-lg relative`}>
             <button 
               onClick={() => setSelectedIncident(null)} 
               className="absolute top-2 right-2 px-2 py-1 bg-red-500 text-white rounded-lg"
             >
               X
             </button>
-            <h4 className="text-lg font-semibold text-blue-700">Incident Report Details</h4>
-            <div className="mt-2 text-gray-700 space-y-2">
+            <h4 className={`text-lg font-semibold ${isDarkMode ? 'text-blue-400' : 'text-blue-700'}`}>Incident Report Details</h4>
+            <div className="mt-2 space-y-2">
               <p><strong>Incident:</strong> {selectedIncident.type}</p>
               <p>
                 <strong>Incident Type:</strong> 
@@ -653,7 +696,8 @@ const TanodMap = () => {
               </p>
               <p><strong>Date:</strong> {new Date(selectedIncident.date).toLocaleDateString()}</p>
               <p><strong>Time:</strong> {selectedIncident.time || 'N/A'}</p>
-              <p><strong>Location:</strong> {selectedIncident.location || 'N/A'}</p>
+              <p><strong>Address:</strong> {selectedIncident.address || 'Not provided'}</p>
+              <p><strong>Coordinates:</strong> {selectedIncident.location || 'N/A'}</p>
               <p><strong>Location Note:</strong> {selectedIncident.locationNote || 'N/A'}</p>
               <p><strong>Description:</strong> {selectedIncident.description || 'N/A'}</p>
               <p><strong>Full Name:</strong> {selectedIncident.fullName || 'Anonymous'}</p>

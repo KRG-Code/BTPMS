@@ -30,6 +30,7 @@ const MyAccount = lazy(() => import("./components/users/tanods/MyAcc"));
 const ResidentRating = lazy(() => import("./components/users/residents/TanodPersonels"));
 const Home= lazy(() => import("./components/users/residents/Home"));
 const ReportIncident= lazy(() => import("./components/users/residents/ReportIncident"));
+
 function App() {
   return (
     <ThemeProvider>  {/* Add ThemeProvider here */}
@@ -43,9 +44,16 @@ function App() {
                 <Route path="/" element={<SelectionPage />} />
                 <Route path="/tanod-login" element={<LoginTanod />} />
                 <Route path="/signup" element={<SignupPage />} />
+                
+                {/* Public Resident Routes - No authentication needed */}
+                <Route path="/Home" element={<Home />} />
+                <Route path="/Tanodevaluation" element={<ResidentRating />} />
+                <Route path="/Reportincidents" element={<ReportIncident />} />
+                
                 <Route element={<Layout />}>
-                <Route path="/myaccount" element={<MyAccount />}/>
+                  <Route path="/myaccount" element={<MyAccount />}/>
                 </Route>
+                
                 {/* Protected Routes for Tanod */}
                 <Route element={<Layout />}>
                   <Route
@@ -70,22 +78,6 @@ function App() {
                   /> 
                 </Route>
 
-                {/* Protected Routes for Residents */}
-                <Route>
-                  <Route
-                    path="/Home"
-                    element={<Home />}
-                  />
-                  <Route
-                    path="/Tanodevaluation"
-                    element={<ResidentRating />}
-                  />
-                  <Route
-                    path="/Reportincidents"
-                    element={<ReportIncident />}
-                  />
-                </Route>
-                
                 {/* Protected Routes for Admin */}
                 <Route element={<Layout />}>
                   <Route
@@ -109,8 +101,6 @@ function App() {
                     element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolTrack /></ProtectedRoute>}
                   />
                 </Route>
-                
-
               </Routes>
             </Suspense>
           </CombinedProvider>

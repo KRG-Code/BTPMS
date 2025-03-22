@@ -1,6 +1,8 @@
 // routes/authRoutes.js
 const express = require('express');
 const { body } = require('express-validator');
+const mongoose = require('mongoose'); // Add this import
+const TanodRating = require('../models/Rating'); // Add this import
 const {
   registerUser,
   registerTanod,
@@ -107,7 +109,7 @@ router.get('/user', getAllUserProfiles);
 router.get('/:tanodId/rating', getTanodRatings);    
 
 router.post('/tanods/:tanodId/rate', rateTanod); // Ensure this route is defined
-router.post('/auth/tanods/:tanodId/rate', protect, rateTanod); // Ensure this route is defined
+router.post('/auth/tanods/:tanodId/rate', rateTanod); // Ensure this route is defined
 
 // Equipment Routes
 router.get('/equipments', protect, getEquipments); // Get all borrowed equipments
@@ -192,6 +194,65 @@ router.get('/:userId/debug-equipment', protect, async (req, res) => {
     res.json(equipment);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Add public routes for tanod evaluation
+router.get('/auth/:tanodId/rating', getTanodRatings);  // Keep this existing route
+
+// New route for anonymous ratings
+router.post('/public/tanods/:tanodId/rate', async (req, res) => {
+  const { tanodId } = req.params;
+  const { rating, comment, fullName, identifier } = req.body;
+
+  if (!rating || !comment || rating < 1 || rating > 5) {
+    return res.status(400).json({ message: "Invalid rating or comment" });
+  }
+
+  try {
+    // Find or create rating document for this tanod
+    let tanodRating = await TanodRating.findOne({ tanodId });
+    
+    if (!tanodRating) {
+      tanodRating = new TanodRating({
+        tanodId,
+        ratings: []
+      });
+    }
+
+    // For public ratings, we use the identifier to track anonymous users
+    const ratingIndex = tanodRating.ratings.findIndex(
+      r => r.identifier === identifier
+    );
+
+    if (ratingIndex > -1) {
+      // Update existing rating from this anonymous user
+      tanodRating.ratings[ratingIndex] = {
+        ...tanodRating.ratings[ratingIndex],
+        rating,
+        comment,
+        fullName: fullName || "Anonymous",
+        createdAt: new Date()
+      };
+    } else {
+      // Add new rating
+      tanodRating.ratings.push({
+        rating,
+        comment,
+        fullName: fullName || "Anonymous",
+        identifier,
+        createdAt: new Date()
+      });
+    }
+
+    await tanodRating.save();
+    
+    return res.status(200).json({ 
+      message: ratingIndex > -1 ? "Rating updated successfully" : "Rating submitted successfully",
+    });
+  } catch (error) {
+    console.error("Error saving rating:", error);
+    res.status(500).json({ message: "Error submitting rating" });
   }
 });
 

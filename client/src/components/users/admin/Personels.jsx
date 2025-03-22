@@ -311,37 +311,37 @@ export default function TanodPersonels() {
   };
 
   return (
-    <motion.div 
-      className={`container mx-auto px-4 py-8 ${isDarkMode ? 'text-[#e7e8f4]' : 'text-[#0b0c18]'}`}
-      variants={containerVariants}
+    <motion.div
       initial="hidden"
       animate="visible"
+      variants={containerVariants}
+      className={`p-6 ${isDarkMode ? 'bg-[#080917] text-[#e7e8f4]' : 'bg-gray-50 text-gray-800'}`}
     >
       <ToastContainer />
       
-      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold mb-4 sm:mb-0 flex items-center">
-          <span className={`bg-[${isDarkMode ? '#191f8a' : '#191d67'}] text-white p-2 rounded-md mr-3`}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-          </span>
-          Tanod Personnel Management
-        </h1>
-        
-        <div>
+      {/* Header section */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-semibold">Manage Tanod Personnel</h1>
+        <div className="flex space-x-2">
           <motion.button
-            className={`${isDarkMode ? 'bg-[#989ce6] hover:bg-[#4750eb]' : 'bg-[#191d67] hover:bg-[#141db8]'} text-white font-medium py-2 px-4 rounded-md shadow-md flex items-center transition-all duration-200`}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => setShowModal(true)}
+            className={`${isDarkMode ? 'bg-[#4750eb] hover:bg-[#191f8a] text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-4 py-2 rounded-md flex items-center`}
           >
-            <FaUserPlus className="mr-2" />
-            Add Tanod
+            <FaUserPlus className="mr-2" /> Add New Tanod
+          </motion.button>
+          <motion.button
+            className={`${isDarkMode ? 'bg-[#080917] text-[#989ce6]' : 'bg-gray-100 text-gray-600'} hover:${isDarkMode ? 'bg-[#0e1022]' : 'bg-gray-200'} p-2 rounded-md`}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleRefresh}
+          >
+            <FaSyncAlt className={loading ? "animate-spin" : ""} />
           </motion.button>
         </div>
-      </motion.div>
-      
+      </div>
+
       <motion.div 
         variants={itemVariants} 
         className={`${isDarkMode ? 'bg-[#0e1022]' : 'bg-white'} rounded-lg shadow-md p-6 mb-8`}

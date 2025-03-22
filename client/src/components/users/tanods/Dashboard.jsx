@@ -60,6 +60,8 @@ const TanodDashboard = () => {
   const [currentNote, setCurrentNote] = useState("");
   const [activeTab, setActiveTab] = useState('notes'); // 'notes' or 'calendar'
   const [loading, setLoading] = useState(true);
+  // Add missing state variables
+  const [showAllRatings, setShowAllRatings] = useState(false);
 
   // Dashboard data state
   const [dashboardData, setDashboardData] = useState({
@@ -470,6 +472,199 @@ const TanodDashboard = () => {
       return `bg-gray-800 border-l-4 border-${color}-500 shadow-lg`;
     }
     return `bg-white border-l-4 border-${color}-500 shadow-lg`;
+  };
+
+  // Update the section where ratings are displayed to properly show the name
+  const RatingsList = ({ ratings }) => {
+    return (
+      <div className="space-y-3 mt-4">
+        {ratings.length > 0 ? (
+          ratings.map((rating, index) => (
+            <div 
+              key={index} 
+              className={`p-4 rounded-lg ${isDarkMode 
+                ? 'bg-gray-800 border-gray-700' 
+                : 'bg-white border-gray-200'} border shadow-sm`}
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-1 mb-1">
+                    {Array(5).fill(0).map((_, i) => (
+                      <span key={i} className={`text-sm ${
+                        i < rating.rating 
+                          ? 'text-yellow-400' 
+                          : isDarkMode ? 'text-gray-600' : 'text-gray-300'
+                      }`}>★</span>
+                    ))}
+                  </div>
+                  <p className="text-sm italic mb-2">{rating.comment}</p>
+                  <div className="text-xs flex items-center gap-1">
+                    <span className={isDarkMode ? 'text-blue-400' : 'text-blue-600'}>
+                      {/* Display the name as provided in API response */}
+                      {rating.fullName || "Anonymous"}
+                    </span>
+                    <span className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>•</span>
+                    <span className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
+                      {new Date(rating.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className={`text-center py-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            No ratings yet
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  // Add the missing renderStars helper function
+  const renderStars = (rating) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 !== 0;
+    const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+    
+    // Add full stars
+    for (let i = 0; i < fullStars; i++) {
+      stars.push(
+        <FaStar 
+          key={`full-${i}`} 
+          className={isDarkMode ? "text-yellow-400" : "text-yellow-500"} 
+        />
+      );
+    }
+    
+    // Add half star if needed
+    if (hasHalfStar) {
+      stars.push(
+        <FaStar 
+          key="half" 
+          className={`text-gradient-half ${
+            isDarkMode ? "text-yellow-400" : "text-yellow-500"
+          }`} 
+        />
+      );
+    }
+    
+    // Add empty stars
+    for (let i = 0; i < emptyStars; i++) {
+      stars.push(
+        <FaStar 
+          key={`empty-${i}`} 
+          className={isDarkMode ? "text-gray-600" : "text-gray-300"} 
+        />
+      );
+    }
+    
+    return stars;
+  };
+
+  // Update the Ratings Card component to fix undefined variables
+  const RatingsCard = () => {
+    // Get the ratings data from the dashboard state
+    const ratings = dashboardData.ratings.comments || [];
+    const averageRating = dashboardData.ratings.average || 0;
+
+    return (
+      <div className={`rounded-xl shadow-lg overflow-hidden ${
+        isDarkMode ? 'bg-gray-800' : 'bg-white'
+      }`}>
+        <div className={`px-6 py-4 ${
+          isDarkMode 
+            ? 'bg-gradient-to-r from-blue-900 to-blue-700' 
+            : 'bg-gradient-to-r from-blue-600 to-blue-400'
+        } text-white`}>
+          <h3 className="text-lg font-semibold">Recent Ratings & Feedback</h3>
+        </div>
+        <div className="p-6">
+          {loading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div 
+                  key={i} 
+                  className={`animate-pulse p-4 rounded-lg ${
+                    isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                  }`}
+                >
+                  <div className="h-4 w-32 bg-gray-400 rounded mb-3"></div>
+                  <div className="h-3 w-full bg-gray-400 rounded mb-2"></div>
+                  <div className="h-3 w-2/3 bg-gray-400 rounded"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <div className="text-3xl font-bold mr-2 text-yellow-500">{averageRating}</div>
+                  <div className="flex items-center">
+                    {renderStars(averageRating)}
+                  </div>
+                </div>
+                <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {ratings.length} {ratings.length === 1 ? 'rating' : 'ratings'}
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <h4 className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  Rating Distribution
+                </h4>
+                {/* ...existing rating distribution code... */}
+              </div>
+              
+              <h4 className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                Recent Comments
+              </h4>
+              
+              {/* Use the updated RatingsList component */}
+              <RatingsList ratings={ratings.slice(0, 3)} />
+              
+              {ratings.length > 3 && (
+                <button
+                  className={`text-sm mt-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'} hover:underline focus:outline-none`}
+                  onClick={() => setShowAllRatings(true)}
+                >
+                  View all {ratings.length} ratings
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        
+        {/* Modal for showing all ratings */}
+        {showAllRatings && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className={`rounded-lg shadow-xl max-w-lg w-full mx-4 ${
+              isDarkMode ? 'bg-gray-900' : 'bg-white'
+            }`}>
+              <div className={`px-6 py-4 border-b ${
+                isDarkMode 
+                  ? 'border-gray-700 bg-gray-800' 
+                  : 'border-gray-200'
+              } flex justify-between items-center`}>
+                <h3 className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                  All Ratings & Feedback
+                </h3>
+                <button
+                  className={`text-lg ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-black'}`}
+                  onClick={() => setShowAllRatings(false)}
+                >
+                  ×
+                </button>
+              </div>
+              <div className={`p-6 max-h-[70vh] overflow-y-auto ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+                <RatingsList ratings={ratings} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -904,6 +1099,10 @@ const TanodDashboard = () => {
                         {comment.createdAt ? formatDate(comment.createdAt) : 'Unknown date'}
                       </span>
                     </div>
+                    {/* Add commenter name here */}
+                    <p className={`text-sm ${isDarkMode ? 'text-blue-400' : 'text-blue-600'} mb-1`}>
+                      From: {comment.fullName || "Anonymous"}
+                    </p>
                     <p>{comment.comment}</p>
                   </motion.li>
                 ))}
