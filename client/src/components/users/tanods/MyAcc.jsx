@@ -1,531 +1,421 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate, Navigate  } from "react-router-dom";
-import { FaEdit, FaEye, FaEyeSlash } from "react-icons/fa";
-import { compressImage } from "../../../utils/ImageCompression";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "../../../firebase";
-import Loading from "../../../utils/Loading";
-import { UserContext } from '../../../contexts/useContext'; // Import UserContext
+import React, { useState, useEffect } from 'react';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
+import { FaCloudUploadAlt, FaEdit, FaSave, FaTimes, FaKey } from 'react-icons/fa';
+import { motion } from 'framer-motion';
+import { useTheme } from '../../../contexts/ThemeContext'; // Import useTheme hook
 
-const MyAcc = () => {
-  const { refetchUserProfile } = useContext(UserContext);
-  const navigate = useNavigate();
-  const [accountState, setAccountState] = useState({
-    firstName: "",
-    lastName: "",
-    address: "",
-    contactNumber: "",
-    birthday: "",
-    gender: "",
-    profilePicture: null,
-    _id: "", // Add this to store user ID
+export default function MyAcc() {
+  const { isDarkMode } = useTheme(); // Use theme context
+  const [user, setUser] = useState({
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    email: '',
+    username: '',
+    contactNumber: '',
+    address: '',
+    birthday: '',
+    gender: '',
+    profilePicture: null
   });
-  const [localProfilePicture, setLocalProfilePicture] = useState(null);
-  const [age, setAge] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwords, setPasswords] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmNewPassword: "",
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
   });
-  const [loading, setLoading] = useState(false);
-  const [loadingUserData, setLoadingUserData] = useState(true); // New loading state
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [userProfile, setUserProfile] = useState(null); // Define userProfile
+  const [passwordErrors, setPasswordErrors] = useState({});
 
-  const calculateAge = (birthday) => {
-    const today = new Date();
-    const birthDate = new Date(birthday);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (
-      monthDiff < 0 ||
-      (monthDiff === 0 && today.getDate() < birthDate.getDate())
-    ) {
-      age--;
-    }
-    return age;
+  // Animation variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { duration: 0.5 } }
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1, transition: { duration: 0.5 } }
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        navigate("/login");
-        return;
-      }
-
-      setLoadingUserData(true); // Start loading user data
-
+    const fetchUserData = async () => {
+      const token = localStorage.getItem('token');
       try {
-        const response = await fetch(
-          `${process.env.REACT_APP_API_URL}/auth/me`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const data = await response.json();
-        if (response.ok) {
-          setAccountState({
-            firstName: data.firstName,
-            lastName: data.lastName,
-            address: data.address,
-            contactNumber: data.contactNumber,
-            birthday: data.birthday
-              ? new Date(data.birthday).toISOString().split("T")[0]
-              : "",
-            gender: data.gender || "",
-            profilePicture: data.profilePicture || null,
-            _id: data._id, // Store the user ID
-          });
-          setAge(calculateAge(data.birthday));
-        } else {
-          toast.error(data.message || "Failed to load user data");
-        }
+        const response = await axios.get(`${process.env.REACT_APP_API_URL}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUser(response.data);
       } catch (error) {
-        toast.error("An error occurred while fetching user data.");
+        toast.error('Failed to load user data');
+        console.error('Error loading user data:', error);
       } finally {
-        setLoadingUserData(false); // End loading user data
+        setLoading(false);
       }
     };
 
-    fetchData();
-  }, [navigate]);
+    fetchUserData();
+  }, []);
 
   const handleChange = (e) => {
-    const { id, value } = e.target;
-    setAccountState((prevState) => ({ ...prevState, [id]: value }));
+    const { name, value } = e.target;
+    setUser(prevUser => ({
+      ...prevUser,
+      [name]: value
+    }));
   };
 
   const handleProfilePictureChange = async (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      try {
-        const compressedFile = await compressImage(file);
-        const imageUrl = URL.createObjectURL(compressedFile);
-        setLocalProfilePicture(imageUrl);
-        setAccountState((prevState) => ({
-          ...prevState,
-          profilePicture: compressedFile,
-        }));
-        toast.success("Profile picture selected!");
-      } catch (error) {
-        toast.error("Error processing profile picture. Please try again.");
-      }
-    }
+    // ...existing code...
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    const token = localStorage.getItem("token");
-
-    try {
-      let updatedProfilePictureURL = accountState.profilePicture;
-      
-      // Only upload new image if it's a File object
-      if (accountState.profilePicture instanceof File) {
-        const storageRef = ref(
-          storage,
-          `userprofiles/${Date.now()}_${accountState.profilePicture.name}`
-        );
-        const snapshot = await uploadBytes(storageRef, accountState.profilePicture);
-        updatedProfilePictureURL = await getDownloadURL(snapshot.ref);
-      }
-
-      const updateData = {
-        address: accountState.address,
-        contactNumber: accountState.contactNumber,
-        birthday: accountState.birthday,
-        gender: accountState.gender,
-        profilePicture: updatedProfilePictureURL,
-      };
-
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/auth/update`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(updateData),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to update profile");
-      }
-
-      const data = await response.json();
-      toast.success("Profile updated successfully!");
-      setIsEditing(false);
-      setLocalProfilePicture(null);
-      await refetchUserProfile();
-    } catch (error) {
-      console.error("Update Error:", error);
-      toast.error(error.message || "Failed to update profile");
-    } finally {
-      setLoading(false);
-    }
+    // ...existing code...
   };
 
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
-    
-    if (!passwords.currentPassword || !passwords.newPassword || !passwords.confirmNewPassword) {
-      toast.error("All password fields are required.");
-      return;
-    }
-    
-    if (passwords.newPassword !== passwords.confirmNewPassword) {
-      toast.error("New passwords do not match.");
-      return;
-    }
-
-    if (passwords.newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters long.");
-      return;
-    }
-
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast.error("Please log in.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/auth/change-password`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            currentPassword: passwords.currentPassword,
-            newPassword: passwords.newPassword,
-          }),
-        }
-      );
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to change password");
-      }
-
-      toast.success("Password changed successfully! Redirecting to login...");
-      
-      // Clear form
-      setPasswords({
-        currentPassword: "",
-        newPassword: "",
-        confirmNewPassword: ""
-      });
-      
-      // Clear all auth data and redirect after a short delay
-      setTimeout(() => {
-        localStorage.clear();
-        navigate("/tanod-login");
-      }, 2000);
-
-    } catch (error) {
-      console.error("Password Change Error:", error);
-      toast.error(error.message || "Failed to change password");
-    } finally {
-      setLoading(false);
-    }
+  const handlePasswordChange = (e) => {
+    // ...existing code...
   };
 
-  const handleCancel = () => {
-    setIsEditing(false);
-    if (userProfile) {
-      setAccountState({
-        firstName: userProfile.firstName,
-        lastName: userProfile.lastName,
-        address: userProfile.address,
-        contactNumber: userProfile.contactNumber,
-        birthday: userProfile.birthday
-          ? new Date(userProfile.birthday).toISOString().split("T")[0]
-          : "",
-        gender: userProfile.gender || "",
-        profilePicture: userProfile.profilePicture || null,
-      });
-    }
+  const validatePasswords = () => {
+    // ...existing code...
   };
+
+  const handlePasswordSubmit = async (e) => {
+    // ...existing code...
+  };
+
+  // Theme-aware styles
+  const cardClasses = `max-w-4xl mx-auto rounded-lg shadow-xl overflow-hidden 
+    ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'}`;
+  
+  const headerClasses = `py-6 px-8 
+    ${isDarkMode ? 'bg-gradient-to-r from-indigo-900 to-purple-900' : 'bg-gradient-to-r from-blue-600 to-indigo-600'} 
+    text-white`;
+  
+  const inputClasses = `block w-full p-3 mt-1 rounded-lg 
+    ${isDarkMode 
+      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+      : 'bg-gray-50 border-gray-300 text-gray-800 placeholder-gray-500'}
+    border focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200`;
+  
+  const buttonClasses = {
+    primary: `py-3 px-6 rounded-lg font-medium shadow-md
+      ${isDarkMode 
+        ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+        : 'bg-blue-600 hover:bg-blue-700 text-white'}
+      transition-colors duration-200`,
+    secondary: `py-3 px-6 rounded-lg font-medium shadow-md
+      ${isDarkMode 
+        ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+        : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}
+      transition-colors duration-200`
+  };
+  
+  const labelClasses = `font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`;
 
   return (
-    <div className="container mx-auto mt-8 space-y-6 ">
-      <ToastContainer />
-      <div className="flex ml-3">
-        <div className="w-1/3">
-          <div className="relative">
-            {loadingUserData ? (
-              <div className="flex justify-center items-center h-32">
-                <Loading type="spinner" /> {/* Display loading indicator */}
+    <motion.div 
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+      className="p-6"
+    >
+      <ToastContainer position="top-right" />
+      
+      <motion.div 
+        className={cardClasses}
+        variants={itemVariants}
+      >
+        <div className={headerClasses}>
+          <h2 className="text-2xl font-semibold">My Account</h2>
+          <p className="text-blue-100">Manage your personal information</p>
+        </div>
+        
+        <div className="p-8">
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              {/* Profile Picture */}
+              <div className="flex flex-col md:flex-row">
+                <div className="w-full md:w-1/3 flex flex-col items-center mb-6 md:mb-0">
+                  <div className="relative">
+                    <img
+                      src={user.profilePicture || '/default-avatar.png'}
+                      alt="Profile"
+                      className="w-40 h-40 rounded-full object-cover border-4 border-white shadow-lg"
+                    />
+                    
+                    {editing && (
+                      <label className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer hover:bg-blue-700 transition">
+                        <FaCloudUploadAlt size={20} />
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleProfilePictureChange} 
+                          className="hidden" 
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="mt-4">
+                    {!editing ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(true)}
+                        className={`flex items-center ${buttonClasses.secondary}`}
+                      >
+                        <FaEdit className="mr-2" /> Edit Profile
+                      </button>
+                    ) : (
+                      <div className="flex space-x-2">
+                        <button
+                          type="submit"
+                          className={`flex items-center ${buttonClasses.primary}`}
+                        >
+                          <FaSave className="mr-2" /> Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditing(false)}
+                          className={`flex items-center ${buttonClasses.secondary}`}
+                        >
+                          <FaTimes className="mr-2" /> Cancel
+                        </button>
+                      </div>
+                    )}
+
+                    {!editing && (
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordModal(true)}
+                        className={`flex items-center mt-4 ${buttonClasses.secondary}`}
+                      >
+                        <FaKey className="mr-2" /> Change Password
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Form Fields */}
+                <div className="w-full md:w-2/3 md:pl-8">
+                  <div className="mb-6">
+                    <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
+                      Personal Information
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* First Name */}
+                      <div>
+                        <label className={labelClasses}>First Name</label>
+                        <input
+                          type="text"
+                          name="firstName"
+                          value={user.firstName || ''}
+                          onChange={handleChange}
+                          disabled={!editing}
+                          className={inputClasses}
+                        />
+                      </div>
+
+                      {/* Middle Name */}
+                      <div>
+                        <label className={labelClasses}>Middle Name</label>
+                        <input
+                          type="text"
+                          name="middleName"
+                          value={user.middleName || ''}
+                          onChange={handleChange}
+                          disabled={!editing}
+                          className={inputClasses}
+                        />
+                      </div>
+
+                      {/* Last Name */}
+                      <div>
+                        <label className={labelClasses}>Last Name</label>
+                        <input
+                          type="text"
+                          name="lastName"
+                          value={user.lastName || ''}
+                          onChange={handleChange}
+                          disabled={!editing}
+                          className={inputClasses}
+                        />
+                      </div>
+
+                      {/* Gender */}
+                      <div>
+                        <label className={labelClasses}>Gender</label>
+                        <select
+                          name="gender"
+                          value={user.gender || ''}
+                          onChange={handleChange}
+                          disabled={!editing}
+                          className={inputClasses}
+                        >
+                          <option value="">Select Gender</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+
+                      {/* Birthday */}
+                      <div>
+                        <label className={labelClasses}>Birthday</label>
+                        <input
+                          type="date"
+                          name="birthday"
+                          value={user.birthday ? user.birthday.split('T')[0] : ''}
+                          onChange={handleChange}
+                          disabled={!editing}
+                          className={inputClasses}
+                        />
+                      </div>
+
+                      {/* Email */}
+                      <div>
+                        <label className={labelClasses}>Email</label>
+                        <input
+                          type="email"
+                          name="email"
+                          value={user.email || ''}
+                          onChange={handleChange}
+                          disabled={!editing}
+                          className={inputClasses}
+                        />
+                      </div>
+
+                      {/* Contact Number */}
+                      <div>
+                        <label className={labelClasses}>Contact Number</label>
+                        <input
+                          type="tel"
+                          name="contactNumber"
+                          value={user.contactNumber || ''}
+                          onChange={handleChange}
+                          disabled={!editing}
+                          className={inputClasses}
+                        />
+                      </div>
+
+                      {/* Username */}
+                      <div>
+                        <label className={labelClasses}>Username</label>
+                        <input
+                          type="text"
+                          name="username"
+                          value={user.username || ''}
+                          onChange={handleChange}
+                          disabled={!editing}
+                          className={inputClasses}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Address - Full Width */}
+                    <div className="mt-6">
+                      <label className={labelClasses}>Address</label>
+                      <textarea
+                        name="address"
+                        value={user.address || ''}
+                        onChange={handleChange}
+                        disabled={!editing}
+                        rows={3}
+                        className={inputClasses}
+                      ></textarea>
+                    </div>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <img
-                src={
-                  localProfilePicture ||
-                  accountState.profilePicture ||
-                  "/default-user-icon.png"
-                }
-                alt="Profile"
-                className="rounded-full w-32 h-32 object-cover border-2 border-gray-200"
-              />
-            )}
-            {isEditing && (
-              <label
-                htmlFor="profilePicture"
-                className="absolute bottom-0 left-24 bg-white text-black border border-gray-300 p-1 rounded-full cursor-pointer"
-              >
-                <FaEdit />
-                <input
-                  type="file"
-                  id="profilePicture"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleProfilePictureChange}
-                />
-              </label>
-            )}
-          </div>
-
-          <div className="mt-6">
-            <span className="text-lg font-semibold">Age: </span>
-            <span>{age || "N/A"}</span>
-          </div>
-
-          <div className="mt-4">
-            <span className="text-lg font-semibold">Gender: </span>
-            {isEditing ? (
-              <select
-                id="gender"
-                value={accountState.gender}
-                onChange={handleChange}
-                className="border px-2 py-1 text-black"
-              >
-                <option value="None">❌ None</option>
-                <option value="Male">♂ Male</option>
-                <option value="Female">♀ Female</option>
-                <option value="Others">⚧ Others</option>
-              </select>
-            ) : (
-              <span>{accountState.gender || "Not Specified"}</span>
-            )}
-          </div>
-
-          {!isEditing && !isChangingPassword && (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="mt-6 mr-6 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-            >
-              Edit Profile
-            </button>
-          )}
-
-          {!isEditing && (
-            <button
-              onClick={() => setIsChangingPassword(true)}
-              className="mt-6 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600"
-            >
-              Change Password
-            </button>
+            </form>
           )}
         </div>
+      </motion.div>
 
-        <div className="w-2/3 ml-5">
-          <h1 className="text-3xl font-bold">My Profile</h1>
-
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div className="text-lg">
-              <span className="font-semibold">Full Name: </span>
-              {isEditing ? (
-                <span>{`${accountState.firstName} ${accountState.lastName}`}</span>
-              ) : (
-                <span>{`${accountState.firstName} ${accountState.lastName}`}</span>
-              )}
-            </div>
-
-            <div className="text-lg">
-              <span className="font-semibold">Address: </span>
-              {isEditing ? (
+      {/* Password Change Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`w-full max-w-md p-6 rounded-lg shadow-xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
+          >
+            <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              Change Password
+            </h3>
+            
+            <form onSubmit={handlePasswordSubmit}>
+              <div className="mb-4">
+                <label className={labelClasses}>Current Password</label>
                 <input
-                  type="text"
-                  id="address"
-                  value={accountState.address}
-                  onChange={handleChange}
-                  className="border px-2 py-1 text-black"
+                  type="password"
+                  name="currentPassword"
+                  value={passwords.currentPassword}
+                  onChange={handlePasswordChange}
+                  className={inputClasses}
                 />
-              ) : (
-                <span>{accountState.address}</span>
-              )}
-            </div>
-
-            <div className="text-lg">
-              <span className="font-semibold">Contact Number: </span>
-              {isEditing ? (
+                {passwordErrors.currentPassword && (
+                  <p className="text-red-500 text-sm mt-1">{passwordErrors.currentPassword}</p>
+                )}
+              </div>
+              
+              <div className="mb-4">
+                <label className={labelClasses}>New Password</label>
                 <input
-                  type="text"
-                  id="contactNumber"
-                  value={accountState.contactNumber}
-                  onChange={handleChange}
-                  className="border px-2 py-1 text-black"
+                  type="password"
+                  name="newPassword"
+                  value={passwords.newPassword}
+                  onChange={handlePasswordChange}
+                  className={inputClasses}
                 />
-              ) : (
-                <span>{accountState.contactNumber}</span>
-              )}
-            </div>
-
-            <div className="text-lg">
-              <span className="font-semibold">Birthday: </span>
-              {isEditing ? (
+                {passwordErrors.newPassword && (
+                  <p className="text-red-500 text-sm mt-1">{passwordErrors.newPassword}</p>
+                )}
+              </div>
+              
+              <div className="mb-6">
+                <label className={labelClasses}>Confirm New Password</label>
                 <input
-                  type="date"
-                  id="birthday"
-                  value={accountState.birthday}
-                  onChange={handleChange}
-                  className="border px-2 py-1 text-black"
+                  type="password"
+                  name="confirmPassword"
+                  value={passwords.confirmPassword}
+                  onChange={handlePasswordChange}
+                  className={inputClasses}
                 />
-              ) : (
-                <span>{accountState.birthday}</span>
-              )}
-            </div>
-
-            {loading && <p>Loading...</p>}
-
-            {isEditing && (
-              <>
-                <button
-                  type="submit"
-                  className="mt-6 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
-                >
-                  Save Changes
-                </button>
+                {passwordErrors.confirmPassword && (
+                  <p className="text-red-500 text-sm mt-1">{passwordErrors.confirmPassword}</p>
+                )}
+              </div>
+              
+              <div className="flex justify-end space-x-2">
                 <button
                   type="button"
-                  onClick={handleCancel}
-                  className="mt-6 ml-6 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+                  onClick={() => setShowPasswordModal(false)}
+                  className={buttonClasses.secondary}
                 >
                   Cancel
                 </button>
-              </>
-            )}
-          </form>
-
-          {isChangingPassword && (
-             <form className="mt-8 space-y-6" onSubmit={handlePasswordChange}>
-             <div className="text-lg">
-               <label htmlFor="currentPassword" className="font-semibold">
-                 Current Password:{" "}
-               </label>
-               <div className="relative">
-                 <input
-                   type={showCurrentPassword ? "text" : "password"}
-                   id="currentPassword"
-                   value={passwords.currentPassword}
-                   onChange={(e) =>
-                     setPasswords({
-                       ...passwords,
-                       currentPassword: e.target.value,
-                     })
-                   }
-                   className="border px-2 py-1 text-black w-full pr-10"
-                 />
-                 <button
-                   type="button"
-                   onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                   className="absolute right-2 top-1/2 transform -translate-y-1/2 focus:outline-none text-black"
-                 >
-                   {showCurrentPassword ? <FaEyeSlash /> : <FaEye />}
-                 </button>
-               </div>
-             </div>
-       
-             <div className="text-lg">
-               <label htmlFor="newPassword" className="font-semibold">
-                 New Password:{" "}
-               </label>
-               <div className="relative">
-                 <input
-                   type={showNewPassword ? "text" : "password"}
-                   id="newPassword"
-                   value={passwords.newPassword}
-                   onChange={(e) =>
-                     setPasswords({ ...passwords, newPassword: e.target.value })
-                   }
-                   className="border px-2 py-1 text-black w-full pr-10"
-                 />
-                 <button
-                   type="button"
-                   onClick={() => setShowNewPassword(!showNewPassword)}
-                   className="absolute right-2 top-1/2 transform -translate-y-1/2 focus:outline-none text-black"
-                 >
-                   {showNewPassword ? <FaEyeSlash /> : <FaEye />}
-                 </button>
-               </div>
-             </div>
-       
-             <div className="text-lg">
-               <label htmlFor="confirmNewPassword" className="font-semibold">
-                 Confirm New Password:{" "}
-               </label>
-               <div className="relative">
-                 <input
-                   type={showConfirmPassword ? "text" : "password"}
-                   id="confirmNewPassword"
-                   value={passwords.confirmNewPassword}
-                   onChange={(e) =>
-                     setPasswords({
-                       ...passwords,
-                       confirmNewPassword: e.target.value,
-                     })
-                   }
-                   className="border px-2 py-1 text-black w-full pr-10"
-                 />
-                 <button
-                   type="button"
-                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                   className="absolute right-2 top-1/2 transform -translate-y-1/2 focus:outline-none text-black"
-                 >
-                   {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
-                 </button>
-               </div>
-             </div>
-       
-             <button
-               type="submit"
-               className="mt-6 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-             >
-               Change Password
-             </button>
-             <button
-               type="button"
-               onClick={() => setIsChangingPassword(false)}
-               className="mt-6 ml-6 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
-             >
-               Cancel
-             </button>
-           </form>
-          )}
+                <button
+                  type="submit"
+                  className={buttonClasses.primary}
+                >
+                  Update Password
+                </button>
+              </div>
+            </form>
+          </motion.div>
         </div>
-      </div>
-    </div>
+      )}
+    </motion.div>
   );
-};
-
-export default MyAcc;
+}

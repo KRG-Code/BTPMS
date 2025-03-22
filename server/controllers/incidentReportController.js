@@ -1,6 +1,37 @@
 const IncidentReport = require('../models/IncidentReport');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+const axios = require('axios');
+
+// Helper function for reverse geocoding
+const getAddressFromCoordinates = async (latitude, longitude) => {
+  try {
+    // Using OpenStreetMap's Nominatim API for reverse geocoding
+    const response = await axios.get(`https://nominatim.openstreetmap.org/reverse`, {
+      params: {
+        format: 'json',
+        lat: latitude,
+        lon: longitude,
+        zoom: 18,
+        addressdetails: 1
+      },
+      headers: {
+        'User-Agent': 'BTPMS Application' // Required by Nominatim's terms of use
+      }
+    });
+
+    if (response.data && response.data.display_name) {
+      // Extract and format a simplified address
+      const address = response.data.display_name;
+      // Simplify the address if it's too long
+      return address.length > 50 ? address.substring(0, 47) + '...' : address;
+    }
+    return `Lat: ${latitude}, Lon: ${longitude}`;
+  } catch (error) {
+    console.error('Error in reverse geocoding:', error);
+    return `Lat: ${latitude}, Lon: ${longitude}`;
+  }
+};
 
 // Create a new incident report
 exports.createIncidentReport = async (req, res) => {
@@ -24,13 +55,19 @@ exports.createIncidentReport = async (req, res) => {
 
     await newIncidentReport.save();
 
+    // Get human-readable address from coordinates if available
+    let locationDisplay = location;
+    if (location && location.latitude && location.longitude) {
+      locationDisplay = await getAddressFromCoordinates(location.latitude, location.longitude);
+    }
+
     // Fetch all Tanod and Admin users
     const tanodsAndAdmins = await User.find({ userType: { $in: ['tanod', 'admin'] } });
 
     // Create notifications for each Tanod and Admin
     const notifications = tanodsAndAdmins.map(user => ({
       userId: user._id,
-      message: `New incident reported: ${type} at ${location}.`,
+      message: `New incident reported: ${type} at ${locationDisplay}.`,
     }));
 
     await Notification.insertMany(notifications);
@@ -102,9 +139,13 @@ exports.updateIncidentStatus = async (req, res) => {
     if (status === 'Resolved') {
       // Notify admins about the resolution
       const admins = await User.find({ userType: 'admin' });
+      
+      // Format incident ID in a more readable way
+      const incidentNumber = id.substring(id.length - 6).toUpperCase();
+      
       const notifications = admins.map(admin => ({
         userId: admin._id,
-        message: `Incident #${id} has been resolved.`,
+        message: `Incident #${incidentNumber} has been resolved by ${user.firstName} ${user.lastName}.`,
       }));
 
       await Notification.insertMany(notifications);

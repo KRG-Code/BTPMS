@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { toast, ToastContainer } from "react-toastify"; // Add ToastContainer
+import "react-toastify/dist/ReactToastify.css"; // Ensure stylesheet is imported
 import { RiUser3Line, RiMenuLine, RiMessage3Line, RiNotification3Line } from "react-icons/ri";
 import ThemeToggle from "../forms/ThemeToggle";
 import { useCombinedContext } from "../../contexts/useContext";
 import NotificationList from "../notifications/NotificationList";
 import MessageList from "../messages/MessageList";
+import ConversationModal from "../messages/ConversationModal"; // Add this import
 import { io } from "socket.io-client";
 
 export default function TopNav() {
@@ -17,19 +20,38 @@ export default function TopNav() {
   const [notifications, setNotifications] = useState([]);
   const [setUserType] = useState(null);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  // Add states for conversation modal
+  const [showConversationModal, setShowConversationModal] = useState(false);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
   const messageRef = useRef(null);
+  const messageListRef = useRef(null);
+  const notificationListRef = useRef(null);
   const navigate = useNavigate();
   const { toggleSideNav, logout } = useCombinedContext();
 
   const handleClickOutside = useCallback((event) => {
-    if (
-      dropdownRef.current && !dropdownRef.current.contains(event.target) &&
-      notificationRef.current && !notificationRef.current.contains(event.target) &&
-      messageRef.current && !messageRef.current.contains(event.target)
-    ) {
+    const isOutsideMessage = messageRef.current && 
+      !messageRef.current.contains(event.target) &&
+      (!messageListRef.current || !messageListRef.current.contains(event.target));
+
+    const isOutsideNotification = notificationRef.current && 
+      !notificationRef.current.contains(event.target) &&
+      (!notificationListRef.current || !notificationListRef.current.contains(event.target));
+
+    const isOutsideProfile = dropdownRef.current && 
+      !dropdownRef.current.contains(event.target);
+
+    if (isOutsideMessage && isOutsideNotification && isOutsideProfile) {
       closeAllDropdowns();
+    } else if (isOutsideMessage) {
+      setShowMessageList(false);
+    } else if (isOutsideNotification) {
+      setShowNotificationList(false);
+    } else if (isOutsideProfile) {
+      setIsDropdownOpen(false);
     }
   }, []);
 
@@ -154,6 +176,7 @@ export default function TopNav() {
   const toggleMessagesDropdown = () => {
     setShowMessageList(!showMessageList);
     setShowNotificationList(false);
+    setIsDropdownOpen(false);
     // Reset unread messages when opening message list
     if (!showMessageList) {
       setHasUnreadMessages(false);
@@ -163,6 +186,7 @@ export default function TopNav() {
   const toggleNotificationsDropdown = () => {
     setShowNotificationList(!showNotificationList);
     setShowMessageList(false);
+    setIsDropdownOpen(false);
     if (!showNotificationList) markNotificationsAsRead();
   };
 
@@ -214,6 +238,24 @@ export default function TopNav() {
     navigate("/myaccount");
   };
 
+  // Add this function to handle conversation click
+  const handleConversationClick = (conversation) => {
+    setSelectedConversation(conversation);
+    setShowConversationModal(true);
+    setShowMessageList(false);
+  };
+
+  // Add this function to close the conversation modal
+  const handleCloseConversation = () => {
+    setShowConversationModal(false);
+    setSelectedConversation(null);
+  };
+
+  // Update fetchConversations function to pass to ConversationModal
+  const fetchConversations = async () => {
+    checkUnreadMessages();
+  };
+
   const navItems = [
     { id: 1, component: <ThemeToggle />, label: "Theme Toggle" },
   ];
@@ -221,75 +263,128 @@ export default function TopNav() {
   const storedUserType = localStorage.getItem("userType");
 
   return (
-    <aside className="rounded-2xl TopNav relative">
-      <header className="bg-background text-text p-4 flex justify-between items-center rounded navigation">
-        <button onClick={toggleSideNav} className="text-2xl">
-          <RiMenuLine />
-        </button>
-        <div className="flex items-center m-2 space-x-5">
-          {navItems.map((item) => (
-            <span key={item.id} className="flex border-2 rounded-3xl text-2xl" title={item.label}>
-              {item.component}
-            </span>
-          ))}
+    <>
+      <aside className="rounded-2xl card p-2"> {/* Use 'card' class instead of 'TopNav' */}
+        <header className="flex justify-between items-center rounded navigation p-4">
+          <button onClick={toggleSideNav} className="text-2xl" aria-label="Toggle navigation">
+            <RiMenuLine />
+          </button>
+          <div className="flex items-center m-2 space-x-5">
+            {navItems.map((item) => (
+              <span key={item.id} className="flex border-2 rounded-3xl text-2xl" title={item.label}>
+                {item.component}
+              </span>
+            ))}
 
-          {storedUserType === "resident" && (
-            <button onClick={handleBackButton} className="text-2xl p-1" title="Back">
-              Back
-            </button>
-          )}
-
-          {storedUserType !== "resident" && (
-            <>
-              <div className="relative" ref={messageRef}>
-                <button onClick={toggleMessagesDropdown} className="text-2xl p-1 relative" title="Messages">
-                  <RiMessage3Line />
-                  {hasUnreadMessages && (
-                    <span className="absolute top-0 right-0 inline-block w-3 h-3 bg-red-500 rounded-full pulse"></span>
-                  )}
-                </button>
-                {showMessageList && <MessageList />}
-              </div>
-
-              <div className="relative" ref={notificationRef}>
-                <button onClick={toggleNotificationsDropdown} className="text-2xl p-1 relative" title="Notifications">
-                  <RiNotification3Line />
-                  {hasUnreadNotifications && notifications.length > 0 && (
-                    <span className="absolute top-0 right-0 inline-block w-3 h-3 bg-red-500 rounded-full pulse"></span>
-                  )}
-                </button>
-                {showNotificationList && <NotificationList onClose={toggleNotificationsDropdown} />}
-              </div>
-            </>
-          )}
-
-          {storedUserType !== "resident" && (
-            <div className="relative" ref={dropdownRef}>
-              <button onClick={toggleDropdown} className="border-2 rounded-full">
-                {profilePicture ? (
-                  <img src={profilePicture} alt="Profile" className="rounded-full w-12 h-12 object-cover" />
-                ) : (
-                  <RiUser3Line
-                  className="rounded-full w-12 h-12 object-cover"
-                  />
-                )}
+            {storedUserType === "resident" && (
+              <button onClick={handleBackButton} className="text-2xl p-1" title="Back">
+                Back
               </button>
-              {isDropdownOpen && (
-                <div className="absolute right-0 mt-6 w-48 TopNav shadow-lg rounded-lg z-50 hover:cursor-pointer text-center">
-                  <ul className="py-2 ml-5 mr-5 my-5">
-                    <li className="px-4 py-2 hover:bg-blue5 rounded-3xl" onClick={handleMyAccount}>
-                      My Account
-                    </li>
-                    <li className="px-4 py-2 hover:bg-blue5 rounded-3xl" onClick={handleLogout}>
-                      Log Out
-                    </li>
-                  </ul>
+            )}
+
+            {storedUserType !== "resident" && (
+              <>
+                <div className="relative" ref={messageRef}>
+                  <button 
+                    onClick={toggleMessagesDropdown} 
+                    className="text-2xl p-1 relative"
+                    title="Messages"
+                  >
+                    <RiMessage3Line />
+                    {hasUnreadMessages && (
+                      <span className="absolute top-0 right-0 inline-block w-3 h-3 bg-red-500 rounded-full pulse"></span>
+                    )}
+                  </button>
+                  {showMessageList && (
+                    <div 
+                      ref={messageListRef}
+                      className="absolute right-0 mt-2 z-50"
+                      style={{ width: '320px' }}
+                    >
+                      <MessageList 
+                        onClose={() => setShowMessageList(false)} 
+                        onConversationClick={handleConversationClick} // Pass this prop
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
-    </aside>
+
+                <div className="relative" ref={notificationRef}>
+                  <button 
+                    onClick={toggleNotificationsDropdown} 
+                    className="text-2xl p-1 relative"
+                    title="Notifications"
+                  >
+                    <RiNotification3Line />
+                    {hasUnreadNotifications && notifications.length > 0 && (
+                      <span className="absolute top-0 right-0 inline-block w-3 h-3 bg-red-500 rounded-full pulse"></span>
+                    )}
+                  </button>
+                  {showNotificationList && (
+                    <div 
+                      ref={notificationListRef}
+                      className="absolute right-0 mt-2 z-50"
+                      style={{ width: '360px' }}
+                    >
+                      <NotificationList onClose={() => setShowNotificationList(false)} />
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {storedUserType !== "resident" && (
+              <div className="relative" ref={dropdownRef}>
+                <button onClick={toggleDropdown} className="border-2 rounded-full">
+                  {profilePicture ? (
+                    <img src={profilePicture} alt="Profile" className="rounded-full w-12 h-12 object-cover" />
+                  ) : (
+                    <RiUser3Line
+                    className="rounded-full w-12 h-12 object-cover"
+                    />
+                  )}
+                </button>
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-6 w-48 TopNav shadow-lg rounded-lg z-50 hover:cursor-pointer text-center">
+                    <ul className="py-2 ml-5 mr-5 my-5">
+                      <li className="px-4 py-2 hover:bg-blue5 rounded-3xl" onClick={handleMyAccount}>
+                        My Account
+                      </li>
+                      <li className="px-4 py-2 hover:bg-blue5 rounded-3xl" onClick={handleLogout}>
+                        Log Out
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* Add ConversationModal outside of MessageList */}
+        {showConversationModal && selectedConversation && (
+          <ConversationModal
+            conversation={selectedConversation}
+            onClose={handleCloseConversation}
+            onNewMessage={fetchConversations}
+          />
+        )}
+      </aside>
+
+      {/* Add global ToastContainer at root level */}
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme={localStorage.getItem("theme") === "dark" ? "dark" : "light"}
+        style={{ zIndex: 9999 }}
+      />
+    </>
   );
 }

@@ -1,60 +1,73 @@
-import React, { useState, useEffect } from "react";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-import TanodTable from "./PersonelsComponents/TanodTable";
-import AddTanodModal from "./PersonelsComponents/AddTanodModal";
-import EditTanodModal from "./PersonelsComponents/EditTanodModal";
+import React, { useState, useEffect } from 'react';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { io } from 'socket.io-client';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FaUserPlus, FaSearch, FaFilter, FaSyncAlt, FaUserCircle } from 'react-icons/fa';
+import { useTheme } from '../../../contexts/ThemeContext'; // Import useTheme hook
+
+import TanodTable from './PersonelsComponents/TanodTable';
+import AddTanodModal from './PersonelsComponents/AddTanodModal';
+import EditTanodModal from './PersonelsComponents/EditTanodModal';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { 
+    opacity: 1,
+    transition: { 
+      duration: 0.5,
+      when: "beforeChildren",
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 }
+};
 
 export default function TanodPersonels() {
+  const { isDarkMode } = useTheme(); // Use theme context
   const [tanods, setTanods] = useState([]);
+  const [filteredTanods, setFilteredTanods] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedTanod, setSelectedTanod] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     const fetchTanods = async () => {
       const token = localStorage.getItem("token");
       if (!token) {
-        toast.error("Please log in.");
+        toast.error("Please log in to view this page.");
         return;
       }
 
       try {
         setLoading(true);
-        const response = await fetch(
-          `${process.env.REACT_APP_API_URL}/auth/users`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/users`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
         if (!response.ok) {
-          throw new Error("Network response was not ok");
+          throw new Error(`Error: ${response.status}`);
         }
 
-        const users = await response.json();
-
-        if (Array.isArray(users)) {
-          // Filter and map the tanods with isOnline property
-          const tanodsList = users
-            .filter((user) => user.userType === "tanod")
-            .map(tanod => ({
-              ...tanod,
-              isOnline: tanod.isOnline || false
-            }));
-          setTanods(tanodsList);
-        } else {
-          toast.error("Unexpected response format.");
-        }
+        const data = await response.json();
+        // Filter only users with userType "tanod"
+        const tanodData = data.filter(user => user.userType === "tanod");
+        setTanods(tanodData);
+        setFilteredTanods(tanodData);
       } catch (error) {
         console.error("Error fetching tanods:", error);
-        toast.error("Error fetching Tanods.");
+        toast.error("Failed to load tanod personnel.");
       } finally {
         setLoading(false);
       }
@@ -79,12 +92,41 @@ export default function TanodPersonels() {
             : tanod
         )
       );
+      
+      setFilteredTanods(prevTanods => 
+        prevTanods.map(tanod => 
+          tanod._id === userId 
+            ? { ...tanod, isOnline } 
+            : tanod
+        )
+      );
     });
 
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [refreshTrigger]);
+
+  useEffect(() => {
+    // Filter tanods based on search term and filter status
+    let filtered = tanods;
+    
+    if (searchTerm) {
+      filtered = filtered.filter(tanod => 
+        `${tanod.firstName} ${tanod.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tanod.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tanod.username?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(tanod => 
+        filterStatus === 'online' ? tanod.isOnline : !tanod.isOnline
+      );
+    }
+    
+    setFilteredTanods(filtered);
+  }, [searchTerm, filterStatus, tanods]);
 
   const handleAddTanod = async (newTanodData) => {
     if (newTanodData.password !== newTanodData.confirmPassword) {
@@ -124,12 +166,13 @@ export default function TanodPersonels() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to add Tanod");
+        throw new Error(errorData.message || "Failed to add tanod");
       }
 
       const data = await response.json();
       toast.success("Tanod added successfully!");
       setTanods([...tanods, data]);
+      setFilteredTanods([...filteredTanods, data]);
       setShowModal(false);
     } catch (error) {
       console.error("Error adding Tanod:", error);
@@ -142,29 +185,30 @@ export default function TanodPersonels() {
   const handleDeleteTanod = (tanodId) => {
     toast.info(
       <div>
-        <span>Are you sure you want to delete this Tanod?</span>
-        <div className="mt-2">
+        <span className="font-medium">Are you sure you want to delete this Tanod?</span>
+        <div className="mt-2 flex justify-end space-x-2">
           <button
-            className="bg-red-500 text-white px-2 py-1 rounded mr-2"
+            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
             onClick={() => {
               confirmDelete(tanodId);
-              toast.dismiss(); // Dismiss the toast after confirmation
+              toast.dismiss();
             }}
           >
-            Yes
+            Delete
           </button>
           <button
-            className="bg-gray-500 text-white px-2 py-1 rounded"
-            onClick={() => toast.dismiss()} // Dismiss the toast for "No"
+            className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+            onClick={() => toast.dismiss()}
           >
-            No
+            Cancel
           </button>
         </div>
       </div>,
       {
         closeButton: false,
         autoClose: false,
-        position: "top-right",
+        position: "top-center",
+        className: "bg-white text-gray-800 shadow-xl rounded-lg border-l-4 border-red-500",
       }
     );
   };
@@ -190,11 +234,13 @@ export default function TanodPersonels() {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to delete Tanod");
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to delete tanod");
       }
 
       // Remove the deleted tanod from the state
       setTanods(tanods.filter((tanod) => tanod._id !== tanodId));
+      setFilteredTanods(filteredTanods.filter((tanod) => tanod._id !== tanodId));
       toast.success("Tanod deleted successfully!");
     } catch (error) {
       console.error("Error deleting Tanod:", error);
@@ -226,26 +272,30 @@ export default function TanodPersonels() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            firstName: editedTanodData.firstName,
-            middleName: editedTanodData.middleName,
-            lastName: editedTanodData.lastName,
-            email: editedTanodData.email,
-            username: editedTanodData.username,
-            ...(editedTanodData.password && { password: editedTanodData.password }),
-          }),
+          body: JSON.stringify(editedTanodData),
         }
       );
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || "Failed to update Tanod");
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update tanod");
       }
 
-      const data = await response.json();
-      setTanods(tanods.map(tanod => 
-        tanod._id === editedTanodData._id ? { ...tanod, ...data } : tanod
-      ));
+      const updatedTanod = await response.json();
+
+      // Update the tanods state with the edited tanod
+      setTanods(
+        tanods.map((tanod) =>
+          tanod._id === updatedTanod._id ? updatedTanod : tanod
+        )
+      );
+      
+      setFilteredTanods(
+        filteredTanods.map((tanod) =>
+          tanod._id === updatedTanod._id ? updatedTanod : tanod
+        )
+      );
+
       toast.success("Tanod updated successfully!");
       setShowEditModal(false);
     } catch (error) {
@@ -256,41 +306,128 @@ export default function TanodPersonels() {
     }
   };
 
+  const handleRefresh = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
+
   return (
-    <div className="container mx-auto">
+    <motion.div 
+      className={`container mx-auto px-4 py-8 ${isDarkMode ? 'text-[#e7e8f4]' : 'text-[#0b0c18]'}`}
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       <ToastContainer />
-      <h1 className="text-2xl font-bold mb-4">Tanod Personnel List</h1>
+      
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold mb-4 sm:mb-0 flex items-center">
+          <span className={`bg-[${isDarkMode ? '#191f8a' : '#191d67'}] text-white p-2 rounded-md mr-3`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </span>
+          Tanod Personnel Management
+        </h1>
+        
+        <div>
+          <motion.button
+            className={`${isDarkMode ? 'bg-[#989ce6] hover:bg-[#4750eb]' : 'bg-[#191d67] hover:bg-[#141db8]'} text-white font-medium py-2 px-4 rounded-md shadow-md flex items-center transition-all duration-200`}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowModal(true)}
+          >
+            <FaUserPlus className="mr-2" />
+            Add Tanod
+          </motion.button>
+        </div>
+      </motion.div>
+      
+      <motion.div 
+        variants={itemVariants} 
+        className={`${isDarkMode ? 'bg-[#0e1022]' : 'bg-white'} rounded-lg shadow-md p-6 mb-8`}
+      >
+        <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
+          <div className="relative w-full md:w-96">
+            <FaSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`} />
+            <input
+              type="text"
+              placeholder="Search by name, username or email..."
+              className={`w-full pl-10 pr-4 py-2 ${isDarkMode ? 'bg-[#080917] text-[#e7e8f4] border-[#1e2048]' : 'bg-white text-[#0b0c18] border-[#e2e8f0]'} rounded-md focus:ring-2 focus:ring-[${isDarkMode ? '#4750eb' : '#141db8'}] focus:border-[${isDarkMode ? '#4750eb' : '#141db8'}] transition-all duration-200`}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <div className="flex items-center space-x-4 w-full md:w-auto">
+            <div className="flex items-center space-x-2">
+              <FaFilter className={isDarkMode ? 'text-gray-400' : 'text-gray-500'} />
+              <select
+                className={`border ${isDarkMode ? 'bg-[#080917] text-[#e7e8f4] border-[#1e2048]' : 'bg-white text-[#0b0c18] border-[#e2e8f0]'} rounded-md py-2 px-3 focus:ring-2 focus:ring-[${isDarkMode ? '#4750eb' : '#141db8'}] focus:border-[${isDarkMode ? '#4750eb' : '#141db8'}] transition-all duration-200`}
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                <option value="all">All Status</option>
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
+              </select>
+            </div>
+            
+            <motion.button
+              className={`${isDarkMode ? 'bg-[#080917] text-[#989ce6]' : 'bg-gray-100 text-gray-600'} hover:${isDarkMode ? 'bg-[#0e1022]' : 'bg-gray-200'} p-2 rounded-md`}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleRefresh}
+            >
+              <FaSyncAlt className={loading ? "animate-spin" : ""} />
+            </motion.button>
+          </div>
+        </div>
 
-      <div className="mb-4">
-        <button
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700"
-          onClick={() => setShowModal(true)}
-        >
-          Add Tanod
-        </button>
-      </div>
+        <TanodTable 
+          tanods={filteredTanods}
+          loading={loading}
+          handleDeleteTanod={handleDeleteTanod}
+          handleEditClick={handleEditClick}
+          isDarkMode={isDarkMode} // Pass isDarkMode to TanodTable
+        />
+        
+        {filteredTanods.length === 0 && !loading && (
+          <div className={`text-center py-8 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>
+            <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <FaUserCircle className={`h-16 w-16 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+            </div>
+            <p className={`${isDarkMode ? 'text-gray-300' : 'text-gray-500'} text-lg`}>No tanod personnel found</p>
+            {searchTerm || filterStatus !== 'all' ? (
+              <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-400'} mt-2`}>Try adjusting your search or filter criteria</p>
+            ) : null}
+          </div>
+        )}
+      </motion.div>
 
-      <TanodTable 
-        tanods={tanods}
-        loading={loading}
-        handleDeleteTanod={handleDeleteTanod}
-        handleEditClick={handleEditClick}
-      />
+      <AnimatePresence>
+        {showModal && (
+          <AddTanodModal
+            showModal={showModal}
+            closeModal={() => setShowModal(false)}
+            handleAddTanod={handleAddTanod}
+            loading={loading}
+            isDarkMode={isDarkMode} // Pass isDarkMode to AddTanodModal
+          />
+        )}
+      </AnimatePresence>
 
-      <AddTanodModal
-        showModal={showModal}
-        closeModal={() => setShowModal(false)}
-        handleAddTanod={handleAddTanod}
-        loading={loading}
-      />
-
-      <EditTanodModal
-        showModal={showEditModal}
-        closeModal={() => setShowEditModal(false)}
-        handleEditTanod={handleEditTanod}
-        loading={loading}
-        tanodData={selectedTanod}
-      />
-    </div>
+      <AnimatePresence>
+        {showEditModal && selectedTanod && (
+          <EditTanodModal
+            showModal={showEditModal}
+            closeModal={() => setShowEditModal(false)}
+            handleEditTanod={handleEditTanod}
+            loading={loading}
+            tanodData={selectedTanod}
+            isDarkMode={isDarkMode} // Pass isDarkMode to EditTanodModal
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

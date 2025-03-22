@@ -728,7 +728,7 @@ const PatrolTracking = () => {
         limit={3} // Add this to limit number of toasts shown at once
       />
       <div className="flex w-full h-full">
-        <div className="relative w-2/3 h-full mr-6" style={{ zIndex: 1 }}>
+        <div className="relative w-3/5 h-full mr-6" style={{ zIndex: 1 }}>
           <MapContainer center={[14.7356, 121.0498]} zoom={13} style={{ height: '100%', width: '100%' }} ref={mapRef}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <MapEvents />
@@ -751,7 +751,7 @@ const PatrolTracking = () => {
             })}
           </MapContainer>
         </div>
-        <div className="w-1/3 h-full flex flex-col items-center bg-gray-100 p-4 space-y-4 rounded-lg TopNav">
+        <div className="w-2/5 h-full flex flex-col items-center bg-gray-100 p-4 space-y-4 rounded-lg TopNav">
           <div className="w-full flex justify-between gap-2">
             <button 
               onClick={toggleTrackingVisibility} 

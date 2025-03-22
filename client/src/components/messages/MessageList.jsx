@@ -1,18 +1,50 @@
-import React, { useState, useEffect, useRef } from "react"; // Add useRef import
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { toast } from "react-toastify";
-import { RiUser3Line } from "react-icons/ri";
+import { toast, ToastContainer } from "react-toastify"; // Add ToastContainer
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  RiUser3Line, 
+  RiSearchLine, 
+  RiChat3Line, 
+  RiDeleteBin6Line, 
+  RiCheckDoubleLine,
+  RiEyeLine,
+  RiArrowLeftLine,
+  RiCloseLine,
+  RiAddLine
+} from "react-icons/ri";
 import ConversationModal from "./ConversationModal";
 import { io } from "socket.io-client";
+import { useTheme } from "../../contexts/ThemeContext";  // Fixed import path
 
-export default function MessageList() {
+// Animation variants
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.07 } }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+};
+
+const listVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: { duration: 0.3 } 
+  }
+};
+
+export default function MessageList({ onClose, onConversationClick }) { // Accept onConversationClick prop
+  const { isDarkMode } = useTheme();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedConversation, setSelectedConversation] = useState(null);
-  const [showModal, setShowModal] = useState(false);
   const [tanods, setTanods] = useState([]);
   const [showTanodList, setShowTanodList] = useState(false);
-  const refreshIntervalRef = useRef(null); // Add this line
+  const refreshIntervalRef = useRef(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     fetchConversations();
@@ -41,11 +73,10 @@ export default function MessageList() {
     };
   }, []);
 
-  // Add auto-refresh for conversations
   useEffect(() => {
     refreshIntervalRef.current = setInterval(() => {
       fetchConversations();
-    }, 500); // 0.5 seconds
+    }, 500);
 
     return () => {
       if (refreshIntervalRef.current) {
@@ -66,15 +97,13 @@ export default function MessageList() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setConversations(prev => {
-        // Only update if there are actual changes
         const hasChanges = JSON.stringify(prev) !== JSON.stringify(response.data.conversations);
         return hasChanges ? response.data.conversations : prev;
       });
       setLoading(false);
     } catch (error) {
       console.error("Error fetching conversations:", error);
-      // Don't show error toast during auto-refresh
-      if (!refreshIntervalRef.current) { // Fix this line
+      if (!refreshIntervalRef.current) {
         toast.error("Error fetching conversations.");
       }
     }
@@ -88,17 +117,10 @@ export default function MessageList() {
       const currentUserId = localStorage.getItem("userId");
       const currentUserType = localStorage.getItem("userType");
       
-      // Filter users based on user type
       const availableUsers = response.data.filter(user => {
-        // Always exclude self
         if (user._id === currentUserId) return false;
-        
-        // If current user is admin, show only tanods
         if (currentUserType === 'admin') return user.userType === 'tanod';
-        
-        // If current user is tanod, show only admin
         if (currentUserType === 'tanod') return user.userType === 'tanod'|| user.userType === 'admin';
-        
         return false;
       });
       
@@ -111,20 +133,22 @@ export default function MessageList() {
 
   const startConversation = async (tanodId) => {
     try {
-      // Instead of creating conversation immediately, just store the user info
       const selectedUser = tanods.find(user => user._id === tanodId);
       if (selectedUser) {
         setShowTanodList(false);
-        setSelectedConversation({
-          _id: 'temp_' + Date.now(), // Temporary ID
+        // Create temporary conversation and pass to parent via callback
+        const tempConversation = {
+          _id: 'temp_' + Date.now(),
           participants: [
             { _id: localStorage.getItem("userId") },
             selectedUser
           ],
           lastMessage: '',
-          temporary: true // Flag to indicate this is a new conversation
-        });
-        setShowModal(true);
+          temporary: true
+        };
+        // Use the callback to handle the conversation in TopNav
+        onConversationClick(tempConversation);
+        onClose(); // Close the message list
       }
     } catch (error) {
       toast.error("Error starting conversation.");
@@ -132,33 +156,53 @@ export default function MessageList() {
   };
 
   const deleteConversation = async (conversationId, e) => {
-    e.stopPropagation(); // Prevent opening the conversation modal
+    e.stopPropagation();
+    e.preventDefault();
     
     toast.info(
-      <div>
-        <p>Are you sure you want to delete this conversation?</p>
-        <div className="mt-2 flex justify-end gap-2">
-          <button
-            onClick={() => {
+      <div className="text-center" onClick={e => e.stopPropagation()}>
+        <p className="mb-3">Delete this conversation?</p>
+        <div className="flex justify-center gap-3">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               performDelete(conversationId);
               toast.dismiss();
             }}
-            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+            className={`px-3 py-1.5 rounded-md ${
+              isDarkMode ? 'bg-red-600 text-white' : 'bg-red-500 text-white'
+            } transition-colors`}
           >
             Delete
-          </button>
-          <button
-            onClick={() => toast.dismiss()}
-            className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toast.dismiss();
+            }}
+            className={`px-3 py-1.5 rounded-md ${
+              isDarkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-800'
+            } transition-colors`}
           >
             Cancel
-          </button>
+          </motion.button>
         </div>
       </div>,
       {
         autoClose: false,
         closeButton: false,
         closeOnClick: false,
+        draggable: false,
+        onClick: (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }
       }
     );
   };
@@ -193,147 +237,332 @@ export default function MessageList() {
     }
   };
 
+  const filteredTanods = tanods.filter(user => 
+    user.firstName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    user.lastName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+      return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString([], {month: 'short', day: 'numeric'});
+    }
+  };
+
+  // Get unread count
+  const unreadCount = conversations.filter(conv => !conv.read).length;
+
   return (
     <>
-      <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg p-4 z-50 TopNav">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="font-bold">Messages</h2>
-          <button
-            onClick={handleStartNewChat}
-            className="text-blue-500 hover:text-blue-700"
-          >
-            New Chat
-          </button>
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className={`rounded-xl shadow-xl overflow-hidden ${
+          isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'
+        }`}
+        style={{ width: '320px' }}
+      >
+        {/* Header */}
+        <div className={`p-4 border-b flex justify-between items-center ${
+          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'
+        }`}>
+          <h2 className="font-bold text-lg flex items-center">
+            <RiChat3Line className="mr-2" />
+            Messages
+            {unreadCount > 0 && (
+              <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800'
+              }`}>{unreadCount}</span>
+            )}
+          </h2>
+          <div className="flex items-center space-x-2">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={handleStartNewChat}
+              className={`p-2 rounded-full ${
+                isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
+              } transition-colors`}
+              title="New Message"
+            >
+              <RiAddLine size={20} />
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={onClose}
+              className={`p-2 rounded-full ${
+                isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
+              } transition-colors`}
+              title="Close"
+            >
+              <RiCloseLine size={20} />
+            </motion.button>
+          </div>
         </div>
 
-        {showTanodList ? (
-          <div className="mt-2 text-black">
-            <h3 className="font-semibold mb-2">Select User</h3>
-            {tanods.length > 0 ? (
-              <ul className="space-y-2">
-                {tanods.map((user) => (
-                  <li
-                    key={user._id}
-                    onClick={() => startConversation(user._id)}
-                    className="p-2 bg-gray-100 rounded cursor-pointer hover:bg-gray-200 flex items-center"
-                  >
-                    <div className="w-10 h-10 rounded-full overflow-hidden mr-2 bg-gray-200 flex items-center justify-center">
-                      {user.profilePicture ? (
-                        <img
-                          src={user.profilePicture}
-                          alt={`${user.firstName}'s profile`}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <RiUser3Line className="w-6 h-6 text-gray-400" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-semibold">{user.firstName} {user.lastName}</p>
-                      <p className="text-xs text-gray-500 capitalize">{user.userType}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-gray-500">No users available</p>
-            )}
-            <button
-              onClick={() => setShowTanodList(false)}
-              className="mt-2 text-sm text-blue-500"
+        {/* Content area */}
+        <div className="max-h-[60vh] overflow-y-auto">
+          {showTanodList ? (
+            <motion.div 
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="p-4"
             >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <>
-            {loading ? (
-              <div className="flex justify-center items-center h-24">
-                <div className="animate-spin h-5 w-5 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+              {/* Search and back button */}
+              <div className="flex items-center gap-2 mb-4">
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setShowTanodList(false)}
+                  className={`p-2 rounded-full ${
+                    isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
+                  } flex-shrink-0`}
+                >
+                  <RiArrowLeftLine />
+                </motion.button>
+                
+                <div className={`relative flex-grow ${
+                  isDarkMode ? 'text-white' : 'text-black'
+                }`}>
+                  <RiSearchLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                  <input
+                    type="text"
+                    placeholder="Search users..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className={`w-full py-2 pl-10 pr-4 rounded-lg border ${
+                      isDarkMode 
+                        ? 'bg-gray-800 border-gray-700 text-white placeholder:text-gray-400' 
+                        : 'bg-white border-gray-300 text-black placeholder:text-gray-500'
+                    } focus:outline-none focus:ring-2 ${
+                      isDarkMode ? 'focus:ring-blue-500' : 'focus:ring-blue-500'
+                    }`}
+                  />
+                </div>
               </div>
-            ) : conversations.length === 0 ? (
-              <div className="text-center py-4">
-                <p className="text-gray-500 mb-2">No conversations yet</p>
-                <p className="text-sm text-gray-400">
-                  Start a new chat with a tanod!
-                </p>
-              </div>
-            ) : (
-              <ul className="space-y-2">
-                {conversations.map((conv) => {
-                  const otherParticipant = conv.participants.find(
-                    p => p._id !== localStorage.getItem("userId")
-                  );
-                  
-                  return (
-                    <li
-                      key={conv._id}
-                      onClick={() => {
-                        setSelectedConversation(conv);
-                        setShowModal(true);
-                        // Mark messages as read when opening conversation
-                        markConversationAsRead(conv._id);
+              
+              {/* User selection list */}
+              <h3 className={`font-medium mb-3 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>Select a Recipient</h3>
+              
+              <motion.ul 
+                variants={listVariants}
+                className="space-y-2"
+              >
+                {filteredTanods.length > 0 ? (
+                  filteredTanods.map((user) => (
+                    <motion.li
+                      key={user._id}
+                      variants={itemVariants}
+                      whileHover={{ 
+                        scale: 1.02, 
+                        backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.05)' 
                       }}
-                      className={`p-3 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors ${
-                        !conv.read ? 'bg-blue-50 border-l-4 border-blue-500' : 'bg-gray-100'
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => startConversation(user._id)}
+                      className={`p-3 rounded-xl cursor-pointer transition-colors flex items-center ${
+                        isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
                       }`}
                     >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 flex items-center justify-center">
-                          {otherParticipant?.profilePicture ? (
-                            <img
-                              src={otherParticipant.profilePicture}
-                              alt={`${otherParticipant.firstName}'s profile`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <RiUser3Line className="w-6 h-6 text-gray-400" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-center">
-                            <p className={`font-semibold text-black ${!conv.read ? 'font-bold' : ''}`}>
-                              {otherParticipant?.firstName} {otherParticipant?.lastName}
-                            </p>
-                            <button
-                              onClick={(e) => deleteConversation(conv._id, e)}
-                              className="text-red-500 hover:text-red-700 text-sm px-2 py-1 rounded"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                          <p className={`text-sm text-gray-500 truncate ${!conv.read ? 'font-semibold' : ''}`}>
-                            {conv.lastMessage ? (
-                              <>
-                                <span className="font-medium">
-                                  {conv.lastMessageSender?._id === localStorage.getItem("userId")
-                                    ? "You"
-                                    : conv.lastMessageSender?.firstName || "Unknown"}: 
-                                </span>&nbsp;
-                                {conv.lastMessage}
-                              </>
-                            ) : (
-                              'No messages yet'
-                            )}
-                          </p>
-                        </div>
+                      <div className={`w-10 h-10 rounded-full overflow-hidden mr-3 ${
+                        isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+                      } flex-shrink-0 flex items-center justify-center`}>
+                        {user.profilePicture ? (
+                          <img
+                            src={user.profilePicture}
+                            alt={`${user.firstName}'s profile`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <RiUser3Line className={`w-6 h-6 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                          }`} />
+                        )}
                       </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </>
-        )}
-      </div>
-
-      {showModal && selectedConversation && (
-        <ConversationModal
-          conversation={selectedConversation}
-          onClose={() => setShowModal(false)}
-          onNewMessage={fetchConversations}
-        />
-      )}
+                      <div className="flex-grow min-w-0">
+                        <p className="font-medium truncate">{user.firstName} {user.lastName}</p>
+                        <p className={`text-xs truncate capitalize ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                        }`}>{user.userType}</p>
+                      </div>
+                    </motion.li>
+                  ))
+                ) : (
+                  <div className={`text-center py-8 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    <p className="mb-1">No users found</p>
+                    <p className="text-sm">Try a different search term</p>
+                  </div>
+                )}
+              </motion.ul>
+            </motion.div>
+          ) : (
+            <>
+              {loading ? (
+                <div className="flex flex-col items-center justify-center h-40">
+                  <div className={`w-8 h-8 border-4 border-t-transparent rounded-full animate-spin mb-3 ${
+                    isDarkMode ? 'border-blue-500' : 'border-blue-600'
+                  }`}></div>
+                  <p className={isDarkMode ? 'text-gray-300' : 'text-gray-600'}>Loading messages...</p>
+                </div>
+              ) : conversations.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-40 text-center px-4">
+                  <div className={`w-16 h-16 mb-4 rounded-full flex items-center justify-center ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-blue-50'
+                  }`}>
+                    <RiChat3Line className={`text-2xl ${
+                      isDarkMode ? 'text-blue-400' : 'text-blue-500'
+                    }`} />
+                  </div>
+                  <p className={`font-medium mb-1 ${
+                    isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                  }`}>No conversations yet</p>
+                  <p className={`text-sm ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    Start a new chat by clicking the plus button above
+                  </p>
+                </div>
+              ) : (
+                <motion.ul 
+                  variants={containerVariants} 
+                  initial="hidden" 
+                  animate="visible" 
+                  className="divide-y"
+                >
+                  {conversations.map((conv) => {
+                    const otherParticipant = conv.participants.find(
+                      p => p._id !== localStorage.getItem("userId")
+                    );
+                    
+                    return (
+                      <motion.li
+                        key={conv._id}
+                        variants={itemVariants}
+                        onClick={() => {
+                          markConversationAsRead(conv._id);
+                          onConversationClick(conv);
+                        }}
+                        className={`cursor-pointer transition-all group ${
+                          !conv.read 
+                            ? isDarkMode 
+                              ? 'bg-blue-900 bg-opacity-20' 
+                              : 'bg-blue-50'
+                            : isDarkMode 
+                              ? 'hover:bg-gray-800' 
+                              : 'hover:bg-gray-50'
+                        }`}
+                        whileHover={{ 
+                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)'
+                        }}
+                      >
+                        <div className="py-4 px-4 flex items-start">
+                          {/* Avatar with online indicator */}
+                          <div className="relative">
+                            <div className={`w-12 h-12 rounded-full overflow-hidden ${
+                              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+                            } flex items-center justify-center`}>
+                              {otherParticipant?.profilePicture ? (
+                                <img
+                                  src={otherParticipant.profilePicture}
+                                  alt={`${otherParticipant.firstName}'s profile`}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <RiUser3Line className={`w-6 h-6 ${
+                                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                }`} />
+                              )}
+                            </div>
+                            {otherParticipant?.isOnline && (
+                              <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
+                            )}
+                          </div>
+                          
+                          {/* Message content */}
+                          <div className="ml-3 flex-1 min-w-0">
+                            <div className="flex justify-between items-center mb-1">
+                              <p className={`font-semibold truncate ${!conv.read ? 'font-bold' : ''}`}>
+                                {otherParticipant?.firstName} {otherParticipant?.lastName}
+                              </p>
+                              <span className={`text-xs flex-shrink-0 ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}>
+                                {formatTime(conv.updatedAt || conv.createdAt)}
+                              </span>
+                            </div>
+                            <div className={`flex justify-between items-center ${
+                              !conv.read 
+                                ? isDarkMode ? 'text-white' : 'text-gray-900'
+                                : isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
+                              <p className={`text-sm truncate mr-2 ${!conv.read ? 'font-medium' : ''}`}>
+                                {conv.lastMessage ? (
+                                  conv.lastMessageSender?._id === localStorage.getItem("userId")
+                                    ? <span>You: {conv.lastMessage}</span>
+                                    : conv.lastMessage
+                                ) : (
+                                  <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>
+                                    No messages yet
+                                  </span>
+                                )}
+                              </p>
+                              <div className="flex items-center space-x-2">
+                                {!conv.read && (
+                                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                    isDarkMode ? 'bg-blue-400' : 'bg-blue-600'
+                                  }`}></span>
+                                )}
+                                <button
+                                  onClick={(e) => deleteConversation(conv._id, e)}
+                                  className={`p-1 rounded-full hover:bg-opacity-20 transition-opacity ${
+                                    isDarkMode ? 'hover:bg-gray-700 text-gray-400 hover:text-red-400' : 'hover:bg-gray-200 text-gray-500 hover:text-red-600'
+                                  } opacity-0 group-hover:opacity-100`}
+                                  aria-label="Delete conversation"
+                                >
+                                  <RiDeleteBin6Line size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.li>
+                    );
+                  })}
+                </motion.ul>
+              )}
+            </>
+          )}
+        </div>
+      </motion.div>
+      
+      {/* Add ToastContainer for notifications */}
+      <ToastContainer 
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme={isDarkMode ? "dark" : "light"}
+        style={{ zIndex: 9999 }} // Ensure it's above other elements
+      />
     </>
   );
 }

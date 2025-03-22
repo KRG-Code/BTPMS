@@ -11,8 +11,7 @@ export const CombinedProvider = ({ children }) => {
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [userType, setUserType] = useState(() => localStorage.getItem('userType'));
 
-  // State for dark mode and side nav
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
+  // State for side nav only - remove dark mode state
   const [isOpen, setIsOpen] = useState(false);
   
   // Fetch user data to get userType
@@ -72,10 +71,7 @@ export const CombinedProvider = ({ children }) => {
     await fetchData();
   };
 
-  useEffect(() => {
-    document.body.classList.toggle('dark-mode', isDarkMode);
-    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-  }, [isDarkMode]);
+  // Remove theme-related code and effects
 
   const toggleSideNav = () => setIsOpen((prev) => !prev);
   const closeSideNav = () => setIsOpen(false);
@@ -87,8 +83,7 @@ export const CombinedProvider = ({ children }) => {
         userType,
         login,
         logout,
-        isDarkMode,
-        toggleTheme: () => setIsDarkMode(prev => !prev),
+        // Remove isDarkMode and toggleTheme
         isOpen,
         toggleSideNav,
         closeSideNav,

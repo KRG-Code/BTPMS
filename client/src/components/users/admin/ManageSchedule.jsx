@@ -1,20 +1,42 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { motion, AnimatePresence } from "framer-motion";
+import { FaPlus, FaCalendarAlt, FaUsers, FaSyncAlt, FaRegCalendarCheck } from "react-icons/fa";
 import ScheduleForm from "./ManageScheduleComponents/ScheduleForm";
 import ScheduleList from "./ManageScheduleComponents/ScheduleList";
 import ScheduleMembers from "./ManageScheduleComponents/ScheduleMembers";
 import TanodModal from "./ManageScheduleComponents/TanodModal";
-import { FaUserCircle } from 'react-icons/fa';
+import { useTheme } from "../../../contexts/ThemeContext";
 import {
   fetchTanods,
   fetchSchedules,
-  handleCreateOrUpdateSchedule,
   handleDeleteSchedule,
   handleViewMembers,
 } from "./ManageScheduleComponents/ScheduleUtils";
 
+// Animation variants
+const fadeIn = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.4 } }
+};
+
+const slideUp = {
+  hidden: { y: 20, opacity: 0 },
+  visible: i => ({ 
+    y: 0, 
+    opacity: 1, 
+    transition: { delay: i * 0.1, duration: 0.5 } 
+  })
+};
+
+const buttonScale = {
+  hover: { scale: 1.05, transition: { duration: 0.2 } },
+  tap: { scale: 0.95, transition: { duration: 0.1 } }
+};
+
 export default function ScheduleMaker() {
+  const { isDarkMode } = useTheme();
   const [tanods, setTanods] = useState([]);
   const [unit, setUnit] = useState("Unit 1");
   const [selectedTanods, setSelectedTanods] = useState([]);
@@ -85,72 +107,124 @@ export default function ScheduleMaker() {
   };
 
   return (
-    <div className="container mx-auto relative p-4">
-      <h1 className="text-2xl font-bold mb-4">Schedule Maker</h1>
-
-      <button
-        onClick={() => {
-          resetForm();
-          setShowForm(true);
-        }}
-        className="bg-blue-500 text-white px-4 py-2 rounded mb-4"
-        hidden={showForm}
+    <motion.div 
+      className={`container mx-auto px-4 py-6 ${isDarkMode ? 'bg-[#080917] text-[#e7e8f4]' : 'bg-[#e8e9f7] text-[#0b0c18]'}`}
+      variants={fadeIn}
+      initial="hidden"
+      animate="visible"
+    >
+      <motion.div 
+        className="flex flex-col md:flex-row items-center justify-between mb-6"
+        variants={slideUp}
+        custom={0}
       >
-        Create Schedule
-      </button>
+        <h1 className="text-3xl font-bold flex items-center mb-4 md:mb-0">
+          <FaCalendarAlt className={`mr-3 ${isDarkMode ? 'text-[#989ce6]' : 'text-[#191d67]'}`} />
+          Schedule Manager
+        </h1>
+        
+        <div className="flex space-x-3">
+          <motion.button
+            variants={buttonScale}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+            className={`flex items-center px-4 py-2 rounded-lg ${
+              isDarkMode 
+              ? 'bg-[#4750eb] hover:bg-[#191f8a] text-white' 
+              : 'bg-[#141db8] hover:bg-[#191d67] text-white'
+            } transition-all duration-300 shadow-md ${showForm ? 'hidden' : ''}`}
+          >
+            <FaPlus className="mr-2" />
+            Create Schedule
+          </motion.button>
+          
+          <motion.button
+            variants={buttonScale}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={handleRefresh}
+            className={`flex items-center px-4 py-2 rounded-lg ${
+              isDarkMode 
+              ? 'bg-[#080917] hover:bg-[#0e1022] text-[#989ce6] border border-[#1e2048]' 
+              : 'bg-white hover:bg-gray-100 text-[#141db8] border border-gray-200'
+            } transition-all duration-300 shadow-md`}
+            disabled={loadingSchedules}
+          >
+            <FaSyncAlt className={`mr-2 ${loadingSchedules ? 'animate-spin' : ''}`} />
+            Refresh
+          </motion.button>
+        </div>
+      </motion.div>
 
-      {showForm && (
-        <ScheduleForm
-          isEditing={isEditing}
-          currentScheduleId={currentScheduleId}
-          unit={unit}
-          setUnit={setUnit}
-          selectedTanods={selectedTanods}
-          setSelectedTanods={setSelectedTanods}
-          startTime={startTime}
-          setStartTime={setStartTime}
-          endTime={endTime}
-          setEndTime={setEndTime}
-          originalStartTime={originalStartTime}
-          setOriginalStartTime={setOriginalStartTime}
-          resetForm={resetForm}
-          fetchSchedules={() => fetchSchedules(setSchedules, setLoadingSchedules)}
+      <AnimatePresence>
+        {showForm && (
+          <ScheduleForm
+            isEditing={isEditing}
+            currentScheduleId={currentScheduleId}
+            unit={unit}
+            setUnit={setUnit}
+            selectedTanods={selectedTanods}
+            setSelectedTanods={setSelectedTanods}
+            startTime={startTime}
+            setStartTime={setStartTime}
+            endTime={endTime}
+            setEndTime={setEndTime}
+            originalStartTime={originalStartTime}
+            setOriginalStartTime={setOriginalStartTime}
+            resetForm={resetForm}
+            fetchSchedules={() => fetchSchedules(setSchedules, setLoadingSchedules)}
+            schedules={schedules}
+            setSchedules={setSchedules}
+            setShowForm={setShowForm}
+            tanods={tanods}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        variants={slideUp}
+        custom={1}
+      >
+        <ScheduleList
           schedules={schedules}
           setSchedules={setSchedules}
+          setUnit={setUnit}
+          setSelectedTanods={setSelectedTanods}
+          setStartTime={setStartTime}
+          setEndTime={setEndTime}
+          setOriginalStartTime={setOriginalStartTime}
+          setCurrentScheduleId={setCurrentScheduleId}
+          setIsEditing={setIsEditing}
           setShowForm={setShowForm}
-          tanods={tanods}
+          fetchSchedules={() => fetchSchedules(setSchedules, setLoadingSchedules)}
+          handleViewMembers={(schedule) =>
+            handleViewMembers(schedule, setScheduleMembers, setShowMembersTable)
+          }
+          handleDeleteSchedule={(scheduleId) =>
+            handleDeleteSchedule(scheduleId, setSchedules, schedules, () =>
+              fetchSchedules(setSchedules, setLoadingSchedules)
+            )
+          }
+          loadingSchedules={loadingSchedules}
+          isDarkMode={isDarkMode}
         />
-      )}
+      </motion.div>
 
-      <ScheduleList
-        schedules={schedules}
-        setSchedules={setSchedules}
-        setUnit={setUnit}
-        setSelectedTanods={setSelectedTanods}
-        setStartTime={setStartTime}
-        setEndTime={setEndTime}
-        setOriginalStartTime={setOriginalStartTime}
-        setCurrentScheduleId={setCurrentScheduleId}
-        setIsEditing={setIsEditing}
-        setShowForm={setShowForm}
-        fetchSchedules={() => fetchSchedules(setSchedules, setLoadingSchedules)}
-        handleViewMembers={(schedule) =>
-          handleViewMembers(schedule, setScheduleMembers, setShowMembersTable)
-        }
-        handleDeleteSchedule={(scheduleId) =>
-          handleDeleteSchedule(scheduleId, setSchedules, schedules, () =>
-            fetchSchedules(setSchedules, setLoadingSchedules)
-          )
-        }
-      />
-
-      {showMembersTable && (
-        <ScheduleMembers
-          scheduleMembers={scheduleMembers}
-          setShowMembersTable={setShowMembersTable}
-          scheduleId={currentScheduleId}
-        />
-      )}
+      <AnimatePresence>
+        {showMembersTable && (
+          <ScheduleMembers
+            scheduleMembers={scheduleMembers}
+            setShowMembersTable={setShowMembersTable}
+            scheduleId={currentScheduleId}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </AnimatePresence>
 
       <TanodModal
         showAddTanodModal={showAddTanodModal}
@@ -163,7 +237,8 @@ export default function ScheduleMaker() {
         handleAddSelectedTanods={handleAddSelectedTanods}
         handleRemoveSelectedTanods={handleRemoveSelectedTanods}
         checkedTanods={checkedTanods}
+        isDarkMode={isDarkMode}
       />
-    </div>
+    </motion.div>
   );
 }

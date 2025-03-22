@@ -32,9 +32,17 @@ const {
   savePatrolLogs,
   getPatrolLogs,
   generatePublicToken,
-  getUnreadNotifications, // Import the getUnreadNotifications function
-  markNotificationsAsRead, // Import the markNotificationsAsRead function
-  logout, // Add logout to the destructured imports
+  getUnreadNotifications,
+  markNotificationsAsRead,
+  logout,
+  // Add these imports for the new functions
+  getPatrolStats,
+  getIncidentStats,
+  getIncidentTypeBreakdown,
+  getAttendanceStats,
+  getEquipmentStats,
+  getAssistanceStats,
+  getPerformanceComparison
 } = require('../controllers/authController');
 
 const { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem } = require("../controllers/inventoryController");
@@ -129,6 +137,17 @@ router.put('/schedule/:id/end-patrol', protect, endPatrol); // Update this route
 router.post('/save-patrol-logs', protect, savePatrolLogs);
 router.get('/patrol-logs/:userId/:scheduleId', protect, getPatrolLogs);
 
+// Add these new routes:
+router.get('/:userId/patrol-stats', protect, getPatrolStats);
+router.get('/:userId/incident-stats', protect, getIncidentStats);
+
+// Add these new routes for performance dashboard data
+router.get('/:userId/incident-types', protect, getIncidentTypeBreakdown);
+router.get('/:userId/attendance-stats', protect, getAttendanceStats);
+router.get('/:userId/equipment-stats', protect, getEquipmentStats);
+router.get('/:userId/assistance-stats', protect, getAssistanceStats);
+router.get('/:userId/performance-comparison', protect, getPerformanceComparison);
+
 // Notification routes
 router.get('/notifications/unread', protect, getUnreadNotifications); // Ensure this route is defined
 router.post('/notifications/mark-read', protect, markNotificationsAsRead); // Mark notifications as read
@@ -136,5 +155,44 @@ router.get('/auth/:tanodId/rating', getTanodRatings); // Ensure this route is de
 
 // Public token route
 router.get('/public-token', generatePublicToken);
+
+// Add these debugging routes to help diagnose issues
+router.get('/:userId/debug-schedules', protect, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const schedules = await Schedule.find({ tanods: userObjectId })
+      .select('unit startTime endTime status');
+    res.json(schedules);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/:userId/debug-incidents', protect, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const incidents = await IncidentReport.find({ responder: userObjectId })
+      .select('type status createdAt respondedAt');
+    res.json(incidents);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/:userId/debug-equipment', protect, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const equipment = await Equipment.find({ user: userObjectId });
+    res.json(equipment);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 module.exports = router;

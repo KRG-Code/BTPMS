@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import { CombinedProvider } from "./contexts/useContext";
+import { ThemeProvider } from "./contexts/ThemeContext";  // Import the ThemeProvider
 import { ToastContainer } from "react-toastify";
 import ProtectedRoute from "./utils/ProtectedRoute";
 import Loading from "./utils/Loading";
@@ -31,89 +32,91 @@ const Home= lazy(() => import("./components/users/residents/Home"));
 const ReportIncident= lazy(() => import("./components/users/residents/ReportIncident"));
 function App() {
   return (
-    <div className="flex-1 p-0 bg-background text-text">
-      <BrowserRouter>
-        <CombinedProvider>
-          <Suspense fallback={<div className="flex items-center justify-center min-h-screen" ><Loading type="spinner" /></div>}>
-            <ToastContainer />
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<SelectionPage />} />
-              <Route path="/tanod-login" element={<LoginTanod />} />
-              <Route path="/signup" element={<SignupPage />} />
-              <Route element={<Layout />}>
-              <Route path="/myaccount" element={<MyAccount />}/>
-              </Route>
-              {/* Protected Routes for Tanod */}
-              <Route element={<Layout />}>
-                <Route
-                  path="/Dashboard"
-                  element={<ProtectedRoute userTypeAllowed={["tanod"]}><Dashboard /></ProtectedRoute>}
-                />
-                <Route
-                  path="/Patrolmap"
-                  element={<ProtectedRoute userTypeAllowed={["tanod"]}><Patrolmap /></ProtectedRoute>}
-                />
-                <Route
-                  path="/Equipments"
-                  element={<ProtectedRoute userTypeAllowed={["tanod"]}><Equipments /></ProtectedRoute>}
-                />
-                <Route
-                  path="/Performance"
-                  element={<ProtectedRoute userTypeAllowed={["tanod"]}><Performance /></ProtectedRoute>}
-                />
-                <Route
-                  path="/Schedule"
-                  element={<ProtectedRoute userTypeAllowed={["tanod"]}><Schedule /></ProtectedRoute>}
-                /> 
-              </Route>
+    <ThemeProvider>  {/* Add ThemeProvider here */}
+      <div className="flex-1 p-0 bg-background text-text">
+        <BrowserRouter>
+          <CombinedProvider>
+            <Suspense fallback={<div className="flex items-center justify-center min-h-screen" ><Loading type="spinner" /></div>}>
+              <ToastContainer />
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<SelectionPage />} />
+                <Route path="/tanod-login" element={<LoginTanod />} />
+                <Route path="/signup" element={<SignupPage />} />
+                <Route element={<Layout />}>
+                <Route path="/myaccount" element={<MyAccount />}/>
+                </Route>
+                {/* Protected Routes for Tanod */}
+                <Route element={<Layout />}>
+                  <Route
+                    path="/Dashboard"
+                    element={<ProtectedRoute userTypeAllowed={["tanod"]}><Dashboard /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/Patrolmap"
+                    element={<ProtectedRoute userTypeAllowed={["tanod"]}><Patrolmap /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/Equipments"
+                    element={<ProtectedRoute userTypeAllowed={["tanod"]}><Equipments /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/Performance"
+                    element={<ProtectedRoute userTypeAllowed={["tanod"]}><Performance /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/Schedule"
+                    element={<ProtectedRoute userTypeAllowed={["tanod"]}><Schedule /></ProtectedRoute>}
+                  /> 
+                </Route>
 
-              {/* Protected Routes for Residents */}
-              <Route>
-                <Route
-                  path="/Home"
-                  element={<Home />}
-                />
-                <Route
-                  path="/Tanodevaluation"
-                  element={<ResidentRating />}
-                />
-                <Route
-                  path="/Reportincidents"
-                  element={<ReportIncident />}
-                />
-              </Route>
-              
-              {/* Protected Routes for Admin */}
-              <Route element={<Layout />}>
-                <Route
-                  path="/Admindashboard"
-                  element={<ProtectedRoute userTypeAllowed={["admin"]}><AdminDashboard /></ProtectedRoute>}
-                />
-                <Route
-                  path="/ManageTanod"
-                  element={<ProtectedRoute userTypeAllowed={["admin"]}><ManageTanod /></ProtectedRoute>}
-                />
-                <Route
-                  path="/Resources"
-                  element={<ProtectedRoute userTypeAllowed={["admin"]}><Resources /></ProtectedRoute>}
-                />
-                <Route
-                  path="/ManagePatrolschedules"
-                  element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolManagement /></ProtectedRoute>}
-                />
-                <Route
-                  path="/Patrol&incidenttracking"
-                  element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolTrack /></ProtectedRoute>}
-                />
-              </Route>
-              
+                {/* Protected Routes for Residents */}
+                <Route>
+                  <Route
+                    path="/Home"
+                    element={<Home />}
+                  />
+                  <Route
+                    path="/Tanodevaluation"
+                    element={<ResidentRating />}
+                  />
+                  <Route
+                    path="/Reportincidents"
+                    element={<ReportIncident />}
+                  />
+                </Route>
+                
+                {/* Protected Routes for Admin */}
+                <Route element={<Layout />}>
+                  <Route
+                    path="/Admindashboard"
+                    element={<ProtectedRoute userTypeAllowed={["admin"]}><AdminDashboard /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/ManageTanod"
+                    element={<ProtectedRoute userTypeAllowed={["admin"]}><ManageTanod /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/Resources"
+                    element={<ProtectedRoute userTypeAllowed={["admin"]}><Resources /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/ManagePatrolschedules"
+                    element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolManagement /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/Patrol&incidenttracking"
+                    element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolTrack /></ProtectedRoute>}
+                  />
+                </Route>
+                
 
-            </Routes>
-          </Suspense>
-        </CombinedProvider>
-      </BrowserRouter>
-    </div>
+              </Routes>
+            </Suspense>
+          </CombinedProvider>
+        </BrowserRouter>
+      </div>
+    </ThemeProvider>
   );
 }
 

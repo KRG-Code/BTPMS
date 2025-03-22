@@ -2,17 +2,18 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import SideNav from "../../components/layout/SideNav";
 import TopNav from "../../components/layout/TopNav";
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function Layout() {
     const [isSideNavOpen, setIsSideNavOpen] = useState(false);
-    const [isDarkMode] = useState(false);
+    const { isDarkMode } = useTheme(); // Use the theme context instead of local state
 
     const toggleSideNav = () => {
         setIsSideNavOpen(!isSideNavOpen);
     };
 
     return (
-        <div className={`App ${isDarkMode ? "dark-mode" : "light-mode"}`}>
+        <div className={`App`}>  {/* Remove manual class assignment, theme is now applied via CSS */}
             <div className="flex h-screen">
                 {/* Sidebar taking full height without overlapping */}
                 <SideNav isOpen={isSideNavOpen} toggleSideNav={toggleSideNav} className="h-full" />

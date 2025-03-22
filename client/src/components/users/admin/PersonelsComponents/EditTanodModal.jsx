@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaUserCircle } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { useTheme } from '../../../../contexts/ThemeContext'; // Import useTheme hook
 
 export default function EditTanodModal({ showModal, closeModal, handleEditTanod, loading, tanodData }) {
+  const { isDarkMode } = useTheme(); // Use theme context
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [showPasswordFields, setShowPasswordFields] = useState(false);
@@ -78,82 +80,124 @@ export default function EditTanodModal({ showModal, closeModal, handleEditTanod,
   if (!showModal) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-96 TopNav">
-        <h2 className="text-xl font-bold mb-4">Edit Tanod</h2>
-        <form onSubmit={onSubmit}>
-          <div className="mb-4">
-            <label htmlFor="firstName" className="block text-lg font-semibold mb-2">
-              First Name:
-            </label>
-            <input
-              type="text"
-              name="firstName"
-              id="firstName"
-              value={editTanod.firstName || ''}
-              onChange={handleInputChange}
-              className="border border-gray-300 p-2 rounded w-full text-black"
-              required
-            />
+    <div
+      className={`fixed inset-0 flex items-center justify-center z-50 ${
+        showModal ? "visible" : "hidden"
+      }`}
+    >
+      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={handleClose}></div>
+      
+      <div className={`relative w-full max-w-lg mx-4 ${
+        isDarkMode ? 'bg-[#0e1022] text-[#e7e8f4]' : 'bg-white text-gray-800'
+      } rounded-lg shadow-lg overflow-hidden`}>
+        <div className={`${
+          isDarkMode 
+            ? 'bg-gradient-to-r from-[#191f8a] to-[#4750eb]' 
+            : 'bg-gradient-to-r from-[#191d67] to-[#141db8]'
+          } text-white p-4 flex justify-between items-center`}>
+          <h2 className="text-xl font-semibold">Edit Tanod</h2>
+          <button
+            onClick={handleClose}
+            className="text-white hover:text-gray-200 focus:outline-none"
+          >
+            ✕
+          </button>
+        </div>
+        
+        <form onSubmit={onSubmit} className="p-6 space-y-4">
+          {/* Profile Picture */}
+          <div className="flex justify-center mb-4">
+            {editTanod.profilePicture ? (
+              <img 
+                src={editTanod.profilePicture} 
+                alt="Profile" 
+                className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md" 
+              />
+            ) : (
+              <div className={`w-24 h-24 rounded-full flex items-center justify-center ${
+                isDarkMode ? 'bg-[#080917] border-4 border-[#0e1022]' : 'bg-gray-100 border-4 border-white'
+              } shadow-md`}>
+                <FaUserCircle className={`h-16 w-16 ${isDarkMode ? 'text-[#1e2048]' : 'text-gray-300'}`} />
+              </div>
+            )}
           </div>
 
-          <div className="mb-4">
-            <label htmlFor="middleName" className="block text-lg font-semibold mb-2">
-              Middle Name:
-            </label>
-            <input
-              type="text"
-              name="middleName"
-              id="middleName"
-              value={editTanod.middleName || ''}
-              onChange={handleInputChange}
-              className="border border-gray-300 p-2 rounded w-full text-black"
-            />
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="lastName" className="block text-lg font-semibold mb-2">
-              Last Name:
-            </label>
-            <input
-              type="text"
-              name="lastName"
-              id="lastName"
-              value={editTanod.lastName || ''}
-              onChange={handleInputChange}
-              className="border border-gray-300 p-2 rounded w-full text-black"
-              required
-            />
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-lg font-semibold mb-2">
-              Email:
-            </label>
-            <input
-              type="email"
-              name="email"
-              id="email"
-              value={editTanod.email || ''}
-              onChange={handleInputChange}
-              className="border border-gray-300 p-2 rounded w-full text-black"
-              required
-            />
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="username" className="block text-lg font-semibold mb-2">
-              Username:
-            </label>
-            <input
-              type="text"
-              name="username"
-              id="username"
-              value={editTanod.username || ''}
-              onChange={handleInputChange}
-              className="border border-gray-300 p-2 rounded w-full text-black"
-              required
-            />
+          {/* Form Fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium mb-1">First Name</label>
+              <input
+                type="text"
+                name="firstName"
+                value={editTanod.firstName || ''}
+                onChange={handleInputChange}
+                className={`w-full p-2 rounded ${
+                  isDarkMode 
+                    ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
+                    : 'bg-white border-gray-300 text-black'
+                }`}
+                required
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1">Middle Name</label>
+              <input
+                type="text"
+                name="middleName"
+                value={editTanod.middleName || ''}
+                onChange={handleInputChange}
+                className={`w-full p-2 rounded ${
+                  isDarkMode 
+                    ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
+                    : 'bg-white border-gray-300 text-black'
+                }`}
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1">Last Name</label>
+              <input
+                type="text"
+                name="lastName"
+                value={editTanod.lastName || ''}
+                onChange={handleInputChange}
+                className={`w-full p-2 rounded ${
+                  isDarkMode 
+                    ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
+                    : 'bg-white border-gray-300 text-black'
+                }`}
+                required
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1">Email</label>
+              <input
+                type="email"
+                name="email"
+                value={editTanod.email || ''}
+                onChange={handleInputChange}
+                className={`w-full p-2 rounded ${
+                  isDarkMode 
+                    ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
+                    : 'bg-white border-gray-300 text-black'
+                }`}
+                required
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1">Username</label>
+              <input
+                type="text"
+                name="username"
+                value={editTanod.username || ''}
+                onChange={handleInputChange}
+                className={`w-full p-2 rounded ${
+                  isDarkMode 
+                    ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
+                    : 'bg-white border-gray-300 text-black'
+                }`}
+                required
+              />
+            </div>
           </div>
 
           {!showPasswordFields ? (
@@ -178,7 +222,11 @@ export default function EditTanodModal({ showModal, closeModal, handleEditTanod,
                   id="password"
                   value={editTanod.password || ''}
                   onChange={handleInputChange}
-                  className="border border-gray-300 p-2 rounded w-full text-black"
+                  className={`w-full p-2 rounded ${
+                    isDarkMode 
+                      ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
+                      : 'bg-white border-gray-300 text-black'
+                  }`}
                   required
                 />
                 <button
@@ -200,7 +248,11 @@ export default function EditTanodModal({ showModal, closeModal, handleEditTanod,
                   id="confirmPassword"
                   value={editTanod.confirmPassword || ''}
                   onChange={handleInputChange}
-                  className="border border-gray-300 p-2 rounded w-full text-black"
+                  className={`w-full p-2 rounded ${
+                    isDarkMode 
+                      ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
+                      : 'bg-white border-gray-300 text-black'
+                  }`}
                   required
                 />
                 <button
@@ -217,7 +269,11 @@ export default function EditTanodModal({ showModal, closeModal, handleEditTanod,
           <div className="flex justify-end">
             <button
               type="submit"
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2"
+              className={`px-4 py-2 rounded ${
+                isDarkMode
+                  ? 'bg-[#4750eb] hover:bg-[#191f8a]'
+                  : 'bg-blue-500 hover:bg-blue-600'
+              } text-white mr-2`}
               disabled={loading}
             >
               {loading ? "Saving..." : "Save Changes"}
@@ -225,7 +281,11 @@ export default function EditTanodModal({ showModal, closeModal, handleEditTanod,
             <button
               type="button"
               onClick={handleClose}
-              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              className={`px-4 py-2 rounded ${
+                isDarkMode
+                  ? 'bg-gray-700 hover:bg-gray-600'
+                  : 'bg-gray-500 hover:bg-gray-600'
+              } text-white`}
             >
               Cancel
             </button>

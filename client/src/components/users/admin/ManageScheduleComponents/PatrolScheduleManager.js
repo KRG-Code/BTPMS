@@ -1,19 +1,42 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import axios from 'axios';
+import { motion } from 'framer-motion';
+import { FaMapMarkedAlt, FaCalendarAlt, FaSyncAlt, FaUsers, FaCheckCircle } from 'react-icons/fa';
 
+const fadeIn = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.4 } }
+};
 
-const PatrolScheduleManager = ({ polygons }) => {
+const slideUp = {
+  hidden: { y: 20, opacity: 0 },
+  visible: i => ({ 
+    y: 0, 
+    opacity: 1, 
+    transition: { delay: i * 0.1, duration: 0.5 } 
+  })
+};
+
+const buttonScale = {
+  hover: { scale: 1.05, transition: { duration: 0.2 } },
+  tap: { scale: 0.95, transition: { duration: 0.1 } }
+};
+
+const PatrolScheduleManager = ({ polygons, isDarkMode }) => {
   const [schedules, setSchedules] = useState([]);
   const [selectedSchedule, setSelectedSchedule] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
+  const [loading, setLoading] = useState(false);
   const API_URL = process.env.REACT_APP_API_URL;
 
-   // Memoize the fetchData function using useCallback
-   const fetchData = useCallback(async () => {
+  // Memoize the fetchData function using useCallback
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('User is not authenticated.');
+      setLoading(false);
       return;
     }
 
@@ -38,6 +61,8 @@ const PatrolScheduleManager = ({ polygons }) => {
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load schedules.');
+    } finally {
+      setLoading(false);
     }
   }, [API_URL]); // Add API_URL as dependency
 
@@ -63,27 +88,31 @@ const PatrolScheduleManager = ({ polygons }) => {
     toast.info(
       <div>
         <p>Are you sure you want to assign this patrol area to the selected schedule?</p>
-        <button
-          className="bg-green-500 text-white p-2 rounded m-2"
-          onClick={() => confirmAssignPatrolArea()}
-        >
-          Yes
-        </button>
-        <button
-          className="bg-red-500 text-white p-2 rounded m-2"
-          onClick={() => toast.dismiss()}
-        >
-          No
-        </button>
+        <div className="flex justify-center mt-3 space-x-3">
+          <button
+            className={`px-4 py-2 rounded-lg ${isDarkMode ? 'bg-green-700 text-white' : 'bg-green-500 text-white'}`}
+            onClick={() => confirmAssignPatrolArea()}
+          >
+            Yes
+          </button>
+          <button
+            className={`px-4 py-2 rounded-lg ${isDarkMode ? 'bg-red-700 text-white' : 'bg-red-500 text-white'}`}
+            onClick={() => toast.dismiss()}
+          >
+            No
+          </button>
+        </div>
       </div>,
       { autoClose: false }
     );
   };
   
   const confirmAssignPatrolArea = async () => {
+    setLoading(true);
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('User is not authenticated.');
+      setLoading(false);
       return;
     }
   
@@ -108,98 +137,242 @@ const PatrolScheduleManager = ({ polygons }) => {
     } catch (error) {
       console.error('Error assigning patrol area:', error);
       toast.error('Failed to assign patrol area.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const isAreaAvailable = (areaId, startTime, endTime) => {
+    if (!startTime || !endTime) return true;
     return !schedules.some(schedule => 
       schedule.patrolArea && schedule.patrolArea._id === areaId &&
       ((new Date(schedule.startTime) < new Date(endTime) && new Date(schedule.endTime) > new Date(startTime)))
     );
   };
 
+  // Get the selected schedule details
+  const selectedScheduleDetails = selectedSchedule 
+    ? schedules.find(schedule => schedule._id === selectedSchedule)
+    : null;
+
+  const getStatusBadgeColor = (status) => {
+    if (isDarkMode) {
+      switch(status) {
+        case 'Upcoming': return 'bg-blue-900 text-blue-100';
+        case 'Ongoing': return 'bg-green-900 text-green-100';
+        case 'Completed': return 'bg-gray-700 text-gray-100';
+        default: return 'bg-gray-700 text-gray-100';
+      }
+    } else {
+      switch(status) {
+        case 'Upcoming': return 'bg-blue-100 text-blue-800';
+        case 'Ongoing': return 'bg-green-100 text-green-800';
+        case 'Completed': return 'bg-gray-100 text-gray-800';
+        default: return 'bg-gray-100 text-gray-800';
+      }
+    }
+  };
+
   return (
-    <div className="p-6 bg-gray-100 rounded-xl shadow-lg space-y-6 TopNav">
-            <h3 className="text-2xl font-semibold text-center text-blue-700 mb-4">Patrol Schedule Manager</h3>
-      {/* Schedule Dropdown */}
-      <div className="mb-6">
-        <label className="block text-lg font-semibold mb-2">Select a Schedule:</label>
-        <select
-          value={selectedSchedule}
-          onChange={(e) => setSelectedSchedule(e.target.value)}
+    <motion.div 
+      className={`rounded-xl shadow-lg overflow-hidden ${isDarkMode ? 'bg-[#0e1022]' : 'bg-white'}`}
+      initial="hidden"
+      animate="visible"
+      variants={fadeIn}
+    >
+      <div className={`${isDarkMode 
+        ? 'bg-gradient-to-r from-[#191f8a] to-[#4750eb]' 
+        : 'bg-gradient-to-r from-[#191d67] to-[#141db8]'} px-6 py-4 text-white flex justify-between items-center`}>
+        <h3 className="text-xl font-semibold flex items-center">
+          <FaMapMarkedAlt className="mr-2" />
+          Patrol Area Assignment
+        </h3>
+        <motion.button
+          variants={buttonScale}
+          whileHover="hover"
+          whileTap="tap"
           onClick={fetchData}
-          className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+          className={`p-2 rounded-full ${isDarkMode ? 'bg-[#080917] bg-opacity-30' : 'bg-white bg-opacity-20'}`}
+          disabled={loading}
         >
-          <option value="" disabled>Select available schedule</option>
-          {schedules.length > 0 ? (
-            schedules
-              .filter((schedule) => !schedule.patrolArea) // Exclude schedules with assigned patrol areas
-              .map((schedule) => {
-              const { date: startDate, time: startTime } = formatDateTime(schedule.startTime);
-              const { date: endDate, time: endTime } = formatDateTime(schedule.endTime);
-              return (
-                <option key={schedule._id} value={schedule._id} className="text-justify">
-                  {schedule.unit}: {startDate}: {startTime} - {endDate} {endTime} ({schedule.status})
-                </option>
-              );
-            })
-          ) : (
-            <option value="" disabled>No schedules available</option>
-          )}
-        </select>
+          <FaSyncAlt className={`${loading ? 'animate-spin' : ''}`} />
+        </motion.button>
       </div>
 
-      {/* Patrol Area Dropdown */}
-      <div className="mb-6">
-        <label className="block text-lg font-semibold mb-2">Select Patrol Area:</label>
-        <select
-          value={selectedArea}
-          onChange={(e) => setSelectedArea(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+      <div className="p-6 space-y-5">
+        {/* Schedule Dropdown */}
+        <motion.div 
+          variants={slideUp} 
+          custom={0}
+          className="space-y-2"
         >
-          <option value="" disabled>Select a patrol area</option>
-          {polygons.length > 0 ? (
-            polygons
-              .filter((polygon) => isAreaAvailable(polygon._id, schedules.find(schedule => schedule._id === selectedSchedule)?.startTime, schedules.find(schedule => schedule._id === selectedSchedule)?.endTime))
-              .map((polygon) => (
-                <option key={polygon._id} value={polygon._id}>
-                  {polygon.legend || 'No legend available'}
-                </option>
-              ))
-          ) : (
-            <option value="" disabled>No patrol areas available</option>
-          )}
-        </select>
-      </div>
+          <label className={`block font-medium ${isDarkMode ? 'text-[#e7e8f4]' : 'text-gray-700'}`}>
+            <FaCalendarAlt className="inline mr-2" />
+            Select Schedule:
+          </label>
+          <select
+            value={selectedSchedule}
+            onChange={(e) => setSelectedSchedule(e.target.value)}
+            className={`w-full px-4 py-3 rounded-lg border ${
+              isDarkMode 
+              ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
+              : 'bg-white border-gray-300 text-gray-800'
+            } focus:ring-2 ${isDarkMode ? 'focus:ring-[#4750eb]' : 'focus:ring-blue-500'}`}
+            disabled={loading}
+          >
+            <option value="" className={isDarkMode ? 'bg-[#080917] text-[#e7e8f4]' : ''}>-- Select a schedule --</option>
+            {schedules.length > 0 ? (
+              schedules
+                .filter((schedule) => !schedule.patrolArea) // Exclude schedules with assigned patrol areas
+                .map((schedule) => {
+                  const { date: startDate, time: startTime } = formatDateTime(schedule.startTime);
+                  const { date: endDate, time: endTime } = formatDateTime(schedule.endTime);
+                  return (
+                    <option 
+                      key={schedule._id} 
+                      value={schedule._id}
+                      className={isDarkMode ? 'bg-[#080917] text-[#e7e8f4]' : ''}
+                    >
+                      {schedule.unit}: {startDate}, {startTime} - {endTime}
+                    </option>
+                  );
+                })
+            ) : null}
+          </select>
+        </motion.div>
 
-      {/* Assign Patrol Area Button */}
-      <div className="flex justify-center">
-        <button
-          onClick={handleAssignPatrolArea}
-          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition duration-200 ease-in-out"
+        {/* Patrol Area Dropdown */}
+        <motion.div 
+          variants={slideUp} 
+          custom={1}
+          className="space-y-2"
         >
-          Assign Patrol Area
-        </button>
-      </div>
+          <label className={`block font-medium ${isDarkMode ? 'text-[#e7e8f4]' : 'text-gray-700'}`}>
+            <FaMapMarkedAlt className="inline mr-2" />
+            Select Patrol Area:
+          </label>
+          <select
+            value={selectedArea}
+            onChange={(e) => setSelectedArea(e.target.value)}
+            className={`w-full px-4 py-3 rounded-lg border ${
+              isDarkMode 
+              ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
+              : 'bg-white border-gray-300 text-gray-800'
+            } focus:ring-2 ${isDarkMode ? 'focus:ring-[#4750eb]' : 'focus:ring-blue-500'}`}
+            disabled={!selectedSchedule || loading}
+          >
+            <option value="" className={isDarkMode ? 'bg-[#080917] text-[#e7e8f4]' : ''}>-- Select a patrol area --</option>
+            {polygons.length > 0 ? (
+              polygons
+                .filter((polygon) => isAreaAvailable(
+                  polygon._id,
+                  selectedScheduleDetails?.startTime,
+                  selectedScheduleDetails?.endTime
+                ))
+                .map((polygon) => (
+                  <option 
+                    key={polygon._id} 
+                    value={polygon._id}
+                    className={isDarkMode ? 'bg-[#080917] text-[#e7e8f4]' : ''}
+                  >
+                    {polygon.legend || 'Unnamed Area'}
+                  </option>
+                ))
+            ) : null}
+          </select>
+        </motion.div>
 
-      {/* Selected Information */}
-      {selectedSchedule && (
-        <div className="p-4 bg-blue-50 rounded-lg shadow-md">
-          <h4 className="text-lg font-semibold text-blue-700">Selected Schedule Details</h4>
-          <div className="mt-2 text-gray-700 space-y-2">
-            <p><strong>Unit:</strong> {schedules.find((schedule) => schedule._id === selectedSchedule)?.unit}</p>
-            <p><strong>Members:</strong> {schedules.find((schedule) => schedule._id === selectedSchedule)?.tanods.map(tanod => `${tanod.firstName} ${tanod.lastName}`).join(', ')}</p>
-            <p>
-              <strong>Time:</strong> 
-              {schedules.find((schedule) => schedule._id === selectedSchedule) && 
-                `${formatDateTime(schedules.find((schedule) => schedule._id === selectedSchedule).startTime).date}: 
-                 ${formatDateTime(schedules.find((schedule) => schedule._id === selectedSchedule).startTime).time} - 
-                 ${formatDateTime(schedules.find((schedule) => schedule._id === selectedSchedule).endTime).time}`}
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
+        {/* Selected Schedule Details */}
+        {selectedScheduleDetails && (
+          <motion.div 
+            variants={slideUp} 
+            custom={2}
+            className={`mt-4 p-4 rounded-lg ${
+              isDarkMode ? 'bg-[#080917] border border-[#1e2048]' : 'bg-blue-50'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h4 className={`font-medium ${isDarkMode ? 'text-[#e7e8f4]' : 'text-blue-800'}`}>
+                Schedule Details
+              </h4>
+              <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusBadgeColor(selectedScheduleDetails.status)}`}>
+                {selectedScheduleDetails.status}
+              </span>
+            </div>
+            
+            <div className={`space-y-2 ${isDarkMode ? 'text-[#989ce6]' : 'text-gray-700'}`}>
+              <div className="flex items-center">
+                <span className="font-medium w-24">Unit:</span>
+                <span>{selectedScheduleDetails.unit}</span>
+              </div>
+              
+              <div className="flex items-start">
+                <span className="font-medium w-24">Members:</span>
+                <div className="flex-1">
+                  <div className="flex items-center">
+                    <FaUsers className="mr-1" />
+                    <span>{selectedScheduleDetails.tanods?.length || 0} members</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {selectedScheduleDetails.tanods?.map(tanod => (
+                      <span key={tanod._id} className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
+                        isDarkMode ? 'bg-[#191f8a] text-[#e7e8f4]' : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {tanod.firstName} {tanod.lastName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center">
+                <span className="font-medium w-24">Time:</span>
+                <div>
+                  <div>
+                    {formatDateTime(selectedScheduleDetails.startTime).date}
+                  </div>
+                  <div>
+                    {formatDateTime(selectedScheduleDetails.startTime).time} - {formatDateTime(selectedScheduleDetails.endTime).time}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Assign Button */}
+        <motion.div 
+          variants={slideUp} 
+          custom={3}
+          className="flex justify-center pt-4"
+        >
+          <motion.button
+            variants={buttonScale}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={handleAssignPatrolArea}
+            disabled={!selectedSchedule || !selectedArea || loading}
+            className={`px-5 py-2.5 rounded-lg flex items-center justify-center ${
+              isDarkMode 
+              ? 'bg-[#4750eb] hover:bg-[#191f8a] text-white' 
+              : 'bg-[#141db8] hover:bg-[#191d67] text-white'
+            } ${(!selectedSchedule || !selectedArea || loading) ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {loading ? (
+              <>
+                <FaSyncAlt className="animate-spin mr-2" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <FaCheckCircle className="mr-2" />
+                Assign Patrol Area
+              </>
+            )}
+          </motion.button>
+        </motion.div>
+      </div>
+    </motion.div>
   );
 };
 

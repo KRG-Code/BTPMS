@@ -1,26 +1,100 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { FaUserShield } from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  FaUserShield, 
+  FaCalendarAlt, 
+  FaClipboardList, 
+  FaExclamationTriangle,
+  FaPencilAlt,
+  FaTrashAlt,
+  FaSave,
+  FaClipboardCheck,
+  FaMapMarkedAlt,
+  FaEye,
+  FaPaperPlane,
+  FaLocationArrow,
+  FaLock,
+  FaChevronDown,
+  FaChevronUp
+} from "react-icons/fa";
 import TanodPatrolSchedule from "./incidentComponents/TanodPatrolSchedule";
 import ReportIncident from "./incidentComponents/IncidentResponse";
 import ViewReportedIncidents from "./incidentComponents/ViewReportedIncidents";
-import io from 'socket.io-client'; // Import socket.io-client
-import { MapContainer } from 'react-leaflet'; // Import MapContainer
+import { useTheme } from "../../../contexts/ThemeContext";
+
+// Animation variants
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { 
+    opacity: 1,
+    transition: { 
+      staggerChildren: 0.1,
+      when: "beforeChildren" 
+    }
+  },
+  exit: { 
+    opacity: 0,
+    transition: { duration: 0.2 } 
+  }
+};
+
+const itemVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: { 
+    y: 0, 
+    opacity: 1, 
+    transition: { 
+      type: "spring",
+      damping: 25,
+      stiffness: 200
+    }
+  },
+  exit: { 
+    y: -20, 
+    opacity: 0,
+    transition: { duration: 0.15 } 
+  }
+};
+
+const buttonVariants = {
+  hover: { scale: 1.05, transition: { duration: 0.2 } },
+  tap: { scale: 0.95 }
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      damping: 25,
+      stiffness: 200
+    }
+  },
+  exit: { opacity: 0, y: -20, transition: { duration: 0.2 } }
+};
 
 const Incidents = ({ 
   fetchCurrentPatrolArea, 
   setUserLocation, 
   setIncidentLocations, 
   incidentReports,
-  setIncidentReports, // Add this prop
+  setIncidentReports,
   isTrackingVisible, 
   toggleTracking,
   showReportIncident,
   setShowReportIncident,
   selectedIncidentForResponse,
-  setSelectedIncidentForResponse
-}) => { // Add setUserLocation as a prop
+  setSelectedIncidentForResponse,
+  socketRef,
+  initializeSocket,
+  userProfile,
+  prevUserLocation,
+  setPrevUserLocation
+}) => {
   const [patrols, setPatrols] = useState([]);
   const [upcomingPatrols, setUpcomingPatrols] = useState([]);
   const [incident, setIncident] = useState({ type: "", description: "", location: "" });
@@ -33,42 +107,35 @@ const Incidents = ({
   const [patrolLogs, setPatrolLogs] = useState(JSON.parse(localStorage.getItem("patrolLogs")) || []);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState(null);
-  const [editIndex, setEditIndex] = useState(null); // Track the index being edited
+  const [editIndex, setEditIndex] = useState(null);
   const [hasStartedPatrol, setHasStartedPatrol] = useState(false);
-  const [currentScheduleId, setCurrentScheduleId] = useState(null); // Track the current schedule ID
-  const [isTracking, setIsTracking] = useState(JSON.parse(localStorage.getItem("isTracking")) || false); // Persist tracking state
-  const [userProfile, setUserProfile] = useState(null); // Define userProfile
-  const [watchId, setWatchId] = useState(null); // Add state to store watchId
-  const [intervalId, setIntervalId] = useState(null); // Add state to store intervalId
-  const socketRef = useRef(null); // Add socketRef
+  const [currentScheduleId, setCurrentScheduleId] = useState(null);
+  const [isTracking, setIsTracking] = useState(JSON.parse(localStorage.getItem("isTracking")) || false);
   const watchPositionId = useRef(null);
-  const [prevUserLocation, setPrevUserLocation] = useState(null);  // Add this state
+  const [showLogForm, setShowLogForm] = useState(false);
+  const { isDarkMode } = useTheme();
 
-  // Add global animation styles
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-@keyframes pulse {
-  0% { transform: scale(0.1); opacity: 1; }
-  50% { transform: scale(1); opacity: .5; }
-  100% { transform: scale(1.5); opacity: 0; }
-}
-
-@keyframes markerPulse {
-  0% { transform: scale(0.1); opacity: 1; }
-  50% { transform: scale(1); opacity: 0.5; }
-  100% { transform: scale(1.5); opacity: 0; }
-}
-
-.pulse-animation {
-  animation: pulse 2s ease-out infinite;
-}
-    `;
-    document.head.appendChild(style);
-    return () => document.head.removeChild(style);
-  }, []);
+  // Get theme aware styles
+  const cardBg = isDarkMode ? 'bg-gray-800' : 'bg-white';
+  const textColor = isDarkMode ? 'text-gray-100' : 'text-gray-800';
+  const subTextColor = isDarkMode ? 'text-gray-400' : 'text-gray-600';
+  const borderColor = isDarkMode ? 'border-gray-700' : 'border-gray-200';
+  const headerBg = isDarkMode ? 'bg-gray-900' : 'bg-blue-50';
+  const buttonPrimary = isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600';
+  const buttonSecondary = isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300';
+  const buttonWarning = isDarkMode ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-yellow-500 hover:bg-yellow-600';
+  const buttonDanger = isDarkMode ? 'bg-red-600 hover:bg-red-700' : 'bg-red-500 hover:bg-red-600';
+  const buttonSuccess = isDarkMode ? 'bg-green-600 hover:bg-green-700' : 'bg-green-500 hover:bg-green-600';
+  const inputBg = isDarkMode ? 'bg-gray-700' : 'bg-white';
+  const inputText = isDarkMode ? 'text-white' : 'text-black';
+  const inputBorder = isDarkMode ? 'border-gray-600' : 'border-gray-300';
+  const tableBg = isDarkMode ? 'bg-gray-800' : 'bg-white';
+  const tableHeaderBg = isDarkMode ? 'bg-gray-900' : 'bg-blue-50';
+  const tableRowHover = isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50';
 
   const fetchUserProfile = async () => {
+    if (userProfile) return userProfile;
+    
     const token = localStorage.getItem("token");
     if (!token) {
       toast.error("Please log in.");
@@ -79,8 +146,7 @@ const Incidents = ({
       const response = await axios.get(`${process.env.REACT_APP_API_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      localStorage.setItem("userId", response.data._id); // Store userId in localStorage
-      setUserProfile(response.data); // Set userProfile
+      localStorage.setItem("userId", response.data._id);
       return response.data;
     } catch (error) {
       console.error("Error fetching user profile:", error);
@@ -91,11 +157,11 @@ const Incidents = ({
 
   const fetchUpcomingPatrols = async () => {
     const token = localStorage.getItem('token');
-    const userProfile = await fetchUserProfile();
-    if (!token || !userProfile) return;
+    const profile = await fetchUserProfile();
+    if (!token || !profile) return;
 
     try {
-      const response = await axios.get(`${process.env.REACT_APP_API_URL}/auth/tanod-schedules/${userProfile._id}`, {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/auth/tanod-schedules/${profile._id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const schedulesWithPatrolArea = await Promise.all(
@@ -127,18 +193,17 @@ const Incidents = ({
         return startTime.toDateString() === today.toDateString();
       }));
       const startedPatrol = schedulesWithPatrolArea.some(schedule => {
-        const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === userProfile._id);
+        const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === profile._id);
         return patrolStatus && patrolStatus.status === 'Started';
       });
       setHasStartedPatrol(startedPatrol);
 
       if (startedPatrol) {
         const currentSchedule = schedulesWithPatrolArea.find(schedule => {
-          const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === userProfile._id);
+          const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === profile._id);
           return patrolStatus && patrolStatus.status === 'Started';
         });
-        setCurrentScheduleId(currentSchedule._id); // Set the current schedule ID
-
+        setCurrentScheduleId(currentSchedule._id);
       }
     } catch (error) {
       console.error('Error fetching upcoming patrols:', error);
@@ -155,7 +220,6 @@ const Incidents = ({
   };
 
   const savePatrolLog = () => {
-    // Check if the report is empty or only contains whitespace
     if (!currentReport || !currentReport.trim()) {
       toast.error("Cannot save empty patrol log.");
       return;
@@ -166,18 +230,16 @@ const Incidents = ({
 
     let updatedLogs;
     if (editIndex !== null) {
-      // Update the existing log entry
       updatedLogs = patrolLogs.map((log, index) => (index === editIndex ? logEntry : log));
-      setEditIndex(null); // Reset the edit index
+      setEditIndex(null);
     } else {
-      // Add a new log entry
       updatedLogs = [...patrolLogs, logEntry];
     }
 
     setPatrolLogs(updatedLogs);
     localStorage.setItem("patrolLogs", JSON.stringify(updatedLogs));
     localStorage.setItem("currentReport", "");
-    setCurrentReport(""); // Clear the text area after saving
+    setCurrentReport("");
     toast.success("Patrol log saved.");
   };
 
@@ -198,7 +260,7 @@ const Incidents = ({
   const editPatrolLog = (index) => {
     const log = patrolLogs[index];
     setCurrentReport(log.report);
-    setEditIndex(index); // Set the index being edited
+    setEditIndex(index);
   };
 
   const uploadPatrolLogs = async (scheduleId) => {
@@ -208,13 +270,13 @@ const Incidents = ({
     try {
       await axios.post(`${process.env.REACT_APP_API_URL}/auth/save-patrol-logs`, {
         scheduleId,
-        logs: patrolLogs.filter(log => log.scheduleId === scheduleId), // Filter logs by schedule ID
+        logs: patrolLogs.filter(log => log.scheduleId === scheduleId),
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setPatrolLogs([]); // Clear the logs after saving
-      localStorage.removeItem("patrolLogs"); // Clear local storage
+      setPatrolLogs([]);
+      localStorage.removeItem("patrolLogs");
       toast.success("Patrol logs uploaded successfully");
     } catch (error) {
       console.error('Error uploading patrol logs:', error);
@@ -223,296 +285,272 @@ const Incidents = ({
   };
 
   // Update the fetchPatrolAreaColor function
-const fetchPatrolAreaColor = async (scheduleId) => {
-  try {
-    const token = localStorage.getItem('token');
-    const schedule = await axios.get(
-      `${process.env.REACT_APP_API_URL}/auth/schedule/${scheduleId}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    // Extract patrol area ID properly
-    const patrolAreaId = schedule.data.patrolArea?._id || schedule.data.patrolArea;
-    
-    if (patrolAreaId) {
-      const patrolArea = await axios.get(
-        `${process.env.REACT_APP_API_URL}/polygons/${patrolAreaId}`,
+  const fetchPatrolAreaColor = async (scheduleId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const schedule = await axios.get(
+        `${process.env.REACT_APP_API_URL}/auth/schedule/${scheduleId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      return patrolArea.data.color;
+
+      const patrolAreaId = schedule.data.patrolArea?._id || schedule.data.patrolArea;
+      
+      if (patrolAreaId) {
+        const patrolArea = await axios.get(
+          `${process.env.REACT_APP_API_URL}/polygons/${patrolAreaId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        return patrolArea.data.color;
+      }
+      return 'red';
+    } catch (error) {
+      console.error('Error fetching patrol area color:', error);
+      return 'red';
     }
-    return 'red'; // default color
-  } catch (error) {
-    console.error('Error fetching patrol area color:', error);
-    return 'red'; // default color
-  }
-};
-
-// Update updateUserLocation to include better error logging
-const updateUserLocation = async (position, profile) => {
-  if (!profile || !position?.coords) return;
-
-  const { latitude, longitude } = position.coords;
-  
-  const newLocation = {
-    latitude,
-    longitude,
-    currentScheduleId,
-    markerColor: currentScheduleId ? await fetchPatrolAreaColor(currentScheduleId) : 'red',
-    isOnPatrol: !!currentScheduleId
   };
 
-  // Only update if location has actually changed
-  if (!hasLocationChanged(prevUserLocation, newLocation)) {
-    return;
-  }
-  
-  try {
-    const token = localStorage.getItem('token');
+  // Improved location update function with better error handling
+  const updateUserLocation = async (position, profile) => {
+    if (!profile || !position?.coords) return;
+
+    const { latitude, longitude } = position.coords;
     
-    await axios.post(
-      `${process.env.REACT_APP_API_URL}/locations/update`,
-      {
-        ...newLocation,
-        userId: profile._id
-      },
-      {
-        headers: { Authorization: `Bearer ${token}` }
-      }
-    );
-    
-    const locationData = {
-      ...newLocation,
-      firstName: profile.firstName,
-      lastName: profile.lastName,
-      profilePicture: profile.profilePicture,
+    const newLocation = {
+      latitude,
+      longitude,
+      currentScheduleId,
+      markerColor: currentScheduleId ? await fetchPatrolAreaColor(currentScheduleId) : 'red',
+      isOnPatrol: !!currentScheduleId,
+      lastUpdate: Date.now() // Add timestamp to track freshness
     };
 
-    setPrevUserLocation(locationData);
-    setUserLocation(locationData); // Always update location
-
-  } catch (error) {
-    console.error('Error updating location:', error?.response?.data || error.message);
-    toast.error('Failed to update location');
-  }
-};
-
-// Add helper function to check if location update is needed
-const shouldUpdateLocation = (newLocation) => {
-  if (!prevUserLocation) {
-    setPrevUserLocation(newLocation);
-    return true;
-  }
-  
-  const minDistanceChange = 5; // 5 meters minimum change
-  const distance = calculateDistance(
-    prevUserLocation.latitude,
-    prevUserLocation.longitude,
-    newLocation.latitude,
-    newLocation.longitude
-  );
-
-  const shouldUpdate = distance > minDistanceChange || 
-                       prevUserLocation.currentScheduleId !== newLocation.currentScheduleId ||
-                       prevUserLocation.areaColor !== newLocation.areaColor;
-  
-  if (shouldUpdate) {
-    setPrevUserLocation(newLocation);
-  }
-  
-  return shouldUpdate;
-};
-
-// Add distance calculation helper
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lon2-lon1) * Math.PI/180;
-
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-          Math.cos(φ1) * Math.cos(φ2) *
-          Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-  return R * c;
-};
-
-const startLocationTracking = async () => {
-  const profile = await fetchUserProfile();
-  if (!profile) {
-    toast.error("Failed to fetch user profile");
-    return;
-  }
-
-  if (navigator.geolocation) {
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 5000, // Update this to cache positions for 5 seconds
-      distanceFilter: 5
-    };
-
-    try {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          updateUserLocation(position, profile);
-          
-          if (watchPositionId.current) {
-            navigator.geolocation.clearWatch(watchPositionId.current);
-          }
-          
-          watchPositionId.current = navigator.geolocation.watchPosition(
-            (position) => updateUserLocation(position, profile),
-            handleLocationError,
-            options
-          );
-        },
-        handleLocationError,
-        options
-      );
-    } catch (error) {
-      console.error('Geolocation error:', error);
-      toast.error('Error initializing location tracking');
+    // Only update if location has actually changed
+    if (!hasLocationChanged(prevUserLocation, newLocation)) {
+      return;
     }
-  } else {
-    toast.error('Geolocation is not supported by your browser');
-  }
-};
+    
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Send update to server
+      await axios.post(
+        `${process.env.REACT_APP_API_URL}/locations/update`,
+        {
+          ...newLocation,
+          userId: profile._id
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      
+      // Create complete location data object
+      const locationData = {
+        ...newLocation,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        profilePicture: profile.profilePicture,
+      };
 
-const startTracking = async () => {
-  const profile = await fetchUserProfile();
-  if (!profile) {
-    toast.error("Failed to fetch user profile");
-    return;
-  }
+      // Update state
+      setPrevUserLocation(locationData);
+      setUserLocation(locationData);
 
-  setIsTracking(true);
-  toggleTracking();
-  localStorage.setItem("isTracking", "true");
+    } catch (error) {
+      console.error('Error updating location:', error?.response?.data || error.message);
+    }
+  };
 
-  // Only initialize socket if it doesn't exist
-  if (!socketRef.current) {
-    const socketUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://barangaypatrol.lgu1.com'
-      : 'http://localhost:5000';
+  const hasLocationChanged = (prevLoc, newLoc) => {
+    if (!prevLoc) return true;
+    
+    // Check if location has moved at least 5 meters or other properties changed
+    return (
+      calculateDistance(
+        prevLoc.latitude,
+        prevLoc.longitude,
+        newLoc.latitude,
+        newLoc.longitude
+      ) > 5 ||
+      prevLoc.currentScheduleId !== newLoc.currentScheduleId ||
+      prevLoc.markerColor !== newLoc.markerColor ||
+      prevLoc.isOnPatrol !== newLoc.isOnPatrol
+    );
+  };
 
-    const token = localStorage.getItem('token');
-    if (!token) {
-      toast.error('Authentication required');
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  };
+
+  // Improved location tracking with better error handling
+  const startLocationTracking = async () => {
+    const profile = await fetchUserProfile();
+    if (!profile) {
+      toast.error("Failed to fetch user profile");
       return;
     }
 
-    socketRef.current = io(socketUrl, {
-      auth: { token },
-      withCredentials: true,
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 20000
-    });
+    if (navigator.geolocation) {
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 3000 // Cache positions for 3 seconds
+      };
 
-    socketRef.current.on('connect', () => {
-      console.log('Connected to socket server');
-      socketRef.current.emit('joinTrackingRoom');
-      startLocationTracking(); // Start location tracking after socket connects
-    });
-
-    socketRef.current.on('locationUpdate', (data) => {
-      if (data.userId?._id === profile._id) {
-        const locationData = {
-          ...data,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          markerColor: data.markerColor || 'red',
-          isOnPatrol: data.isOnPatrol || false,
-          profilePicture: profile.profilePicture,
-          firstName: profile.firstName,
-          lastName: profile.lastName
-        };
-        setUserLocation(locationData);
+      try {
+        // Get initial position immediately
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            updateUserLocation(position, profile);
+            
+            // Clear any existing watch
+            if (watchPositionId.current) {
+              navigator.geolocation.clearWatch(watchPositionId.current);
+            }
+            
+            // Start continuous watching
+            watchPositionId.current = navigator.geolocation.watchPosition(
+              (position) => updateUserLocation(position, profile),
+              handleLocationError,
+              options
+            );
+          },
+          handleLocationError,
+          options
+        );
+      } catch (error) {
+        console.error('Geolocation error:', error);
+        toast.error('Error initializing location tracking');
       }
-    });
-  } else {
-    // If socket exists, just start location tracking
-    startLocationTracking();
-  }
-};
+    } else {
+      toast.error('Geolocation is not supported by your browser');
+    }
+  };
 
-const stopTracking = async () => {
-  try {
-    // Clear the watch position first
-    if (watchPositionId.current) {
-      navigator.geolocation.clearWatch(watchPositionId.current);
-      watchPositionId.current = null;
+  // Enhanced tracking start with better socket initialization
+  const startTracking = async () => {
+    const profile = await fetchUserProfile();
+    if (!profile) {
+      toast.error("Failed to fetch user profile");
+      return;
     }
 
-    const token = localStorage.getItem('token');
-    await axios.post(
-      `${process.env.REACT_APP_API_URL}/locations/deactivate`,
-      {},
-      {
-        headers: { Authorization: `Bearer ${token}` }
-      }
-    );
-
-    setIsTracking(false);
+    setIsTracking(true);
     toggleTracking();
-    localStorage.setItem("isTracking", "false");
-    setUserLocation(null);
-  } catch (error) {
-    console.error('Error deactivating tracking:', error);
-    toast.error('Failed to stop tracking');
-  }
-};
+    localStorage.setItem("isTracking", "true");
 
-const handleLocationError = (error) => {
-  let errorMessage = '';
-  
-  switch (error.code) {
-    case error.PERMISSION_DENIED:
-      errorMessage = "Location access denied. Please enable location services in your browser settings.";
-      break;
-    case error.POSITION_UNAVAILABLE:
-      errorMessage = "Location information is unavailable. Please check your device's GPS settings.";
-      break;
-    case error.TIMEOUT:
-      errorMessage = "Location request timed out. Please try again.";
-      break;
-    case error.UNKNOWN_ERROR:
-    default:
-      errorMessage = "An unknown error occurred while getting location.";
-      break;
-  }
+    // Initialize socket if it doesn't exist
+    if (!socketRef.current) {
+      socketRef.current = initializeSocket();
 
-  console.error('Geolocation error:', error.code, error.message);
-  toast.error(errorMessage);
+      if (socketRef.current) {
+        socketRef.current.on('connect', () => {
+          console.log('Connected to socket server');
+          socketRef.current.emit('joinTrackingRoom');
+          startLocationTracking();
+        });
 
-  // Stop tracking if there's a critical error
-  if (error.code === error.PERMISSION_DENIED) {
-    stopTracking();
-  }
-};
+        // Setup location update handler
+        socketRef.current.on('locationUpdate', (data) => {
+          if (data.userId?._id === profile._id) {
+            const locationData = {
+              ...data,
+              latitude: data.latitude,
+              longitude: data.longitude,
+              markerColor: data.markerColor || 'red',
+              isOnPatrol: data.isOnPatrol || false,
+              profilePicture: profile.profilePicture,
+              firstName: profile.firstName,
+              lastName: profile.lastName,
+              lastUpdate: Date.now() // Add timestamp
+            };
+            
+            // Always update current location to ensure the marker is visible
+            setUserLocation(locationData);
+            setPrevUserLocation(locationData);
+          }
+        });
+      }
+    } else {
+      // If socket already exists but isn't connected, reconnect
+      if (socketRef.current && !socketRef.current.connected) {
+        socketRef.current.connect();
+      }
+      
+      // Start location tracking even if socket exists
+      startLocationTracking();
+    }
+  };
 
-// Add this helper function at the top level of your component
-const hasLocationChanged = (prevLoc, newLoc) => {
-  if (!prevLoc) return true;
-  
-  return (
-    prevLoc.latitude !== newLoc.latitude ||
-    prevLoc.longitude !== newLoc.longitude ||
-    prevLoc.currentScheduleId !== newLoc.currentScheduleId ||
-    prevLoc.markerColor !== newLoc.markerColor ||
-    prevLoc.isOnPatrol !== newLoc.isOnPatrol
-  );
-};
+  const stopTracking = async () => {
+    try {
+      // Clear the watch position first
+      if (watchPositionId.current) {
+        navigator.geolocation.clearWatch(watchPositionId.current);
+        watchPositionId.current = null;
+      }
+
+      // Update server
+      const token = localStorage.getItem('token');
+      await axios.post(
+        `${process.env.REACT_APP_API_URL}/locations/deactivate`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Update state
+      setIsTracking(false);
+      toggleTracking();
+      localStorage.setItem("isTracking", "false");
+      setUserLocation(null);
+    } catch (error) {
+      console.error('Error deactivating tracking:', error);
+      toast.error('Failed to stop tracking');
+    }
+  };
+
+  const handleLocationError = (error) => {
+    let errorMessage = '';
+    
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        errorMessage = "Location access denied. Please enable location services in your browser settings.";
+        break;
+      case error.POSITION_UNAVAILABLE:
+        errorMessage = "Location information is unavailable. Please check your device's GPS settings.";
+        break;
+      case error.TIMEOUT:
+        errorMessage = "Location request timed out. Please try again.";
+        break;
+      case error.UNKNOWN_ERROR:
+      default:
+        errorMessage = "An unknown error occurred while getting location.";
+        break;
+    }
+
+    console.error('Geolocation error:', error.code, error.message);
+    toast.error(errorMessage);
+
+    if (error.code === error.PERMISSION_DENIED) {
+      stopTracking();
+    }
+  };
 
   // Add effect to start tracking on component mount
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
+    const wasTracking = JSON.parse(localStorage.getItem("isTracking") || "false");
+    if (wasTracking) {
       startTracking();
     }
     
@@ -524,249 +562,337 @@ const hasLocationChanged = (prevLoc, newLoc) => {
       if (watchPositionId.current) {
         navigator.geolocation.clearWatch(watchPositionId.current);
       }
-      localStorage.setItem("isTracking", "false");
-      setIsTracking(false);
-      setUserLocation(null);
     };
   }, []);
 
-  // Replace the tracking initialization effect with this updated version
+  // Add cleanup effect
   useEffect(() => {
-    let isMounted = true;
-
-    const initializeTracking = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const wasTracking = JSON.parse(localStorage.getItem("isTracking") || "false");
-
-        if (token && wasTracking && isMounted) {
-          const profile = await fetchUserProfile();
-          if (profile && isMounted) {
-            setUserProfile(profile);
-            setIsTracking(true);
-            toggleTracking();
-
-            // Initialize socket connection first
-            if (!socketRef.current) {
-              const socketUrl = process.env.NODE_ENV === 'production' 
-                ? 'https://barangaypatrol.lgu1.com'
-                : 'http://localhost:5000';
-
-              socketRef.current = io(socketUrl, {
-                auth: { token },
-                withCredentials: true,
-                transports: ['websocket'],
-                reconnection: true,
-                reconnectionAttempts: 5,
-                reconnectionDelay: 1000,
-                timeout: 20000
-              });
-
-              socketRef.current.on('connect', () => {
-                socketRef.current.emit('joinTrackingRoom');
-                // Start location tracking only after socket connects
-                startLocationTracking();
-              });
-
-              // Set up socket event handlers
-              setupSocketHandlers(profile);
-            }
-
-            // If socket exists but not connected, connect it
-            if (socketRef.current && !socketRef.current.connected) {
-              socketRef.current.connect();
-            }
-
-            // Start location tracking if socket is already connected
-            if (socketRef.current && socketRef.current.connected) {
-              startLocationTracking();
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error initializing tracking:', error);
-        toast.error('Failed to initialize tracking');
-      }
-    };
-
-    initializeTracking();
-
     return () => {
-      isMounted = false;
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
       if (watchPositionId.current) {
         navigator.geolocation.clearWatch(watchPositionId.current);
+        watchPositionId.current = null;
       }
     };
   }, []);
 
-  // Add this new function to setup socket handlers
-  const setupSocketHandlers = (profile) => {
-    if (!socketRef.current) return;
-
-    socketRef.current.on('locationUpdate', (data) => {
-      if (data.userId?._id === profile._id) {
-        const locationData = {
-          ...data,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          markerColor: data.markerColor || 'red',
-          isOnPatrol: data.isOnPatrol || false,
-          profilePicture: profile.profilePicture,
-          firstName: profile.firstName,
-          lastName: profile.lastName
-        };
-        setUserLocation(locationData);
-      }
-    });
-
-    socketRef.current.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-      toast.error('Connection error occurred');
-    });
-  };
-
-  // Update the handleLocationUpdate function
-  const handleLocationUpdate = (data) => {
-    if (!socketRef.current) return;
-
-    if (data.userId?._id === userProfile?._id) {
-      const locationData = {
-        ...data,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        markerColor: data.markerColor || 'red',
-        isOnPatrol: data.isOnPatrol || false,
-        profilePicture: userProfile.profilePicture,
-        firstName: userProfile.firstName,
-        lastName: userProfile.lastName
-      };
-      
-      setUserLocation(locationData);
-      setPrevUserLocation(locationData);
-    }
-  };
-
   return (
-    <div className="p-2 sm:p-4 max-w-4xl mx-auto bg-white bg-opacity-75 shadow-lg rounded-lg TopNav border border-blue-600">
-      <h1 onClick={toggleDropdown} className="text-xl sm:text-2xl md:text-3xl font-bold text-center mb-2 sm:mb-4 cursor-pointer bg-blue-600 text-white py-2 px-4 rounded-lg shadow hover:bg-blue-700 transition">
-        <FaUserShield className="inline-block mr-2" />
-      </h1>
-      
-      {isDropdownOpen && (
-        <div className="dropdown-content space-y-4">
-          {/* Replace the grid layout with this new responsive layout */}
-          <div className="flex flex-col sm:flex-row gap-2 w-full">
-            <div className="flex flex-col sm:flex-row gap-2 flex-grow">
-              <button
-                onClick={() => setShowTodaySchedule(true)}
-                className="w-full sm:flex-1 bg-blue-600 text-white px-3 py-2 text-sm sm:text-base rounded-lg shadow hover:bg-blue-700 transition flex items-center justify-center"
-              >
-                Today's Schedule
-              </button>
-              <button
-                onClick={() => setShowReportedIncidents(true)}
-                className="w-full sm:flex-1 bg-yellow-600 text-white px-3 py-2 text-sm sm:text-base rounded-lg shadow hover:bg-yellow-700 transition flex items-center justify-center"
-              >
-                View Reports
-              </button>
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+      style={{ 
+        pointerEvents: isDropdownOpen ? 'auto' : 'none' 
+      }}
+    >
+      <div className="max-w-7xl mx-auto w-full">
+        {/* Main Dashboard Button - always needs pointer events */}
+        <motion.div 
+          variants={itemVariants}
+          className="flex justify-between items-center"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <motion.button
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className={`flex items-center justify-between w-full ${buttonPrimary} text-white py-2.5 px-4 rounded-xl shadow-md`}
+            aria-expanded={isDropdownOpen}
+          >
+            <div className="flex items-center">
+              <FaUserShield className="mr-3 text-xl" />
+              <span className="font-semibold text-lg">Tanod Control Panel</span>
             </div>
-            {selectedIncidentForResponse && selectedIncidentForResponse.status === 'In Progress' && (
-              <button
-                onClick={() => setShowReportIncident(true)}
-                className="w-full sm:w-auto bg-green-600 text-white px-3 py-2 text-sm sm:text-base rounded-lg shadow hover:bg-green-700 transition flex items-center justify-center"
-              >
-                Respond to Incident
-              </button>
-            )}
-          </div>
-          
-          {hasStartedPatrol && (
-            <div className="space-y-2 sm:space-y-4">
-              <h2 className="text-lg sm:text-xl md:text-2xl mb-2">Log Patrol Report</h2>
-              <textarea
-                className="border p-2 mb-2 sm:mb-4 w-full h-24 rounded text-sm sm:text-base text-black"
-                placeholder="Enter your patrol report..."
-                value={currentReport}
-                onChange={(e) => setCurrentReport(e.target.value)}
-              />
-              <button 
-                onClick={savePatrolLog} 
-                className="w-full sm:w-auto bg-blue-600 text-white text-sm sm:text-base px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition"
-              >
-                Save Log
-              </button>
-            </div>
-          )}
+            <motion.div
+              animate={{ rotate: isDropdownOpen ? 180 : 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {isDropdownOpen ? <FaChevronUp /> : <FaChevronDown />}
+            </motion.div>
+          </motion.button>
+        </motion.div>
 
-          {patrolLogs.filter(log => log.scheduleId === currentScheduleId).length > 0 && (
-            <div className="mt-4">
-              <h3 className="text-base sm:text-lg md:text-xl font-bold mb-2">Saved Patrol Logs</h3>
-              <div className="overflow-x-auto overflow-y-auto max-h-[200px] sm:max-h-[300px]">
-                <table className="min-w-full bg-white shadow-md rounded-lg border overflow-hidden text-center">
-                  <thead className="TopNav">
-                    <tr>
-                      <th className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">Time Log</th>
-                      <th className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">Report</th>
-                      <th className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-black">
-                    {patrolLogs.filter(log => log.scheduleId === currentScheduleId).map((log, index) => (
-                      <tr key={index}>
-                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">{log.timestamp}</td>
-                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">{log.report}</td>
-                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm md:text-base">
-                          <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 justify-center">
-                            <button 
-                              onClick={() => editPatrolLog(index)} 
-                              className="bg-yellow-600 text-white text-xs sm:text-sm px-2 py-1 rounded shadow hover:bg-yellow-700 transition"
-                            >
-                              Edit
-                            </button>
-                            <button 
-                              onClick={() => confirmDeletePatrolLog(index)} 
-                              className="bg-red-600 text-white text-xs sm:text-sm px-2 py-1 rounded shadow hover:bg-red-700 transition"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        {/* Dropdown Content */}
+        <AnimatePresence>
+          {isDropdownOpen && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="overflow-hidden rounded-xl mt-2"
+              style={{ maxHeight: "calc(100vh - 8rem)", overflowY: "auto" }}
+            >
+              <motion.div 
+                variants={containerVariants} 
+                initial="hidden" 
+                animate="visible"
+                className={`p-4 ${cardBg} rounded-xl shadow-lg border ${borderColor}`}
+              >
+                {/* Quick Action Buttons */}
+                <motion.div variants={itemVariants} className="mb-6">
+                  <h2 className={`text-lg font-semibold mb-3 ${textColor}`}>Quick Actions</h2>
+                  <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2">
+                    <motion.button
+                      variants={buttonVariants}
+                      whileHover="hover"
+                      whileTap="tap"
+                      onClick={() => setShowTodaySchedule(true)}
+                      className={`${buttonPrimary} text-white p-3 rounded-lg shadow-md flex flex-col items-center justify-center w-full md:flex-1`}
+                    >
+                      <FaCalendarAlt className="text-xl mb-1" />
+                      <span className="text-sm font-medium">Today's Schedule</span>
+                    </motion.button>
+                    
+                    <motion.button
+                      variants={buttonVariants}
+                      whileHover="hover"
+                      whileTap="tap"
+                      onClick={() => setShowReportedIncidents(true)}
+                      className={`${buttonWarning} text-white p-3 rounded-lg shadow-md flex flex-col items-center justify-center w-full md:flex-1`}
+                    >
+                      <FaExclamationTriangle className="text-xl mb-1" />
+                      <span className="text-sm font-medium">View Reports</span>
+                    </motion.button>
+                    
+                    {selectedIncidentForResponse && selectedIncidentForResponse.status === 'In Progress' && (
+                      <motion.button
+                        variants={buttonVariants}
+                        whileHover="hover"
+                        whileTap="tap"
+                        onClick={() => setShowReportIncident(true)}
+                        className={`${buttonSuccess} text-white p-3 rounded-lg shadow-md flex flex-col items-center justify-center w-full md:flex-1`}
+                      >
+                        <FaPaperPlane className="text-xl mb-1" />
+                        <span className="text-sm font-medium">Respond to Incident</span>
+                      </motion.button>
+                    )}
+                    
+                    <motion.button
+                      variants={buttonVariants}
+                      whileHover="hover"
+                      whileTap="tap"
+                      onClick={() => {
+                        if (isTracking) {
+                          stopTracking();
+                        } else {
+                          startTracking();
+                        }
+                      }}
+                      className={`${isTracking ? buttonDanger : buttonSuccess} text-white p-3 rounded-lg shadow-md flex flex-col items-center justify-center w-full md:flex-1`}
+                    >
+                      <FaLocationArrow className="text-xl mb-1" />
+                      <span className="text-sm font-medium">{isTracking ? 'Stop Tracking' : 'Start Tracking'}</span>
+                    </motion.button>
+                    
+                    {hasStartedPatrol && (
+                      <motion.button
+                        variants={buttonVariants}
+                        whileHover="hover"
+                        whileTap="tap"
+                        onClick={() => setShowLogForm(!showLogForm)}
+                        className={`${buttonSecondary} ${textColor} p-3 rounded-lg shadow-md flex flex-col items-center justify-center w-full md:flex-1`}
+                      >
+                        <FaClipboardCheck className="text-xl mb-1" />
+                        <span className="text-sm font-medium">Log Report</span>
+                      </motion.button>
+                    )}
+                  </div>
+                </motion.div>
+                
+                {/* Patrol Log Form */}
+                <AnimatePresence>
+                  {hasStartedPatrol && showLogForm && (
+                    <motion.div 
+                      variants={cardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      className={`mb-6 p-4 border ${borderColor} rounded-xl bg-opacity-50 ${isDarkMode ? 'bg-gray-800/50' : 'bg-gray-50/50'}`}
+                    >
+                      <h2 className={`text-lg font-semibold mb-3 flex items-center ${textColor}`}>
+                        <FaClipboardList className="mr-2" /> Patrol Report Log
+                      </h2>
+                      
+                      <textarea
+                        className={`w-full h-32 p-3 rounded-lg border ${inputBorder} ${inputBg} ${inputText} focus:ring-2 focus:ring-blue-500 focus:outline-none mb-3`}
+                        placeholder="Enter your patrol report details..."
+                        value={currentReport}
+                        onChange={(e) => setCurrentReport(e.target.value)}
+                      />
+                      
+                      <div className="flex justify-end">
+                        <motion.button
+                          variants={buttonVariants}
+                          whileHover="hover"
+                          whileTap="tap"
+                          onClick={savePatrolLog}
+                          disabled={!currentReport.trim()}
+                          className={`${buttonSuccess} text-white px-4 py-2 rounded-lg flex items-center ${!currentReport.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <FaSave className="mr-2" /> Save Report
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                
+                {/* Patrol Logs Table */}
+                {patrolLogs.filter(log => log.scheduleId === currentScheduleId).length > 0 && (
+                  <motion.div variants={itemVariants} className="mb-2">
+                    <h2 className={`text-lg font-semibold mb-3 flex items-center ${textColor}`}>
+                      <FaClipboardCheck className="mr-2" /> Saved Patrol Logs
+                    </h2>
+                    
+                    <div className={`border ${borderColor} rounded-xl overflow-hidden shadow-md`}>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className={`${tableHeaderBg}`}>
+                            <tr>
+                              <th className={`text-left py-3 px-4 font-medium ${subTextColor}`}>Time</th>
+                              <th className={`text-left py-3 px-4 font-medium ${subTextColor}`}>Report</th>
+                              <th className={`text-center py-3 px-4 font-medium ${subTextColor}`}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className={`divide-y ${borderColor}`}>
+                            {patrolLogs.filter(log => log.scheduleId === currentScheduleId).map((log, index) => (
+                              <motion.tr 
+                                key={index} 
+                                className={`${tableRowHover}`}
+                                variants={itemVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                              >
+                                <td className={`py-3 px-4 ${textColor}`}>
+                                  <p className="font-medium">{new Date(log.timestamp).toLocaleTimeString()}</p>
+                                  <p className={`text-xs ${subTextColor}`}>{new Date(log.timestamp).toLocaleDateString()}</p>
+                                </td>
+                                <td className={`py-3 px-4 ${textColor}`}>
+                                  <div className="max-h-20 overflow-y-auto pr-2">
+                                    {log.report}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex justify-center space-x-2">
+                                    <motion.button
+                                      variants={buttonVariants}
+                                      whileHover="hover"
+                                      whileTap="tap"
+                                      onClick={() => editPatrolLog(index)}
+                                      className={`p-2 rounded-lg ${buttonWarning} text-white`}
+                                      title="Edit log"
+                                    >
+                                      <FaPencilAlt />
+                                    </motion.button>
+                                    <motion.button
+                                      variants={buttonVariants}
+                                      whileHover="hover"
+                                      whileTap="tap"
+                                      onClick={() => confirmDeletePatrolLog(index)}
+                                      className={`p-2 rounded-lg ${buttonDanger} text-white`}
+                                      title="Delete log"
+                                    >
+                                      <FaTrashAlt />
+                                    </motion.button>
+                                  </div>
+                                </td>
+                              </motion.tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+                
+                {/* Status Cards */}
+                <motion.div 
+                  variants={itemVariants} 
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4"
+                >
+                  <motion.div 
+                    variants={cardVariants}
+                    whileHover={{ y: -5 }}
+                    className={`p-4 rounded-xl border ${borderColor} ${cardBg} shadow-md`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className={`font-medium ${textColor}`}>Patrol Status</h3>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${hasStartedPatrol ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'}`}>
+                        {hasStartedPatrol ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <p className={`text-sm ${subTextColor}`}>
+                      {hasStartedPatrol 
+                        ? 'You have an active patrol session.' 
+                        : 'No active patrol session.'}
+                    </p>
+                  </motion.div>
+                  
+                  <motion.div 
+                    variants={cardVariants}
+                    whileHover={{ y: -5 }}
+                    className={`p-4 rounded-xl border ${borderColor} ${cardBg} shadow-md`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className={`font-medium ${textColor}`}>Tracking Status</h3>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${isTracking ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>
+                        {isTracking ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                    <p className={`text-sm ${subTextColor}`}>
+                      {isTracking 
+                        ? 'Your location is being tracked for patrol.' 
+                        : 'Location tracking is currently disabled.'}
+                    </p>
+                  </motion.div>
+                </motion.div>
+              </motion.div>
+            </motion.div>
           )}
-        </div>
-      )}
+        </AnimatePresence>
+      </div>
 
+      {/* Modals */}
       {showTodaySchedule && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4">
+        <div 
+          className="fixed inset-0 overflow-y-auto modal-fixed z-[1500]"
+          style={{ touchAction: 'manipulation' }}
+          onTouchMove={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div 
+            className="flex items-start justify-center min-h-screen p-4 modal-container"
+            onClick={(e) => e.stopPropagation()}
+          >
             <TanodPatrolSchedule
               todayPatrols={todayPatrols}
               setShowTodaySchedule={setShowTodaySchedule}
               fetchUpcomingPatrols={fetchUpcomingPatrols}
               fetchCurrentPatrolArea={fetchCurrentPatrolArea}
-              uploadPatrolLogs={uploadPatrolLogs} // Pass the function as a prop
+              uploadPatrolLogs={uploadPatrolLogs}
             />
           </div>
         </div>
       )}
 
       {showReportIncident && selectedIncidentForResponse && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50"
-             style={{ touchAction: 'none' }}
-             onClick={(e) => {
-               if (e.target === e.currentTarget) {
-                 setShowReportIncident(false);
-               }
-             }}>
-          <div className="flex items-center justify-center min-h-screen px-4">
+        <div 
+          className="fixed inset-0 z-50 overflow-y-auto modal-fixed"
+          style={{ touchAction: 'none' }}
+          onTouchMove={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              e.stopPropagation();
+              setShowReportIncident(false);
+            }
+          }}
+        >
+          <div 
+            className="flex items-center justify-center min-h-screen p-4"
+            onClick={(e) => e.stopPropagation()}
+            style={{ marginTop: '0', paddingTop: '5vh' }}
+          >
             <div onClick={(e) => e.stopPropagation()}>
               <ReportIncident
                 incident={incident}
@@ -783,8 +909,17 @@ const hasLocationChanged = (prevLoc, newLoc) => {
       )}
 
       {showReportedIncidents && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4">
+        <div 
+          className="fixed inset-0 z-50 overflow-y-auto modal-fixed"
+          style={{ touchAction: 'manipulation' }}
+          onTouchMove={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div 
+            className="flex items-center justify-center min-h-screen p-4"
+            onClick={(e) => e.stopPropagation()}
+            style={{ marginTop: '0', paddingTop: '5vh' }}
+          >
             <ViewReportedIncidents
               setShowReportedIncidents={setShowReportedIncidents}
               setIncidentLocations={setIncidentLocations}
@@ -796,23 +931,68 @@ const hasLocationChanged = (prevLoc, newLoc) => {
         </div>
       )}
 
-      {showDeleteConfirmation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg w-11/12 max-w-lg relative TopNav">
-            <h2 className="text-xl md:text-2xl font-bold mb-4">Confirm Delete</h2>
-            <p>Are you sure you want to delete this patrol log?</p>
-            <div className="mt-4 flex justify-end space-x-4">
-              <button onClick={deletePatrolLog} className="bg-red-600 text-white text-sm md:text-base px-4 py-2 rounded shadow hover:bg-red-700 transition">
-                Delete
-              </button>
-              <button onClick={() => setShowDeleteConfirmation(false)} className="bg-gray-600 text-white text-sm md:text-base px-4 py-2 rounded shadow hover:bg-gray-700 transition">
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteConfirmation && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 modal-fixed"
+            style={{ touchAction: 'none' }}
+            onTouchMove={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={`${cardBg} rounded-xl shadow-xl mx-4 max-w-md w-full p-6 border ${borderColor}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center mb-4">
+                <div className="p-3 rounded-full bg-red-100 dark:bg-red-900/30 mr-3">
+                  <FaExclamationTriangle className="text-red-500 dark:text-red-400 text-xl" />
+                </div>
+                <h2 className={`text-xl font-bold ${textColor}`}>Confirm Delete</h2>
+              </div>
+              
+              <p className={`mb-6 ${subTextColor}`}>
+                Are you sure you want to delete this patrol log? This action cannot be undone.
+              </p>
+              
+              <div className="flex justify-end space-x-3">
+                <motion.button
+                  variants={buttonVariants}
+                  whileHover="hover"
+                  whileTap="tap"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDeleteConfirmation(false);
+                  }}
+                  className={`px-4 py-2 rounded-lg ${buttonSecondary} ${textColor}`}
+                >
+                  Cancel
+                </motion.button>
+                
+                <motion.button
+                  variants={buttonVariants}
+                  whileHover="hover"
+                  whileTap="tap"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deletePatrolLog();
+                  }}
+                  className={`px-4 py-2 rounded-lg ${buttonDanger} text-white`}
+                >
+                  Delete
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 };
 

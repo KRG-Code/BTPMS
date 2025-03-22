@@ -391,7 +391,7 @@ const PatrolManagement = () => {
                 disabled={editingPolygonId !== null}
               />
             </div>
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 space-y-2 mb-2">
             <h3 className="text-l font-semibold mb-4">Map Tools</h3>
               <button
                 onClick={toggleGeomanTools}

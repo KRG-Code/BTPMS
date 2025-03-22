@@ -2,22 +2,89 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base theme colors */
+/* Base theme with CSS variables on :root for light mode */
 :root {
-  --text-light: #0b0c18;
-  --background-light: #e8e9f7;
-  --primary-light: #191d67;
-  --secondary-light: #757be6;
-  --accent-light: #141db8;
-
-  --text-dark: #e7e8f4;
-  --background-dark: #080917;
-  --primary-dark: #989ce6;
-  --secondary-dark: #191f8a;
-  --accent-dark: #4750eb;
-
+  /* Light mode palette */
+  --text: #0b0c18;
+  --background: #e8e9f7;
+  --primary: #191d67;
+  --secondary: #757be6;
+  --accent: #141db8;
+  
+  /* Extended light theme variables */
+  --card-bg: #ffffff;
+  --border: #e2e8f0;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  
+  /* Typography */
   --font-body: "Roboto", sans-serif;
   --font-headings: "Inter", sans-serif;
+  
+  /* Add global transition for all theme changes */
+  --theme-transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+
+  /* Light mode specific aliases for compatibility */
+  --text-light: var(--text);
+  --background-light: var(--background);
+  --primary-light: var(--primary);
+  --secondary-light: var(--secondary);
+  --accent-light: var(--accent);
+}
+
+/* Dark mode overrides using CSS variables */
+.dark-mode {
+  /* Dark mode palette */
+  --text: #e7e8f4;
+  --background: #080917;
+  --primary: #989ce6;
+  --secondary: #191f8a;
+  --accent: #4750eb;
+  
+  /* Extended dark theme variables */
+  --card-bg: #0e1022;
+  --border: #1e2048;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.24);
+  
+  /* Dark mode specific aliases for compatibility */
+  --text-dark: var(--text);
+  --background-dark: var(--background);
+  --primary-dark: var(--primary);
+  --secondary-dark: var(--secondary);
+  --accent-dark: var(--accent);
+}
+
+/* Apply transitions to common elements */
+body,
+.card,
+.btn,
+input,
+textarea,
+select,
+.modal,
+.sidebar,
+.navbar,
+button {
+  transition: var(--theme-transition);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--text);
+  background-color: var(--background);
+}
+
+/* Theme-based component styles */
+.card {
+  background-color: var(--card-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-headings);
+  color: var(--text);
 }
 
 /* Custom scrollbar hide */
@@ -29,109 +96,48 @@
   display: none !important; /* For Chrome, Safari, and Opera */
 }
 
-body{
-  margin: 0;
-  padding: 0;
+/* Form inputs with theme awareness */
+.form-input, .form-select, .form-textarea {
+  background-color: var(--card-bg);
+  color: var(--text);
+  border-color: var(--border);
 }
 
-/* Dark and light mode styles */
+/* SideNav specific stylings */
 body.light-mode {
-  color: var(--text-light);
-  background-color: var(--background-light);
+  color: var(--text);
+  background-color: var(--background);
 }
 
 body.dark-mode {
-  color: var(--text-dark);
-  background-color: black;
+  color: var(--text);
+  background-color: var(--background);
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: var(--font-headings);
+.SideNav {
+  background-color: var(--card-bg);
+  transition: background-color 0.5s ease;
 }
-
-.icon {
-  color: var(--primary-light);
-}
-
-body.light-mode .navIcon {
-  color: blue;
-}
-
-body.dark-mode .navIcon {
-  color: blue;
-}
-
 
 .SideNav a {
-  color: var(--text-light);
+  color: var(--text);
   z-index: 4;
-}
-
-body.dark-mode .SideNav a {
-  color: var(--text-dark);
-}
-
-body.light-mode .SideNav{
-  background-color: white;
-  transition: background-color 0.5s ease;
-
-}
-
-body.dark-mode .SideNav{
-  background-color: var(--background-dark);
-  transition: background-color 0.5s ease;
-}
-
-
-.navIcon {
-  font-size: 1.5rem;
-  line-height: 1.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.25rem;
-  border-radius: 9999px;
-  transition: color 0.3s ease; /* Smooth transition for icon color */
-}
-
-.TopNav a {
-  color: var(--text-light);
-}
-
-body.dark-mode .TopNav a {
-  color: var(--text-dark);
-}
-
-
-body.light-mode .TopNav {
-  background-color: white;
-  transition: background-color 0.5s ease;
-}
-
-body.dark-mode .TopNav {
-  background-color: var(--background-dark);
-  transition: background-color 0.5s ease;
 }
 
 .navList {
   margin-bottom: 0.5rem;
   width: 100%;
-  padding: 0.75rem 1rem; /* Consistent padding */
-  border-radius: 9999px; /* Consistent border radius */
-  border: 2px solid transparent; /* Ensure border is consistent */
-  transition: background-color 0.3s ease; /* Smooth transition for background color */
+  padding: 0.75rem 1rem;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  transition: background-color 0.3s ease;
 }
 
 .navList:hover {
-  background-color: var(--secondary-light); /* Hover background color */
+  background-color: var(--secondary);
+  opacity: 0.7;
 }
 
-/* Ensure consistent icon styles */
 .navIcon {
   font-size: 1.5rem;
   line-height: 1.75rem;
@@ -140,7 +146,149 @@ body.dark-mode .TopNav {
   justify-content: center;
   padding: 0.25rem;
   border-radius: 9999px;
-  transition: color 0.3s ease; /* Smooth transition for icon color */
+  transition: color 0.3s ease;
+  color: var(--primary);
+}
+
+/* TopNav theming */
+.TopNav {
+  background-color: var(--card-bg);
+  color: var(--text);
+  transition: background-color 0.5s ease;
+}
+
+.TopNav a {
+  color: var(--text);
+}
+
+/* Button theming */
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+}
+
+.btn-secondary {
+  background-color: var(--secondary);
+  color: white;
+}
+
+.btn-accent {
+  background-color: var(--accent);
+  color: white;
+}
+
+/* Theme transitions */
+.theme-transition {
+  transition: var(--theme-transition);
+}
+
+/* Modal Backgrounds */
+.modal-background {
+  background-color: rgba(255, 255, 255, 0.95);
+  color: var(--text);
+}
+
+.dark-mode .modal-background {
+  background-color: rgba(8, 9, 23, 0.95);
+  color: var(--text);
+}
+
+/* Custom Calendar styling for dark mode */
+.react-calendar--dark {
+  background-color: var(--card-bg) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.react-calendar--dark .react-calendar__tile {
+  color: var(--text);
+  background-color: transparent;
+}
+
+.react-calendar--dark .react-calendar__tile:enabled:hover,
+.react-calendar--dark .react-calendar__tile:enabled:focus {
+  background-color: var(--secondary);
+  opacity: 0.3;
+}
+
+.react-calendar--dark .react-calendar__tile--now {
+  background-color: var(--accent);
+  opacity: 0.3;
+}
+
+.react-calendar--dark .react-calendar__tile--active {
+  background-color: var(--primary);
+  opacity: 0.7;
+  color: white;
+}
+
+.react-calendar--dark .react-calendar__navigation button:enabled:hover,
+.react-calendar--dark .react-calendar__navigation button:enabled:focus {
+  background-color: var(--secondary);
+  opacity: 0.3;
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Responsive table styles */
+.responsive-table {
+  background-color: var(--card-bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.responsive-table th {
+  background-color: var(--primary);
+  color: white;
+}
+
+.responsive-table tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+.dark-mode .responsive-table tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Add these utility classes for common text and background colors */
+.text-theme {
+  color: var(--text);
+}
+
+.bg-theme {
+  background-color: var(--background);
+}
+
+.text-theme-primary {
+  color: var(--primary);
+}
+
+.bg-theme-primary {
+  background-color: var(--primary);
+}
+
+.text-theme-secondary {
+  color: var(--secondary);
+}
+
+.bg-theme-secondary {
+  background-color: var(--secondary);
+}
+
+.text-theme-accent {
+  color: var(--accent);
+}
+
+.bg-theme-accent {
+  background-color: var(--accent);
 }
 
 /* mapStyles.css */
@@ -233,9 +381,7 @@ body.dark-mode .TopNav {
     width: 40vw; /* Cover remaining space */
     height: 100%;
     z-index: 998;
-
   }
-
 }
 
 /* Notification and Message pulse animation */
@@ -434,5 +580,66 @@ body.dark-mode .TopNav {
 /* Replace TopNav styles */
 .modal-container {
   @apply theme-transition rounded-lg shadow-xl;
+}
+
+/* Fix for modal touchAction behavior */
+.modal-fixed {
+  position: fixed;
+  touch-action: none;
+  -webkit-overflow-scrolling: touch;
+  pointer-events: auto !important;
+}
+
+.modal-content {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.modal-prevent-scroll {
+  overflow: hidden !important;
+  height: 100% !important;
+}
+
+/* Incidents height management */
+.incidents-container {
+  max-height: 100vh;
+  overflow-y: auto;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  /* pointer-events: none by default, will be overridden inline when dropdown opens */
+}
+
+/* For scrollable content inside incidents dropdown */
+.incidents-dropdown {
+  max-height: calc(100vh - 8rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 155, 155, 0.5) transparent;
+}
+
+.incidents-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.incidents-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.incidents-dropdown::-webkit-scrollbar-thumb {
+  background-color: rgba(155, 155, 155, 0.5);
+  border-radius: 20px;
+}
+
+/* Map interaction containers should be above map but below UI */
+.leaflet-control-container {
+  z-index: calc(var(--z-map) + 500) !important;
+  position: relative;
 }
 

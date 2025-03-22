@@ -1,47 +1,84 @@
 const AssistanceRequest = require('../models/AssistanceRequest');
-const Notification = require('../models/Notification');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
+const axios = require('axios');
 const { saveBackupRequest } = require('../Emergency_Response/controllers/emergencyController');
 
-exports.createAssistanceRequest = async (req, res) => {
+// Helper function for reverse geocoding
+const getAddressFromCoordinates = async (latitude, longitude) => {
   try {
-    const {
-      incidentId,
-      requesterId,
-      location,
-      incidentType,
-      incidentClassification,
-      dateRequested,
-      requesterName
-    } = req.body;
-
-    const newRequest = new AssistanceRequest({
-      incidentId,
-      requesterId,
-      location,
-      incidentType,
-      incidentClassification,
-      dateRequested,
-      requesterName,
-      status: 'Pending'
+    // Using OpenStreetMap's Nominatim API for reverse geocoding
+    const response = await axios.get(`https://nominatim.openstreetmap.org/reverse`, {
+      params: {
+        format: 'json',
+        lat: latitude,
+        lon: longitude,
+        zoom: 18,
+        addressdetails: 1
+      },
+      headers: {
+        'User-Agent': 'BTPMS Application' // Required by Nominatim's terms of use
+      }
     });
 
+    if (response.data && response.data.display_name) {
+      // Extract and format a simplified address
+      const address = response.data.display_name;
+      // Simplify the address if it's too long
+      return address.length > 50 ? address.substring(0, 47) + '...' : address;
+    }
+    return `Lat: ${latitude}, Lon: ${longitude}`;
+  } catch (error) {
+    console.error('Error in reverse geocoding:', error);
+    return `Lat: ${latitude}, Lon: ${longitude}`;
+  }
+};
+
+// Create a new assistance request
+exports.createAssistanceRequest = async (req, res) => {
+  try {
+    const { userId, location, description, emergency, imageUrls } = req.body;
+    
+    // Create the assistance request
+    const newRequest = new AssistanceRequest({
+      userId,
+      location,
+      description,
+      emergency,
+      status: 'Pending',
+      imageUrls
+    });
+    
     await newRequest.save();
-
-    // Notify admins about the assistance request
-    const admins = await User.find({ userType: 'admin' });
-    const notifications = admins.map(admin => ({
-      userId: admin._id,
-      message: `New assistance request from ${requesterName} for incident at ${location}`,
-      type: 'ASSISTANCE_REQUEST'
+    
+    // Get user details for notification
+    const user = await User.findById(userId).select('firstName lastName');
+    
+    // Get human-readable address from coordinates
+    const address = await getAddressFromCoordinates(location.latitude, location.longitude);
+    
+    // Notify all tanods and admins
+    const tanodsAndAdmins = await User.find({ userType: { $in: ['tanod', 'admin'] }});
+    
+    const notifications = tanodsAndAdmins.map(recipient => ({
+      userId: recipient._id,
+      message: `New assistance request from ${user.firstName} ${user.lastName} for incident at ${address}`
     }));
-
+    
     await Notification.insertMany(notifications);
 
-    res.status(201).json(newRequest);
+    res.status(201).json({
+      success: true,
+      message: 'Assistance request created successfully',
+      request: newRequest
+    });
   } catch (error) {
     console.error('Error creating assistance request:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 

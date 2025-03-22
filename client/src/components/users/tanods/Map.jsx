@@ -8,6 +8,8 @@ import 'react-toastify/dist/ReactToastify.css';
 import Incidents from './Incidents';
 import ViewReportedIncidents from './incidentComponents/ViewReportedIncidents'; // Import ViewReportedIncidents
 import { FaExclamationTriangle, FaInfoCircle } from 'react-icons/fa'; // Import icons
+import { useTheme } from "../../../contexts/ThemeContext";
+import io from 'socket.io-client';
 
 const TanodMap = () => {
   const [patrolAreas, setPatrolAreas] = useState([]);
@@ -32,6 +34,8 @@ const TanodMap = () => {
   const incidentLayersRef = useRef({});
   const socketRef = useRef(null); // Add socketRef
   const [prevUserLocation, setPrevUserLocation] = useState(null); // Add prevUserLocation state
+  const { isDarkMode } = useTheme();
+  const [isInitialRender, setIsInitialRender] = useState(true);
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem('token');
@@ -545,30 +549,92 @@ const TanodMap = () => {
     };
   }, []);
 
+  // Initialize socket with better error handling
+  const initializeSocket = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    
+    const socketUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://barangaypatrol.lgu1.com'
+      : 'http://localhost:5000';
+    
+    const socket = io(socketUrl, {
+      auth: { token },
+      withCredentials: true,
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 20000
+    });
+    
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+    });
+    
+    return socket;
+  };
+
   return (
-    <div style={{ position: 'relative', height: '100%' }}>
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
-      <MapContainer center={start} zoom={16} style={{ width: '100%', height: '100%' }}>
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        <MapEvents />
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
-          <Incidents 
-            fetchCurrentPatrolArea={fetchCurrentPatrolArea} 
-            setUserLocation={setUserLocation}
-            setIncidentLocations={setIncidentLocations}
-            incidentReports={incidentReports} // Pass incidentReports down
-            setIncidentReports={setIncidentReports} // Add this prop
-            isTrackingVisible={isTrackingVisible}
-            toggleTracking={toggleTracking}
-            showReportIncident={showReportIncident}
-            setShowReportIncident={setShowReportIncident}
-            selectedIncidentForResponse={selectedIncidentForResponse}
-            setSelectedIncidentForResponse={setSelectedIncidentForResponse}
-          />
-        </div>
-      </MapContainer>
+    <div style={{ position: 'relative', height: '100vh', width: '100%', overflow: 'hidden' }}>
+      {/* ToastContainer with highest z-index */}
+      <ToastContainer 
+        position="top-right" 
+        autoClose={3000} 
+        hideProgressBar 
+        newestOnTop 
+        closeOnClick 
+        rtl={false} 
+        pauseOnFocusLoss 
+        draggable 
+        pauseOnHover 
+        className="z-[2000]"
+      />
+      
+      {/* Map positioned at the lowest layer */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}>
+        <MapContainer center={start} zoom={16} style={{ width: '100%', height: '100%' }}>
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <MapEvents />
+        </MapContainer>
+      </div>
+      
+      {/* Incidents component with improved event handling */}
+      <div 
+        className="incidents-container"
+        style={{ 
+          position: 'absolute', 
+          top: 0, 
+          left: 0, 
+          width: '100%', 
+          height: '100%', 
+          zIndex: 900,
+          pointerEvents: 'none' // This makes the container pass through events to the map by default
+        }}
+      >
+        <Incidents 
+          fetchCurrentPatrolArea={fetchCurrentPatrolArea} 
+          setUserLocation={setUserLocation}
+          setIncidentLocations={setIncidentLocations}
+          incidentReports={incidentReports}
+          setIncidentReports={setIncidentReports}
+          isTrackingVisible={isTrackingVisible}
+          toggleTracking={toggleTracking}
+          showReportIncident={showReportIncident}
+          setShowReportIncident={setShowReportIncident}
+          selectedIncidentForResponse={selectedIncidentForResponse}
+          setSelectedIncidentForResponse={setSelectedIncidentForResponse}
+          socketRef={socketRef}
+          initializeSocket={initializeSocket}
+          userProfile={userProfile}
+          prevUserLocation={prevUserLocation}
+          setPrevUserLocation={setPrevUserLocation}
+        />
+      </div>
+      
+      {/* Incident details modal - using portal container for better stacking */}
       {selectedIncident && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" style={{ zIndex: 2001 }}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center p-4 overflow-y-auto incident-popup z-[1900]">
           <div className="bg-blue-50 p-6 rounded-lg w-11/12 max-w-lg relative">
             <button 
               onClick={() => setSelectedIncident(null)} 

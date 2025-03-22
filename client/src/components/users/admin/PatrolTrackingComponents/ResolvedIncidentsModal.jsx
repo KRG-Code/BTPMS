@@ -1,9 +1,80 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 import { toast } from 'react-toastify';
+import { motion, AnimatePresence } from 'framer-motion';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import axios from 'axios';
+import { useTheme } from '../../../../contexts/ThemeContext';
+import {
+  RiCloseLine,
+  RiMapPin2Line,
+  RiCheckboxCircleLine,
+  RiInformationLine,
+  RiCalendarCheckLine,
+  RiUserLine,
+  RiFileTextLine,
+  RiTimeLine,
+  RiPhoneLine,
+  RiAlertLine,
+  RiSearchLine,
+  RiFilterLine,
+  RiDeleteBin7Line
+} from 'react-icons/ri';
+
+// Animation variants
+const modalVariants = {
+  hidden: {
+    opacity: 0,
+    scale: 0.8,
+    y: 50
+  },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 400,
+      damping: 30
+    }
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.9,
+    transition: {
+      duration: 0.2
+    }
+  }
+};
+
+const contentVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 300,
+      damping: 25
+    }
+  }
+};
+
+const buttonVariants = {
+  hover: { scale: 1.05 },
+  tap: { scale: 0.95 }
+};
 
 // Map component to handle marker creation and updates
 const MapComponent = ({ incident }) => {
@@ -67,6 +138,7 @@ const MapComponent = ({ incident }) => {
 };
 
 const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
+  const { isDarkMode } = useTheme();
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showMap, setShowMap] = useState(false);
@@ -77,6 +149,17 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
   const [showAssistanceDetails, setShowAssistanceDetails] = useState(false);
   const [selectedAssistance, setSelectedAssistance] = useState(null);
   const [friendlyLocation, setFriendlyLocation] = useState('');
+  const [activeTab, setActiveTab] = useState('details'); // 'details' or 'map'
+  const [mobileView, setMobileView] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setMobileView(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const formatDate = (dateString) => {
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
@@ -84,12 +167,15 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
   };
 
   const handleViewDetails = (incident) => {
-    if (selectedIncident?._id === incident._id && showDetails) {
-      // If clicking on the same incident and details are shown, hide them
+    // Switch to details view in mobile mode
+    if (mobileView) {
+      setActiveTab('details');
+    }
+
+    if (selectedIncident?._id === incident._id && showDetails && !mobileView) {
       setShowDetails(false);
       setSelectedIncident(null);
     } else {
-      // Show details for the selected incident
       setSelectedIncident(incident);
       setShowDetails(true);
       setShowMap(false);
@@ -110,12 +196,15 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
       return;
     }
 
-    if (selectedIncident?._id === incident._id && showMap) {
-      // If clicking on the same incident and map is shown, hide it
+    // Switch to map view in mobile mode
+    if (mobileView) {
+      setActiveTab('map');
+    }
+
+    if (selectedIncident?._id === incident._id && showMap && !mobileView) {
       setShowMap(false);
       setSelectedIncident(null);
     } else {
-      // Show map for the selected incident
       setSelectedIncident(incident);
       setShowMap(true);
       setShowDetails(false);
@@ -194,13 +283,32 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
 
   const renderAssistanceStatus = (status) => {
     const statusColors = {
-      'Pending': 'text-yellow-500',
-      'Processing': 'text-blue-500',
-      'Deployed': 'text-indigo-500',
-      'Rejected': 'text-red-500',
-      'Completed': 'text-green-500'
+      'Pending': isDarkMode ? 'text-yellow-400' : 'text-yellow-600',
+      'Processing': isDarkMode ? 'text-blue-400' : 'text-blue-600',
+      'Deployed': isDarkMode ? 'text-indigo-400' : 'text-indigo-600',
+      'Rejected': isDarkMode ? 'text-red-400' : 'text-red-600',
+      'Completed': isDarkMode ? 'text-green-400' : 'text-green-600'
     };
-    return statusColors[status] || 'text-gray-500';
+    return statusColors[status] || (isDarkMode ? 'text-gray-300' : 'text-gray-600');
+  };
+
+  const getStatusBadgeClass = (status) => {
+    switch (status) {
+      case 'Resolved':
+        return isDarkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800';
+      case 'In Progress':
+        return isDarkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800';
+      case 'Pending':
+        return isDarkMode ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800';
+      default:
+        return isDarkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getIncidentTypeBadgeClass = (type) => {
+    return type === 'Emergency Incident'
+      ? isDarkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800'
+      : isDarkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800';
   };
 
   const AssistanceDetailsModal = ({ details, onClose }) => {
@@ -262,18 +370,52 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-[4000] flex items-center justify-center">
-        <div className="bg-white p-6 rounded-lg w-11/12 max-w-lg relative">
-          <h3 className="text-xl font-bold mb-4">Assistance Request Details</h3>
-          <button onClick={onClose} className="absolute top-2 right-2 text-gray-600 hover:text-gray-800">✕</button>
-          <div className="space-y-4">
-            <p className="font-semibold text-lg">
-              Status: <span className={renderAssistanceStatus(details.status)}>{details.status}</span>
-            </p>
-            {renderStatusContent()}
-          </div>
-        </div>
-      </div>
+      <AnimatePresence>
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50 z-[4000] flex items-center justify-center"
+          onClick={onClose}
+        >
+          <motion.div 
+            variants={modalVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className={`${isDarkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-800'} p-6 rounded-xl shadow-2xl w-11/12 max-w-lg relative`}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold mb-4 flex items-center">
+              <RiInformationLine className={`mr-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} size={24} />
+              Assistance Request Details
+            </h3>
+            <motion.button
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              onClick={onClose}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            >
+              <RiCloseLine size={24} />
+            </motion.button>
+            <motion.div 
+              variants={contentVariants}
+              initial="hidden"
+              animate="visible"
+              className="space-y-4 mt-6"
+            >
+              <motion.div variants={itemVariants} className="flex items-center mb-4">
+                <span className="font-semibold text-lg mr-3">Status:</span> 
+                <span className={`px-3 py-1 rounded-full font-medium ${renderAssistanceStatus(details.status)}`}>
+                  {details.status}
+                </span>
+              </motion.div>
+              {renderStatusContent()}
+            </motion.div>
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
     );
   };
 
@@ -283,81 +425,325 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
     const assistanceRequest = assistanceRequests[selectedIncident._id];
 
     return (
-      <div className="w-1/2 pl-6">
-        <div className="bg-blue-50 p-4 rounded-lg h-full text-black">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold text-blue-700">Incident Details</h3>
-            <button
-              onClick={() => setShowDetails(false)}
-              className="text-gray-500 hover:text-gray-700"
+      <motion.div 
+        variants={contentVariants}
+        initial="hidden"
+        animate="visible"
+        className={`w-full ${mobileView ? '' : 'md:w-1/2'} pl-0 ${mobileView ? 'mt-4' : 'md:pl-6'} flex-shrink-0`}
+      >
+        <motion.div 
+          variants={itemVariants}
+          className={`${
+            isDarkMode 
+              ? 'bg-gray-800 border border-gray-700' 
+              : 'bg-white border border-gray-100 shadow-lg'
+          } rounded-2xl overflow-hidden h-full`}
+        >
+          {/* Header */}
+          <div className={`p-4 flex justify-between items-center ${
+            isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+          } border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+            <h3 className="text-lg font-bold flex items-center">
+              <RiInformationLine className={`mr-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+              Incident Details
+            </h3>
+            <motion.button
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              onClick={() => mobileView ? setActiveTab('list') : setShowDetails(false)}
+              className="p-2 rounded-full hover:bg-opacity-20 hover:bg-gray-500"
             >
-              ✕
-            </button>
+              <RiCloseLine size={20} />
+            </motion.button>
           </div>
-          <div className="space-y-3 text-sm">
-            <p><strong className="text-gray-700">Incident:</strong> {selectedIncident.type}</p>
-            <p>
-              <strong className="text-gray-700">Type:</strong>
-              <span className={`ml-2 ${
-                selectedIncident.incidentClassification === 'Emergency Incident' 
-                ? 'text-red-500 font-semibold' 
-                : 'text-blue-500'
-              }`}>
+          
+          {/* Content */}
+          <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 120px)' }}>
+            {/* Incident Type and Classification */}
+            <div className="flex flex-wrap gap-3 mb-4">
+              <span className={`text-sm font-medium px-3 py-1 rounded-full ${getIncidentTypeBadgeClass(selectedIncident.incidentClassification)}`}>
                 {selectedIncident.incidentClassification || 'Normal Incident'}
               </span>
-            </p>
-            <p><strong className="text-gray-700">Status:</strong> 
-              <span className="ml-2 text-green-600 font-semibold">
+              <span className={`text-sm font-medium px-3 py-1 rounded-full ${getStatusBadgeClass(selectedIncident.status)}`}>
                 {selectedIncident.status}
               </span>
-            </p>
-            <p><strong className="text-gray-700">Date:</strong> {formatDate(selectedIncident.date)}</p>
-            <p><strong className="text-gray-700">Time:</strong> {selectedIncident.time || 'N/A'}</p>
-            <p><strong className="text-gray-700">Location:</strong> {' '}
-              {friendlyLocation}
-              {friendlyLocation !== selectedIncident.location && (
-                <span className="block text-gray-500 text-xs mt-1">
-                  ({selectedIncident.location})
-                </span>
-              )}
-            </p>
-            <p><strong className="text-gray-700">Location Note:</strong> {selectedIncident.locationNote || 'N/A'}</p>
-            <div>
-              <strong className="text-gray-700">Description:</strong>
-              <p className="mt-1 p-2 bg-white rounded">{selectedIncident.description || 'N/A'}</p>
             </div>
-            <div className="mt-6 pt-4 px-2 py-1 bg-green-50 border-t border-gray-200 rounded-xl">
-              <h4 className="font-semibold text-green-700 mb-2">Resolution Information</h4>
-              <p><strong className="text-gray-700">Resolved By:</strong> {selectedIncident.resolvedByFullName}</p>
-              <p><strong className="text-gray-700">Resolved At:</strong> {new Date(selectedIncident.resolvedAt).toLocaleString()}</p>
-              <div className="mt-2">
-                <strong className="text-gray-700">Resolution Log:</strong>
-                <p className="mt-1 p-2 bg-white rounded border border-gray-200">
-                  {selectedIncident.log || 'No log provided'}
+
+            {/* Main details */}
+            <motion.div variants={itemVariants} className="space-y-4">
+              <DetailItem 
+                icon={<RiAlertLine />} 
+                label="Incident Type" 
+                value={selectedIncident.type} 
+              />
+              
+              <DetailItem 
+                icon={<RiCalendarCheckLine />} 
+                label="Date & Time" 
+                value={`${formatDate(selectedIncident.date)} at ${selectedIncident.time || 'N/A'}`} 
+              />
+              
+              <DetailItem 
+                icon={<RiMapPin2Line />} 
+                label="Location" 
+                value={
+                  <>
+                    {friendlyLocation}
+                    {friendlyLocation !== selectedIncident.location && (
+                      <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        ({selectedIncident.location})
+                      </div>
+                    )}
+                  </>
+                }
+              />
+              
+              {selectedIncident.locationNote && (
+                <DetailItem 
+                  icon={<RiInformationLine />} 
+                  label="Location Note" 
+                  value={selectedIncident.locationNote} 
+                />
+              )}
+              
+              <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <div className="flex items-center mb-2">
+                  <RiFileTextLine className={`mr-2 ${isDarkMode ? 'text-blue-300' : 'text-blue-500'}`} />
+                  <span className="font-medium">Description:</span>
+                </div>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} whitespace-pre-wrap`}>
+                  {selectedIncident.description || 'No description provided'}
                 </p>
               </div>
-            </div>
-            {assistanceRequest && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <h4 className="font-semibold text-blue-700 mb-2">Assistance Request</h4>
-                <div className="flex items-center justify-between">
-                  <p className={`font-medium ${renderAssistanceStatus(assistanceRequest.status)}`}>
-                    Status: {assistanceRequest.status}
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSelectedAssistance(assistanceRequest);
-                      setShowAssistanceDetails(true);
-                    }}
-                    className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
-                  >
-                    View Details
-                  </button>
-                </div>
+            </motion.div>
+
+            {/* Resolution Information */}
+            <motion.div 
+              variants={itemVariants}
+              className={`mt-6 p-4 rounded-lg ${
+                isDarkMode ? 'bg-green-900 bg-opacity-20 border border-green-900' : 'bg-green-50 border border-green-100'
+              }`}
+            >
+              <h4 className={`text-lg font-semibold flex items-center mb-4 ${
+                isDarkMode ? 'text-green-300' : 'text-green-700'
+              }`}>
+                <RiCheckboxCircleLine className="mr-2" />
+                Resolution Details
+              </h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <DetailItem 
+                  icon={<RiUserLine />} 
+                  label="Resolved By" 
+                  value={selectedIncident.resolvedByFullName} 
+                  theme="green"
+                />
+                
+                <DetailItem 
+                  icon={<RiTimeLine />} 
+                  label="Resolved At" 
+                  value={new Date(selectedIncident.resolvedAt).toLocaleString()} 
+                  theme="green"
+                />
               </div>
+              
+              <div className={`mt-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-4 rounded-lg shadow-sm`}>
+                <div className="flex items-center mb-2">
+                  <RiFileTextLine className={`mr-2 ${isDarkMode ? 'text-green-300' : 'text-green-500'}`} />
+                  <span className="font-medium">Resolution Notes:</span>
+                </div>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} whitespace-pre-wrap`}>
+                  {selectedIncident.log || 'No resolution notes provided'}
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Assistance Request Info */}
+            {assistanceRequest && (
+              <motion.div 
+                variants={itemVariants}
+                className={`mt-6 p-4 rounded-lg ${
+                  isDarkMode ? 'bg-blue-900 bg-opacity-20 border border-blue-900' : 'bg-blue-50 border border-blue-100'
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <h4 className={`text-lg font-semibold ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                    Assistance Request
+                  </h4>
+                  <span className={`px-3 py-1 rounded-full text-sm ${renderAssistanceStatus(assistanceRequest.status)}`}>
+                    {assistanceRequest.status}
+                  </span>
+                </div>
+                <motion.button
+                  variants={buttonVariants}
+                  whileHover="hover"
+                  whileTap="tap" 
+                  onClick={() => {
+                    setSelectedAssistance(assistanceRequest);
+                    setShowAssistanceDetails(true);
+                  }}
+                  className={`mt-3 w-full py-2 rounded-lg text-center font-medium ${
+                    isDarkMode 
+                      ? 'bg-blue-700 hover:bg-blue-600 text-white' 
+                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                  }`}
+                >
+                  View Details
+                </motion.button>
+              </motion.div>
             )}
           </div>
+        </motion.div>
+      </motion.div>
+    );
+  };
+
+  const renderMap = () => {
+    if (!selectedIncident) return null;
+
+    return (
+      <motion.div 
+        variants={contentVariants}
+        initial="hidden"
+        animate="visible"
+        className={`w-full ${mobileView ? '' : 'md:w-1/2'} pl-0 ${mobileView ? 'mt-4' : 'md:pl-6'} flex-shrink-0`}
+      >
+        <motion.div 
+          variants={itemVariants}
+          className={`${
+            isDarkMode 
+              ? 'bg-gray-800 border border-gray-700' 
+              : 'bg-white border border-gray-100 shadow-lg'
+          } rounded-2xl overflow-hidden h-full`}
+        >
+          {/* Header */}
+          <div className={`p-4 flex justify-between items-center ${
+            isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+          } border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+            <h3 className="text-lg font-bold flex items-center">
+              <RiMapPin2Line className={`mr-2 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
+              Incident Location
+            </h3>
+            <motion.button
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              onClick={() => mobileView ? setActiveTab('list') : setShowMap(false)}
+              className="p-2 rounded-full hover:bg-opacity-20 hover:bg-gray-500"
+            >
+              <RiCloseLine size={20} />
+            </motion.button>
+          </div>
+          
+          {/* Map */}
+          <div className="p-4">
+            <div className="h-[500px] rounded-xl overflow-hidden shadow-inner">
+              <MapContainer
+                center={[14.7356, 121.0498]}
+                zoom={15}
+                style={{ height: '100%', width: '100%' }}
+              >
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <MapComponent incident={selectedIncident} />
+              </MapContainer>
+            </div>
+            
+            {/* Location info beneath the map */}
+            <motion.div
+              variants={itemVariants} 
+              className={`mt-4 p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}
+            >
+              <h4 className="font-medium mb-2 flex items-center">
+                <RiMapPin2Line className="mr-2" /> Location Details:
+              </h4>
+              <p className="text-sm">
+                {friendlyLocation || selectedIncident.location}
+              </p>
+              {selectedIncident.locationNote && (
+                <p className={`mt-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  <span className="font-medium">Note:</span> {selectedIncident.locationNote}
+                </p>
+              )}
+            </motion.div>
+          </div>
+        </motion.div>
+      </motion.div>
+    );
+  };
+
+  function DetailItem({ icon, label, value, theme = "default", fullWidth = false }) {
+    const getThemeColors = () => {
+      if (theme === "green") {
+        return isDarkMode ? 'text-green-300' : 'text-green-600';
+      }
+      return isDarkMode ? 'text-blue-300' : 'text-blue-500';
+    };
+    
+    return (
+      <div className={`${fullWidth ? 'col-span-1 md:col-span-2' : ''}`}>
+        <div className="flex items-center mb-1">
+          <span className={`mr-2 ${getThemeColors()}`}>{icon}</span>
+          <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>{label}:</span>
         </div>
+        <div className={`pl-6 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{value}</div>
+      </div>
+    );
+  }
+
+  // Mobile navigation tabs
+  const MobileNavTabs = () => {
+    return (
+      <div className={`flex w-full border-t ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} py-3`}>
+        <motion.button
+          variants={buttonVariants}
+          whileHover="hover"
+          whileTap="tap"
+          onClick={() => setActiveTab('list')}
+          className={`flex-1 flex flex-col items-center justify-center ${activeTab === 'list' ? 
+            isDarkMode ? 'text-blue-400' : 'text-blue-600' : 
+            isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
+        >
+          <RiFileTextLine size={20} />
+          <span className="text-xs mt-1">List</span>
+        </motion.button>
+        
+        {selectedIncident && (
+          <motion.button
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={() => setActiveTab('details')}
+            className={`flex-1 flex flex-col items-center justify-center ${activeTab === 'details' ? 
+              isDarkMode ? 'text-blue-400' : 'text-blue-600' : 
+              isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
+          >
+            <RiInformationLine size={20} />
+            <span className="text-xs mt-1">Details</span>
+          </motion.button>
+        )}
+        
+        {selectedIncident && (
+          <motion.button
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={() => {
+              const latLngMatch = selectedIncident?.location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
+              if (latLngMatch) {
+                setActiveTab('map');
+              } else {
+                toast.warning("Cannot display location on map. Coordinates not found.");
+              }
+            }}
+            className={`flex-1 flex flex-col items-center justify-center ${activeTab === 'map' ? 
+              isDarkMode ? 'text-blue-400' : 'text-blue-600' : 
+              isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
+          >
+            <RiMapPin2Line size={20} />
+            <span className="text-xs mt-1">Map</span>
+          </motion.button>
+        )}
       </div>
     );
   };
@@ -365,159 +751,340 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[3000]">
-      <div className="bg-white p-6 rounded-lg w-11/12 max-w-7xl TopNav flex">
-        {/* Left side - Table */}
-        <div className={`${(showDetails || showMap) ? 'w-1/2' : 'w-full'} transition-all duration-300`}>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Resolved Incidents</h2>
-            <button
-              onClick={handleClose}
-              className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-            >
-              Close
-            </button>
-          </div>
-
-          {/* Modified Search and Filter Controls */}
-          <div className="mb-4 flex justify-end items-center space-x-3">
-            <input
-              type="text"
-              placeholder="Search incidents..."
-              className="w-48 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <input
-              type="date"
-              className="w-40 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-            />
-            <select
-              className="w-32 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-            >
-              <option value="all">All Types</option>
-              <option value="emergency">Emergency</option>
-              <option value="normal">Normal</option>
-            </select>
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setDateFilter('');
-                setTypeFilter('all');
-              }}
-              className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 whitespace-nowrap"
-            >
-              Clear Filters
-            </button>
-          </div>
-          
-          {/* Modified table container with fixed height */}
-          <div className="overflow-x-auto" style={{ 
-            maxHeight: filteredIncidents.length > 5 ? '400px' : 'auto',
-            overflowY: filteredIncidents.length > 5 ? 'auto' : 'hidden' 
-          }}>
-            <table className="min-w-full bg-white">
-              <thead className="bg-gray-50 TopNav">
-                <tr>
-                  <th className="px-4 py-2 text-center">Date</th>
-                  <th className="px-4 py-2 text-center">Incident</th>
-                  <th className="px-4 py-2 text-center">Incident Type</th>
-                  <th className="px-4 py-2 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className='text-black'>
-                {filteredIncidents.length > 0 ? (
-                  filteredIncidents.map((incident) => (
-                    <tr key={incident._id} 
-                        className={`border-b hover:bg-gray-50 ${
-                          selectedIncident?._id === incident._id ? 'bg-blue-50' : ''
-                        }`}>
-                      <td className="px-4 py-2 text-center">{formatDate(incident.date)}</td>
-                      <td className="px-4 py-2 text-center">{incident.type}</td>
-                      <td className="px-4 py-2 text-center">
-                        <span className={incident.incidentClassification === 'Emergency Incident' ? 'text-red-500 font-semibold' : 'text-blue-500'}>
-                          {incident.incidentClassification || 'Normal Incident'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="flex justify-center space-x-2">
-                          <button
-                            onClick={() => handleViewDetails(incident)}
-                            className={`${
-                              selectedIncident?._id === incident._id && showDetails
-                                ? 'bg-red-500 hover:bg-red-600'
-                                : 'bg-blue-500 hover:bg-blue-600'
-                            } text-white px-3 py-1 rounded`}
-                          >
-                            {selectedIncident?._id === incident._id && showDetails ? 'Hide Details' : 'View Details'}
-                          </button>
-                          <button
-                            onClick={() => handleViewLocation(incident)}
-                            className={`${
-                              selectedIncident?._id === incident._id && showMap
-                                ? 'bg-red-500 hover:bg-red-600'
-                                : 'bg-green-500 hover:bg-green-600'
-                            } text-white px-3 py-1 rounded`}
-                          >
-                            {selectedIncident?._id === incident._id && showMap ? 'Hide Location' : 'View Location'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="4" className="px-4 py-2 text-center">
-                      No resolved incidents found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Right side - Details Panel */}
-        {showDetails && selectedIncident && renderIncidentDetails()}
-
-        {/* Right side - Map Panel */}
-        {showMap && selectedIncident && (
-          <div className="w-1/2 pl-6">
-            <div className="bg-gray-50 p-4 rounded-lg h-full">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-green-700">Incident Location</h3>
-                <button
-                  onClick={() => setShowMap(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="h-[500px] rounded-lg overflow-hidden">
-                <MapContainer
-                  center={[14.7356, 121.0498]}
-                  zoom={15}
-                  style={{ height: '100%', width: '100%' }}
-                >
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  <MapComponent incident={selectedIncident} />
-                </MapContainer>
-              </div>
+    <AnimatePresence>
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-[3000]"
+      >
+        <motion.div 
+          variants={modalVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          className={`w-11/12 max-w-7xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col ${
+            isDarkMode ? 'bg-gray-900' : 'bg-white'
+          }`}
+        >
+          {/* Modal Header */}
+          <div className={`px-6 py-4 flex justify-between items-center border-b ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'
+          }`}>
+            <div className="flex items-center">
+              <motion.div 
+                whileHover={{ rotate: 360, transition: { duration: 0.5 } }}
+                className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${
+                  isDarkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-600'
+                }`}
+              >
+                <RiCheckboxCircleLine size={24} />
+              </motion.div>
+              <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                Resolved Incidents
+              </h3>
             </div>
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={handleClose}
+              className={`p-2 rounded-full hover:bg-opacity-80 ${
+                isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-500'
+              }`}
+            >
+              <RiCloseLine size={24} />
+            </motion.button>
           </div>
+
+          {/* Modal Body - Responsive Layout */}
+          <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+            {/* Left side - Table (always visible in desktop, conditionally in mobile) */}
+            {(!mobileView || (mobileView && activeTab === 'list')) && (
+              <motion.div 
+                variants={contentVariants}
+                initial="hidden"
+                animate="visible"
+                className={`${(showDetails || showMap) && !mobileView ? 'w-1/2' : 'w-full'} overflow-y-auto flex-shrink-0 p-6`}
+              >
+                {/* Search and Filter Controls */}
+                <motion.div 
+                  variants={itemVariants}
+                  className={`mb-5 p-4 rounded-xl ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} shadow-md`}
+                >
+                  <div className="flex flex-col md:flex-row gap-3 items-center">
+                    {/* Search input */}
+                    <div className="relative w-full md:w-auto md:flex-grow">
+                      <RiSearchLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                      <input
+                        type="text"
+                        placeholder="Search incidents..."
+                        className={`w-full pl-10 pr-4 py-2.5 rounded-lg ${
+                          isDarkMode 
+                            ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500' 
+                            : 'bg-white border-gray-300 text-gray-800 focus:border-blue-500'
+                        } border focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Filter controls */}
+                    <div className="flex flex-wrap md:flex-nowrap gap-3 w-full md:w-auto">
+                      <input
+                        type="date"
+                        className={`px-3 py-2.5 rounded-lg border ${
+                          isDarkMode 
+                            ? 'bg-gray-700 border-gray-600 text-white' 
+                            : 'bg-white border-gray-300 text-gray-800'
+                        } focus:outline-none focus:ring-1 focus:ring-blue-500 w-full md:w-auto`}
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                      />
+                      <select
+                        className={`px-3 py-2.5 rounded-lg border ${
+                          isDarkMode 
+                            ? 'bg-gray-700 border-gray-600 text-white' 
+                            : 'bg-white border-gray-300 text-gray-800'
+                        } focus:outline-none focus:ring-1 focus:ring-blue-500 w-full md:w-auto`}
+                        value={typeFilter}
+                        onChange={(e) => setTypeFilter(e.target.value)}
+                      >
+                        <option value="all">All Types</option>
+                        <option value="emergency">Emergency</option>
+                        <option value="normal">Normal</option>
+                      </select>
+                      <motion.button
+                        variants={buttonVariants}
+                        whileHover="hover"
+                        whileTap="tap"
+                        onClick={() => {
+                          setSearchTerm('');
+                          setDateFilter('');
+                          setTypeFilter('all');
+                        }}
+                        className={`flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg ${
+                          isDarkMode 
+                            ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
+                            : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                        }`}
+                      >
+                        <RiDeleteBin7Line size={18} />
+                        <span>Clear</span>
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Incident Cards (for mobile) or Table (for desktop) */}
+                {mobileView ? (
+                  <div className="space-y-4">
+                    {filteredIncidents.length > 0 ? (
+                      filteredIncidents.map((incident) => (
+                        <motion.div
+                          key={incident._id}
+                          variants={itemVariants}
+                          className={`p-4 rounded-xl ${
+                            isDarkMode ? 'bg-gray-800' : 'bg-white'
+                          } shadow-md border ${
+                            selectedIncident?._id === incident._id 
+                              ? isDarkMode ? 'border-blue-600' : 'border-blue-500'
+                              : isDarkMode ? 'border-gray-700' : 'border-gray-100'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <span className={`text-sm font-medium px-2.5 py-1 rounded-full ${
+                              incident.incidentClassification === 'Emergency Incident'
+                                ? isDarkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800'
+                                : isDarkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {incident.incidentClassification || 'Normal Incident'}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {formatDate(incident.date)}
+                            </span>
+                          </div>
+                          <h4 className="font-medium text-lg mb-2">{incident.type}</h4>
+                          <div className="flex flex-wrap gap-2 mt-4">
+                            <motion.button
+                              variants={buttonVariants}
+                              whileHover="hover"
+                              whileTap="tap"
+                              onClick={() => handleViewDetails(incident)}
+                              className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg ${
+                                isDarkMode 
+                                  ? 'bg-blue-800 hover:bg-blue-700 text-white' 
+                                  : 'bg-blue-500 hover:bg-blue-600 text-white'
+                              }`}
+                            >
+                              <RiInformationLine />
+                              <span>Details</span>
+                            </motion.button>
+                            <motion.button
+                              variants={buttonVariants}
+                              whileHover="hover"
+                              whileTap="tap"
+                              onClick={() => handleViewLocation(incident)}
+                              className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg ${
+                                isDarkMode 
+                                  ? 'bg-green-800 hover:bg-green-700 text-white' 
+                                  : 'bg-green-500 hover:bg-green-600 text-white'
+                              }`}
+                            >
+                              <RiMapPin2Line />
+                              <span>Map</span>
+                            </motion.button>
+                          </div>
+                        </motion.div>
+                      ))
+                    ) : (
+                      <motion.div
+                        variants={itemVariants}
+                        className={`p-6 text-center rounded-xl ${
+                          isDarkMode ? 'bg-gray-800' : 'bg-white'
+                        } shadow-md border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}
+                      >
+                        <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                          isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                        }`}>
+                          <RiInformationLine size={32} className="text-gray-400" />
+                        </div>
+                        <h4 className="text-lg font-medium mb-2">No incidents found</h4>
+                        <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Try adjusting your search or filters
+                        </p>
+                      </motion.div>
+                    )}
+                  </div>
+                ) : (
+                  <motion.div
+                    variants={itemVariants} 
+                    className={`overflow-hidden rounded-xl border ${
+                      isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                    } shadow-md`}
+                  >
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className={isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}>
+                          <tr>
+                            <th scope="col" className={`px-6 py-3.5 text-left text-xs font-medium ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            } uppercase tracking-wider`}>Date</th>
+                            <th scope="col" className={`px-6 py-3.5 text-left text-xs font-medium ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            } uppercase tracking-wider`}>Incident</th>
+                            <th scope="col" className={`px-6 py-3.5 text-left text-xs font-medium ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            } uppercase tracking-wider`}>Type</th>
+                            <th scope="col" className={`px-6 py-3.5 text-left text-xs font-medium ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            } uppercase tracking-wider`}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y ${
+                          isDarkMode ? 'divide-gray-700' : 'divide-gray-200'
+                        }`}>
+                          {filteredIncidents.length > 0 ? (
+                            filteredIncidents.map((incident) => (
+                              <tr key={incident._id} 
+                                  className={`${
+                                    selectedIncident?._id === incident._id 
+                                      ? isDarkMode ? 'bg-gray-700' : 'bg-blue-50'
+                                      : ''
+                                  } hover:${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} transition-colors`}>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                                  isDarkMode ? 'text-gray-300' : 'text-gray-900'
+                                }`}>{formatDate(incident.date)}</td>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                                  isDarkMode ? 'text-gray-300' : 'text-gray-900'
+                                }`}>{incident.type}</td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
+                                    incident.incidentClassification === 'Emergency Incident'
+                                      ? isDarkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800'
+                                      : isDarkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {incident.incidentClassification || 'Normal Incident'}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                  <div className="flex space-x-2">
+                                    <motion.button
+                                      variants={buttonVariants}
+                                      whileHover="hover"
+                                      whileTap="tap"
+                                      onClick={() => handleViewDetails(incident)}
+                                      className={`inline-flex items-center px-3 py-1.5 rounded-lg ${
+                                        selectedIncident?._id === incident._id && showDetails
+                                          ? isDarkMode ? 'bg-gray-600 text-white' : 'bg-gray-500 text-white'
+                                          : isDarkMode ? 'bg-blue-800 text-white hover:bg-blue-700' : 'bg-blue-500 text-white hover:bg-blue-600'
+                                      }`}
+                                    >
+                                      <RiInformationLine className="mr-1" />
+                                      {selectedIncident?._id === incident._id && showDetails ? 'Hide Details' : 'Details'}
+                                    </motion.button>
+                                    <motion.button
+                                      variants={buttonVariants}
+                                      whileHover="hover"
+                                      whileTap="tap"
+                                      onClick={() => handleViewLocation(incident)}
+                                      className={`inline-flex items-center px-3 py-1.5 rounded-lg ${
+                                        selectedIncident?._id === incident._id && showMap
+                                          ? isDarkMode ? 'bg-gray-600 text-white' : 'bg-gray-500 text-white'
+                                          : isDarkMode ? 'bg-green-800 text-white hover:bg-green-700' : 'bg-green-500 text-white hover:bg-green-600'
+                                      }`}
+                                    >
+                                      <RiMapPin2Line className="mr-1" />
+                                      {selectedIncident?._id === incident._id && showMap ? 'Hide Map' : 'Map'}
+                                    </motion.button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="4" className="px-6 py-4 text-center text-sm font-medium">
+                                <div className="flex flex-col items-center py-6">
+                                  <RiInformationLine size={40} className="text-gray-400 mb-2" />
+                                  <p className={isDarkMode ? 'text-gray-300' : 'text-gray-500'}>
+                                    No resolved incidents found
+                                  </p>
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    Try adjusting your search or filters
+                                  </p>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
+
+            {/* Right side - Details or Map */}
+            {(!mobileView && (showDetails || showMap)) && (
+              showDetails ? renderIncidentDetails() : renderMap()
+            )}
+            
+            {/* Mobile view for details and map */}
+            {mobileView && activeTab === 'details' && renderIncidentDetails()}
+            {mobileView && activeTab === 'map' && renderMap()}
+
+            {/* Mobile Navigation */}
+            {mobileView && <MobileNavTabs />}
+          </div>
+        </motion.div>
+
+        {showAssistanceDetails && selectedAssistance && (
+          <AssistanceDetailsModal
+            details={selectedAssistance}
+            onClose={() => setShowAssistanceDetails(false)}
+          />
         )}
-      </div>
-      {showAssistanceDetails && selectedAssistance && (
-        <AssistanceDetailsModal
-          details={selectedAssistance}
-          onClose={() => setShowAssistanceDetails(false)}
-        />
-      )}
-    </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 

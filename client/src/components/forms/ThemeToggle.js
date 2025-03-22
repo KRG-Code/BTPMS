@@ -1,35 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { RiSunLine, RiMoonLine } from "react-icons/ri";
+import { useTheme } from '../../contexts/ThemeContext';
+import { motion } from 'framer-motion';
 
 export default function ThemeToggle() {
-  const [isDarkMode, setIsDarkMode] = useState(
-    localStorage.getItem('theme') === 'dark'
-  );
-
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-  };
-
-  useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.add('dark-mode');
-      document.body.classList.remove('light-mode');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.body.classList.add('light-mode');
-      document.body.classList.remove('dark-mode');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [isDarkMode]);
-
+  const { isDarkMode, toggleTheme } = useTheme();
+  
   return (
-    <button
+    <motion.button
       onClick={toggleTheme}
-      className={`p-2 rounded transition-colors duration-300 ${
-        isDarkMode ? 'text-white' : 'text-black'
+      className={`p-2 rounded-full transition-colors duration-300 ${
+        isDarkMode 
+          ? 'bg-gray-800 text-yellow-300 hover:bg-gray-700' 
+          : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
       }`}
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.9 }}
+      title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
     >
-      {isDarkMode ? <RiMoonLine /> : <RiSunLine />}
-    </button>
+      {isDarkMode ? <RiSunLine className="h-5 w-5" /> : <RiMoonLine className="h-5 w-5" />}
+    </motion.button>
   );
 }

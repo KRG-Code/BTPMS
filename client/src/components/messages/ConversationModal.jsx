@@ -1,18 +1,56 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { toast } from "react-toastify";
-import { RiUser3Line, RiEmotionLine } from "react-icons/ri";
+import { toast, ToastContainer } from "react-toastify";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  RiUser3Line, 
+  RiEmotionLine, 
+  RiSendPlaneFill, 
+  RiArrowLeftLine,
+  RiAttachment2,
+  RiCloseLine,
+  RiCheckDoubleLine,
+  RiTimeLine,
+  RiInformationLine
+} from "react-icons/ri";
 import io from 'socket.io-client';
 import RTCManager from './RTCManager';
 import EmojiPicker from 'emoji-picker-react';
+import { useTheme } from "../../contexts/ThemeContext";  // Fixed import path
+
+// Animation variants
+const modalVariants = {
+  hidden: { opacity: 0, scale: 0.8 },
+  visible: { 
+    opacity: 1, 
+    scale: 1,
+    transition: { type: "spring", damping: 25, stiffness: 500 }
+  },
+  exit: { 
+    opacity: 0, 
+    scale: 0.8,
+    transition: { duration: 0.15 } 
+  }
+};
+
+const messageVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 }
+};
 
 export default function ConversationModal({ conversation, onClose, onNewMessage }) {
+  const { isDarkMode } = useTheme();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef(null);
   const [socket, setSocket] = useState(null);
   const [rtcManager, setRtcManager] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const messageInputRef = useRef(null);
+  const [typing, setTyping] = useState(false);
+  const [typingTimeoutId, setTypingTimeoutId] = useState(null);
+  // Add a ref for the emoji button
+  const emojiButtonRef = useRef(null);
   
   // Add refresh interval reference
   const refreshIntervalRef = useRef(null);
@@ -25,7 +63,6 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
     const checkUserId = () => {
       const userId = localStorage.getItem("userId");
       if (!userId) {
-        // If userId is not in localStorage, try to get it from the token
         const token = localStorage.getItem("token");
         if (token) {
           try {
@@ -61,12 +98,24 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
         setMessages(prevMessages => {
           const messageExists = prevMessages.some(msg => msg._id === newMsg._id);
           if (!messageExists) {
-            onNewMessage(); // Call this to update the conversation list
+            onNewMessage();
             scrollToBottom();
             return [...prevMessages, newMsg];
           }
           return prevMessages;
         });
+      }
+    });
+
+    socketInstance.on('userTyping', (data) => {
+      if (data.conversationId === conversation._id && 
+          data.userId !== localStorage.getItem("userId")) {
+        setTyping(true);
+        // Clear any existing timeout
+        if (typingTimeoutId) clearTimeout(typingTimeoutId);
+        // Set a new timeout
+        const timeoutId = setTimeout(() => setTyping(false), 3000);
+        setTypingTimeoutId(timeoutId);
       }
     });
 
@@ -76,15 +125,19 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
     return () => {
       if (socketInstance) {
         socketInstance.off('messageReceived');
+        socketInstance.off('userTyping');
         socketInstance.emit('leaveConversation', conversation._id);
         socketInstance.disconnect();
+      }
+      if (typingTimeoutId) {
+        clearTimeout(typingTimeoutId);
       }
     };
   }, [conversation._id]);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]); // Scroll when messages update
+  }, [messages]);
 
   useEffect(() => {
     refreshIntervalRef.current = setInterval(() => {
@@ -97,11 +150,10 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
         refreshIntervalRef.current = null;
       }
     };
-  }, [conversation._id]); // Remove showEmojiPicker from dependencies
+  }, [conversation._id]);
 
   // Modify fetchMessages to avoid unnecessary UI updates
   const fetchMessages = async () => {
-    // Skip fetching messages for temporary conversations
     if (conversation.temporary) {
       return;
     }
@@ -114,7 +166,6 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
         }
       );
       
-      // Compare with current messages to avoid unnecessary updates
       const newMessages = response.data.messages;
       const currentMessagesIds = new Set(messages.map(m => m._id));
       const hasNewMessages = newMessages.some(msg => !currentMessagesIds.has(msg._id));
@@ -125,10 +176,18 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
       }
     } catch (error) {
       console.error("Error fetching messages:", error);
-      // Don't show error toast on auto-refresh to avoid spam
       if (!refreshIntervalRef.current) {
         toast.error("Error fetching messages.");
       }
+    }
+  };
+
+  const handleTyping = () => {
+    if (socket) {
+      socket.emit('typing', {
+        conversationId: conversation._id,
+        userId: localStorage.getItem("userId")
+      });
     }
   };
 
@@ -137,7 +196,7 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
     if (!newMessage.trim()) return;
 
     const messageContent = newMessage.trim();
-    setNewMessage(''); // Clear input immediately
+    setNewMessage('');
 
     try {
       // If this is a new conversation, create it first
@@ -166,9 +225,12 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
       setMessages(prevMessages => [...prevMessages, response.data.message]);
       if (onNewMessage) onNewMessage();
       scrollToBottom();
+      
+      // Focus the input after sending
+      messageInputRef.current?.focus();
     } catch (error) {
       toast.error("Error sending message.");
-      setNewMessage(messageContent); // Restore message if failed
+      setNewMessage(messageContent);
     }
   };
 
@@ -176,7 +238,6 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
     const currentUserId = localStorage.getItem("userId");
     if (!currentUserId) return false;
 
-    // Ensure we're comparing strings and handling nested objects
     const messageUserId = (message.userId?._id || message.userId)?.toString();
     return messageUserId === currentUserId.toString();
   };
@@ -188,36 +249,69 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
     );
   };
 
-  useEffect(() => {
-    const currentUserId = localStorage.getItem("userId");
-    console.log("Current user ID:", currentUserId);
-    console.log("Messages:", messages);
-    console.log("Conversation participants:", conversation.participants);
-  }, [messages, conversation]);
-
   const onEmojiClick = (emojiObject) => {
     setNewMessage(prevMessage => prevMessage + emojiObject.emoji);
     setShowEmojiPicker(false);
-    // Remove the refresh interval restart since it's now always running
+    messageInputRef.current?.focus();
   };
 
-  // Add this function near your other functions
-  const getEmojiPickerPosition = () => {
-    const viewportHeight = window.innerHeight;
-    const emojiHeight = 400; // Height of emoji picker
-    const buttonPosition = document.querySelector('.emoji-button')?.getBoundingClientRect();
-    
-    if (!buttonPosition) return 'bottom-14';
-    
-    // Check if there's enough space below
-    const spaceBelow = viewportHeight - buttonPosition.bottom;
-    const spaceAbove = buttonPosition.top;
-    
-    // Return appropriate position class
-    if (spaceBelow >= emojiHeight) {
-      return 'bottom-14';
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(e);
     }
-    return 'top-14';
+  };
+
+  // Format messages by grouping them by date
+  const groupMessagesByDate = () => {
+    const groups = [];
+    let currentDate = '';
+    let currentGroup = [];
+
+    messages.forEach(message => {
+      const messageDate = new Date(message.createdAt).toLocaleDateString();
+      
+      if (messageDate !== currentDate) {
+        if (currentGroup.length > 0) {
+          groups.push({
+            date: currentDate,
+            messages: currentGroup
+          });
+        }
+        currentDate = messageDate;
+        currentGroup = [message];
+      } else {
+        currentGroup.push(message);
+      }
+    });
+
+    if (currentGroup.length > 0) {
+      groups.push({
+        date: currentDate,
+        messages: currentGroup
+      });
+    }
+
+    return groups;
+  };
+
+  const formatMessageTime = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatDateHeader = (dateString) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    }
   };
 
   useEffect(() => {
@@ -239,137 +333,302 @@ export default function ConversationModal({ conversation, onClose, onNewMessage 
 
     // Call it when modal opens and after receiving new messages
     markConversationAsRead();
-  }, [conversation._id, messages]); // Run when messages update or conversation changes
+  }, [conversation._id, messages]);
+
+  const messageGroups = groupMessagesByDate();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="bg-white rounded-[30px] w-[500px] max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
-        <div className="p-4 border-b flex justify-between items-center TopNav rounded-t-[30px]">
+    <motion.div 
+      variants={modalVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex justify-center items-center z-50 p-4"
+    >
+      <div className={`w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col ${
+        isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'
+      }`}>
+        {/* Header */}
+        <div className={`p-4 border-b flex justify-between items-center ${
+          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'
+        }`}>
           {(() => {
             const receiver = getOtherParticipant();
             return (
-              <div className="flex items-center ">
-                <div className="w-10 h-10 rounded-full overflow-hidden mr-3 bg-gray-200 flex items-center justify-center">
-                  {receiver?.profilePicture ? (
-                    <img
-                      src={receiver.profilePicture}
-                      alt={`${receiver.firstName}'s profile`}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <RiUser3Line className="w-6 h-6 text-gray-400" />
+              <div className="flex items-center">
+                <div className="relative">
+                  <div className={`w-12 h-12 rounded-full overflow-hidden ${
+                    isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+                  } flex items-center justify-center`}>
+                    {receiver?.profilePicture ? (
+                      <img
+                        src={receiver.profilePicture}
+                        alt={`${receiver.firstName}'s profile`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <RiUser3Line className={`w-7 h-7 ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`} />
+                    )}
+                  </div>
+                  {receiver?.isOnline && (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
                   )}
                 </div>
-                <div>
-                  <h3 className="font-bold">
+                <div className="ml-3">
+                  <h3 className="font-bold text-lg">
                     {receiver?.firstName} {receiver?.lastName}
                   </h3>
-                  <p className="text-sm text-gray-500 capitalize">
-                    {receiver?.userType}
+                  <p className={`text-xs capitalize ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                    {receiver?.isOnline ? 'Online' : receiver?.lastActive 
+                      ? `Last seen ${new Date(receiver.lastActive).toLocaleString()}`
+                      : receiver?.userType || 'User'}
                   </p>
                 </div>
               </div>
             );
           })()}
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={onClose}
+              className={`p-2 rounded-full ${
+                isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
+              }`}
+            >
+              <RiCloseLine size={24} className={isDarkMode ? 'text-gray-300' : 'text-gray-600'} />
+            </motion.button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="space-y-3">
-            {messages.length > 0 ? (
-              messages.map((message) => {
-                const isSender = isCurrentUserMessage(message);
-                console.log("Message:", message, "IsSender:", isSender);
-                return (
-                  <div
-                    key={message._id}
-                    className={`flex items-end gap-2 ${
-                      isSender ? 'justify-end' : 'justify-start'
-                    }`}
-                  >
-                    <div
-                      className={`px-4 py-2 rounded-2xl max-w-[70%] break-words ${
-                        isSender
-                          ? 'bg-blue-500 text-white rounded-br-sm'
-                          : 'bg-gray-200 text-black rounded-bl-sm'
-                      }`}
-                    >
-                      {message.content}
-                    </div>
+        {/* Messages */}
+        <div className={`flex-1 overflow-y-auto p-4 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+          {messageGroups.length > 0 ? (
+            messageGroups.map((group, groupIndex) => (
+              <div key={group.date} className="mb-6">
+                <div className="flex justify-center mb-4">
+                  <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-200 text-gray-700'
+                  }`}>
+                    {formatDateHeader(group.date)}
                   </div>
-                );
-              })
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <p className="mb-2">No messages yet</p>
-                <p className="text-sm">Start the conversation by sending a message!</p>
+                </div>
+                
+                <div className="space-y-3">
+                  {group.messages.map((message, index) => {
+                    const isSender = isCurrentUserMessage(message);
+                    const showAvatar = index === 0 || 
+                      isCurrentUserMessage(group.messages[index - 1]) !== isSender;
+                                        
+                    return (
+                      <motion.div
+                        key={message._id}
+                        variants={messageVariants}
+                        initial="hidden"
+                        animate="visible"
+                        className={`flex items-end gap-2 ${isSender ? 'justify-end' : 'justify-start'}`}
+                      >
+                        {!isSender && showAvatar ? (
+                          <div className={`w-8 h-8 rounded-full overflow-hidden ${
+                            isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+                          } flex items-center justify-center flex-shrink-0`}>
+                            {getOtherParticipant()?.profilePicture ? (
+                              <img
+                                src={getOtherParticipant().profilePicture}
+                                alt="Avatar"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <RiUser3Line className={isDarkMode ? 'text-gray-500' : 'text-gray-400'} />
+                            )}
+                          </div>
+                        ) : !isSender && (
+                          <div className="w-8 flex-shrink-0"></div>
+                        )}
+                        
+                        <div className={`${
+                          isSender
+                            ? isDarkMode 
+                              ? 'bg-blue-700 text-white' 
+                              : 'bg-blue-600 text-white'
+                            : isDarkMode 
+                              ? 'bg-gray-800 text-gray-200' 
+                              : 'bg-gray-200 text-gray-800'
+                        } px-4 py-2.5 rounded-2xl max-w-[75%] ${
+                          isSender 
+                            ? 'rounded-br-sm' 
+                            : 'rounded-bl-sm'
+                        }`}>
+                          <div className="break-words">{message.content}</div>
+                          <div className={`text-xs mt-1 flex items-center justify-end ${
+                            isSender 
+                              ? isDarkMode ? 'text-blue-200' : 'text-blue-100' 
+                              : isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                          }`}>
+                            {formatMessageTime(message.createdAt)}
+                            {isSender && (
+                              <span className="ml-1">
+                                {message.read 
+                                  ? <RiCheckDoubleLine className="text-xs" /> 
+                                  : <RiTimeLine className="text-xs" />}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
               </div>
+            ))
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center p-4">
+              <div className={`w-16 h-16 mb-4 rounded-full flex items-center justify-center ${
+                isDarkMode ? 'bg-gray-800' : 'bg-blue-50'
+              }`}>
+                <RiInformationLine size={28} className={isDarkMode ? 'text-blue-400' : 'text-blue-500'} />
+              </div>
+              <h4 className="text-lg font-medium mb-2">No messages yet</h4>
+              <p className={`text-sm max-w-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                Send a message to start the conversation with {getOtherParticipant()?.firstName}
+              </p>
+            </div>
+          )}
+          
+          {/* Typing indicator */}
+          <AnimatePresence>
+            {typing && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="flex items-center mt-2 ml-10"
+              >
+                <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'} px-4 py-2 rounded-xl`}>
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                </div>
+                <div className={`text-xs ml-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {getOtherParticipant()?.firstName} is typing...
+                </div>
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
+          
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={sendMessage} className="p-4 border-t TopNav relative rounded-b-[30px]">
-          <div className="flex gap-2 items-center">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              className="flex-1 border rounded-full px-4 py-2 text-black"
-              placeholder="Type a message..."
-            />
-            
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="text-gray-500 hover:text-gray-700 p-2 rounded-full hover:bg-gray-100 emoji-button"
-              >
-                <RiEmotionLine className="w-6 h-6" />
-              </button>
-              
-              {showEmojiPicker && (
-                <div className="fixed bottom-4 right-4" style={{ transform: 'translateY(-100%)', zIndex: 9999 }}>
-                  <div className="shadow-xl rounded-lg">
-                    <EmojiPicker
-                      onEmojiClick={onEmojiClick}
-                      width={300}
-                      height={400}
-                      searchDisabled={false}
-                      skinTonesDisabled={true}
-                      previewConfig={{
-                        showPreview: false
-                      }}
-                      categories={[
-                        'suggested',
-                        'smileys_people',
-                        'animals_nature',
-                        'food_drink',
-                        'travel_places',
-                        'activities',
-                        'objects',
-                        'symbols',
-                        'flags'
-                      ]}
-                      searchPlaceholder="Search emojis..."
-                      theme="light"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              className="bg-blue-500 text-white px-6 py-2 rounded-full hover:bg-blue-600 transition-colors"
+        {/* Message Form */}
+        <form onSubmit={sendMessage} className={`px-4 py-3 border-t ${
+          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            {/* Emoji button with ref */}
+            <motion.button
+              ref={emojiButtonRef} // Add ref here
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              type="button"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className={`p-2 rounded-full flex-shrink-0 ${
+                isDarkMode 
+                  ? 'text-gray-300 hover:bg-gray-700' 
+                  : 'text-gray-500 hover:bg-gray-100'
+              }`}
             >
-              Send
-            </button>
+              <RiEmotionLine size={24} />
+            </motion.button>
+
+            {/* Message input */}
+            <div className="relative flex-grow">
+              <input
+                ref={messageInputRef}
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyDown={handleKeyPress}
+                onKeyUp={handleTyping}
+                placeholder="Type a message..."
+                className={`w-full pl-4 pr-10 py-3 rounded-full border ${
+                  isDarkMode 
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder:text-gray-400' 
+                    : 'bg-white border-gray-300 text-black placeholder:text-gray-500'
+                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              />
+            </div>
+            
+            {/* Send button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              type="submit"
+              className={`p-3 rounded-full flex-shrink-0 ${
+                newMessage.trim() 
+                  ? isDarkMode 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-blue-500 text-white hover:bg-blue-600'
+                  : isDarkMode
+                    ? 'bg-gray-700 text-gray-400' 
+                    : 'bg-gray-200 text-gray-400'
+              }`}
+              disabled={!newMessage.trim()}
+            >
+              <RiSendPlaneFill size={20} />
+            </motion.button>
           </div>
+
+          {/* Emoji picker - improved positioning */}
+          <AnimatePresence>
+            {showEmojiPicker && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="absolute z-20"
+                style={{
+                  bottom: '80px', // Position above the message form
+                  left: '20px', // Align with the emoji button
+                  maxWidth: 'calc(100vw - 40px)' // Prevent overflow
+                }}
+              >
+                <div className="shadow-xl rounded-lg bg-opacity-100">
+                  <EmojiPicker
+                    onEmojiClick={onEmojiClick}
+                    width={320}
+                    height={400}
+                    searchDisabled={false}
+                    skinTonesDisabled={true}
+                    previewConfig={{ showPreview: false }}
+                    theme={isDarkMode ? "dark" : "light"}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </form>
       </div>
-    </div>
+
+      {/* Add ToastContainer with high z-index to ensure visibility */}
+      <ToastContainer 
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme={isDarkMode ? "dark" : "light"} 
+        style={{ zIndex: 9999 }}
+      />
+    </motion.div>
   );
 }

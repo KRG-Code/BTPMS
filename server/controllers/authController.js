@@ -5,6 +5,8 @@ const TanodRating = require("../models/Rating");
 const Schedule = require("../models/Schedule");
 const Notification = require('../models/Notification');
 const Inventory = require("../models/Inventory");
+const IncidentReport = require('../models/IncidentReport'); // Add this import
+const AssistanceRequest = require('../models/AssistanceRequest'); // Add this import
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { validationResult } = require("express-validator");
@@ -966,5 +968,405 @@ exports.markNotificationsAsRead = async (req, res) => {
   } catch (error) {
     console.error('Error marking notifications as read:', error);
     res.status(500).json({ message: 'Failed to mark notifications as read.' });
+  }
+};
+
+// Add these new controller functions:
+exports.getPatrolStats = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
+    // Get all schedules where this user is a tanod
+    const schedules = await Schedule.find({
+      tanods: userObjectId
+    });
+    
+    // Calculate stats
+    const totalPatrols = schedules.length;
+    const completedPatrols = schedules.filter(s => s.status === 'Completed').length;
+    const ongoingPatrols = schedules.filter(s => s.status === 'Ongoing').length;
+    
+    // Fix the date calculation for lastPatrolDate
+    const lastPatrolDate = schedules.length > 0 ? 
+        new Date(Math.max(...schedules.map(s => new Date(s.startTime).getTime()))) : null;
+
+    // Calculate monthly stats
+    const monthlyPatrols = Array(6).fill(0).map((_, i) => {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const monthName = date.toLocaleString('default', { month: 'short' });
+      const count = schedules.filter(s => {
+        const scheduleDate = new Date(s.startTime);
+        return scheduleDate.getMonth() === date.getMonth() &&
+               scheduleDate.getFullYear() === date.getFullYear();
+      }).length;
+      return { name: monthName, count };
+    }).reverse();
+
+    // Get areas patrolled - fix the MongoDB aggregation query
+    const areasPatrolled = await Schedule.aggregate([
+      { $match: { tanods: userObjectId } },
+      { $lookup: { 
+          from: 'polygons', 
+          localField: 'patrolArea', 
+          foreignField: '_id', 
+          as: 'area' 
+      }},
+      { $unwind: { path: '$area', preserveNullAndEmptyArrays: true } },
+      { $group: { 
+        _id: '$area._id',
+        name: { $first: '$area.legend' },
+        patrolCount: { $sum: 1 }
+      }}
+    ]);
+
+    res.json({
+      totalPatrols,
+      completedPatrols,
+      ongoingPatrols,
+      lastPatrolDate,
+      monthlyPatrols,
+      areasPatrolled
+    });
+  } catch (error) {
+    console.error("Error fetching patrol stats:", error);
+    res.status(500).json({ message: "Error fetching patrol stats" });
+  }
+};
+
+exports.getIncidentStats = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
+    // Get all incident reports handled by this user
+    const incidents = await IncidentReport.find({
+      responder: userObjectId
+    });
+    
+    const totalResponses = incidents.length;
+    const resolvedIncidents = incidents.filter(i => i.status === 'Resolved').length;
+    
+    // Calculate response rate - properly calculate based on resolved/total
+    const responseRate = totalResponses > 0 ? 
+        ((resolvedIncidents / totalResponses) * 100).toFixed(1) : 0;
+
+    // Calculate average response time - use createdAt instead of date field for accuracy
+    const responseTimes = incidents.map(i => {
+      if (i.respondedAt && i.createdAt) {
+        return Math.max(0, (new Date(i.respondedAt) - new Date(i.createdAt)) / (1000 * 60)); // in minutes
+      }
+      return null;
+    }).filter(Boolean);
+
+    const averageResponseTime = responseTimes.length > 0 ?
+        Math.round(responseTimes.reduce((a, b) => a + b) / responseTimes.length) : 0;
+    
+    res.json({
+      totalIncidentResponses: totalResponses,
+      resolvedIncidents,
+      responseRate,
+      averageResponseTime
+    });
+  } catch (error) {
+    console.error("Error fetching incident stats:", error);
+    res.status(500).json({ message: "Error fetching incident stats" });
+  }
+};
+
+// Get incident types breakdown for a tanod
+exports.getIncidentTypeBreakdown = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
+    // Get all incident reports handled by this tanod
+    const incidents = await IncidentReport.find({
+      responder: userObjectId
+    }).select('type');
+
+    // Group by incident type and count
+    const typeCounts = {};
+    incidents.forEach(incident => {
+      if (!typeCounts[incident.type]) {
+        typeCounts[incident.type] = 0;
+      }
+      typeCounts[incident.type]++;
+    });
+
+    // Format for frontend
+    const labels = Object.keys(typeCounts);
+    const counts = labels.map(label => typeCounts[label]);
+
+    res.json({
+      labels,
+      counts
+    });
+  } catch (error) {
+    console.error("Error fetching incident type breakdown:", error);
+    res.status(500).json({ message: "Error fetching incident type statistics" });
+  }
+};
+
+// Get attendance statistics for a tanod
+exports.getAttendanceStats = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
+    // Get all schedules where this user was assigned
+    const schedules = await Schedule.find({
+      tanods: userObjectId
+    });
+
+    const totalScheduled = schedules.length;
+    
+    // Find schedules where the user actually participated (has patrolStatus entry)
+    const attendedSchedules = schedules.filter(schedule => 
+      schedule.patrolStatus.some(status => 
+        status.tanodId.toString() === userId.toString() && 
+        (status.status === 'Started' || status.status === 'Completed')
+      )
+    );
+    
+    const attended = attendedSchedules.length;
+    const attendanceRate = totalScheduled > 0 ? 
+        ((attended / totalScheduled) * 100).toFixed(1) : 0;
+
+    // Calculate on-time rate
+    let onTimeCount = 0;
+    let totalDelayMinutes = 0;
+    
+    attendedSchedules.forEach(schedule => {
+      const statusEntry = schedule.patrolStatus.find(
+        status => status.tanodId.toString() === userId.toString()
+      );
+      
+      if (statusEntry && statusEntry.startTime) {
+        const scheduledStart = new Date(schedule.startTime);
+        const actualStart = new Date(statusEntry.startTime);
+        const delayInMinutes = Math.max(0, (actualStart - scheduledStart) / (1000 * 60));
+        
+        if (delayInMinutes <= 5) { // Consider "on time" if within 5 minutes
+          onTimeCount++;
+        }
+        
+        totalDelayMinutes += delayInMinutes;
+      }
+    });
+    
+    const onTimeRate = attended > 0 ? 
+        ((onTimeCount / attended) * 100).toFixed(1) : 0;
+    const averageDelay = attended > 0 ? 
+        (totalDelayMinutes / attended).toFixed(1) : 0;
+
+    res.json({
+      totalScheduled,
+      attended,
+      attendanceRate,
+      onTimeRate,
+      averageDelay
+    });
+  } catch (error) {
+    console.error("Error fetching attendance stats:", error);
+    res.status(500).json({ message: "Error fetching attendance statistics" });
+  }
+};
+
+// Get equipment statistics for a tanod
+exports.getEquipmentStats = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
+    // Get all equipment borrowed by this user
+    const equipment = await Equipment.find({
+      user: userObjectId
+    }).sort({ borrowDate: -1 });
+    
+    const totalBorrowed = equipment.length;
+    
+    // Fix: Check if returnDate exists AND is after January 1, 1971 to consider it returned
+    const currentlyBorrowed = equipment.filter(item => {
+      return !item.returnDate || (new Date(item.returnDate).getFullYear() <= 1970);
+    }).length;
+    
+    // Calculate return rate - only count properly returned items
+    let returnedOnTime = 0;
+    equipment.forEach(item => {
+      if (item.returnDate && item.borrowDate && new Date(item.returnDate).getFullYear() > 1970) {
+        const borrowDate = new Date(item.borrowDate);
+        const returnDate = new Date(item.returnDate);
+        const expectedReturn = new Date(borrowDate);
+        expectedReturn.setDate(expectedReturn.getDate() + 7); // Assuming 7 days loan period
+        
+        if (returnDate <= expectedReturn) {
+          returnedOnTime++;
+        }
+      }
+    });
+    
+    const returnRate = totalBorrowed > 0 ? 
+        ((returnedOnTime / totalBorrowed) * 100).toFixed(1) : 0;
+    
+    // Get recent equipment (last 5 items)
+    const recentEquipment = equipment.slice(0, 5).map(item => ({
+      name: item.name,
+      borrowDate: item.borrowDate,
+      returnDate: item.returnDate && new Date(item.returnDate).getFullYear() > 1970 ? item.returnDate : null
+    }));
+
+    res.json({
+      totalBorrowed,
+      currentlyBorrowed,
+      returnedOnTime,
+      returnRate,
+      recentEquipment
+    });
+  } catch (error) {
+    console.error("Error fetching equipment stats:", error);
+    res.status(500).json({ message: "Error fetching equipment statistics" });
+  }
+};
+
+// Get assistance request statistics for a tanod
+exports.getAssistanceStats = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
+    // Get all assistance requests made by this user
+    const requests = await AssistanceRequest.find({
+      requesterId: userObjectId
+    });
+    
+    const totalRequests = requests.length;
+    const approved = requests.filter(req => 
+      req.status === 'Processing' || req.status === 'Deployed' || req.status === 'Completed'
+    ).length;
+    const rejected = requests.filter(req => req.status === 'Rejected').length;
+    
+    const approvalRate = totalRequests > 0 ? 
+        ((approved / totalRequests) * 100).toFixed(1) : 0;
+    
+    // Calculate average response time (from request to approval)
+    let totalResponseTime = 0;
+    let responsesWithTime = 0;
+    
+    requests.forEach(req => {
+      if (req.approvedDetails && req.approvedDetails.length > 0 && req.dateRequested) {
+        const requestDate = new Date(req.dateRequested);
+        const approvalDate = new Date(req.approvedDetails[0].approvedDateTime);
+        const responseTimeMinutes = (approvalDate - requestDate) / (1000 * 60);
+        
+        totalResponseTime += responseTimeMinutes;
+        responsesWithTime++;
+      }
+    });
+    
+    const avgResponseTime = responsesWithTime > 0 ? 
+        Math.round(totalResponseTime / responsesWithTime) : 0;
+
+    res.json({
+      totalRequests,
+      approved,
+      rejected,
+      approvalRate,
+      avgResponseTime
+    });
+  } catch (error) {
+    console.error("Error fetching assistance stats:", error);
+    res.status(500).json({ message: "Error fetching assistance request statistics" });
+  }
+};
+
+// Get performance comparison data for a tanod
+exports.getPerformanceComparison = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    // Fix: Use 'new' when creating ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
+    // Get all tanods
+    const tanods = await User.find({ userType: 'tanod' });
+    const totalTanods = tanods.length;
+    
+    // Get patrol data for all tanods
+    const patrolData = await Promise.all(tanods.map(async tanod => {
+      const schedules = await Schedule.find({ tanods: tanod._id });
+      return {
+        tanodId: tanod._id,
+        patrolCount: schedules.length
+      };
+    }));
+    
+    // Sort by patrol count
+    patrolData.sort((a, b) => b.patrolCount - a.patrolCount);
+    
+    // Find user's rank in patrols
+    const patrolsRank = patrolData.findIndex(data => data.tanodId.toString() === userId) + 1;
+    const patrolsPercentile = patrolsRank > 0 ? 
+        Math.round((totalTanods - patrolsRank) / totalTanods * 100) : 0;
+    
+    // Get incident data for all tanods
+    const incidentData = await Promise.all(tanods.map(async tanod => {
+      const incidents = await IncidentReport.find({ responder: tanod._id });
+      return {
+        tanodId: tanod._id,
+        incidentCount: incidents.length
+      };
+    }));
+    
+    // Sort by incident count
+    incidentData.sort((a, b) => b.incidentCount - a.incidentCount);
+    
+    // Find user's rank in incidents
+    const incidentsRank = incidentData.findIndex(data => data.tanodId.toString() === userId) + 1;
+    const incidentsPercentile = incidentsRank > 0 ? 
+        Math.round((totalTanods - incidentsRank) / totalTanods * 100) : 0;
+    
+    // Get rating data for all tanods
+    const ratingData = await Promise.all(tanods.map(async tanod => {
+      const ratings = await TanodRating.findOne({ tanodId: tanod._id });
+      let avgRating = 0;
+      
+      if (ratings && ratings.ratings.length > 0) {
+        avgRating = ratings.ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.ratings.length;
+      }
+      
+      return {
+        tanodId: tanod._id,
+        avgRating
+      };
+    }));
+    
+    // Sort by rating
+    ratingData.sort((a, b) => b.avgRating - a.avgRating);
+    
+    // Find user's rank in ratings
+    const ratingRank = ratingData.findIndex(data => data.tanodId.toString() === userId) + 1;
+    const ratingPercentile = ratingRank > 0 ? 
+        Math.round((totalTanods - ratingRank) / totalTanods * 100) : 0;
+
+    res.json({
+      patrolsRank: patrolsRank || totalTanods,
+      patrolsPercentile,
+      incidentsRank: incidentsRank || totalTanods,
+      incidentsPercentile,
+      ratingRank: ratingRank || totalTanods,
+      ratingPercentile,
+      totalTanods
+    });
+  } catch (error) {
+    console.error("Error fetching performance comparison:", error);
+    res.status(500).json({ message: "Error generating performance comparison" });
   }
 };
