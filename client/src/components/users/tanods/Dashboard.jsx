@@ -1,22 +1,25 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import "chart.js/auto";
-import { Line, Doughnut } from "react-chartjs-2";
+import { Line, Doughnut, Bar } from "react-chartjs-2";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../../../contexts/ThemeContext";
+import { useCombinedContext } from "../../../contexts/useContext"; // Changed from AuthContext to useCombinedContext
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import io from "socket.io-client";
 import L from "leaflet";
+import { Link, useNavigate } from "react-router-dom";
 
 // Import icons
 import { 
   FaTrash, FaMapMarkedAlt, FaCalendarAlt, FaChartLine, 
   FaClipboardList, FaStar, FaPlus, FaExclamationTriangle,
-  FaShieldAlt, FaTools, FaClipboardCheck, FaUserCheck
+  FaShieldAlt, FaTools, FaClipboardCheck, FaUserCheck,
+  FaUserFriends, FaMapMarkerAlt, FaBell, FaSpinner, FaCheckCircle, FaRegStar
 } from "react-icons/fa";
 
 // Set Leaflet icon paths for markers
@@ -49,6 +52,19 @@ const hoverEffect = {
 // TanodDashboard component
 const TanodDashboard = () => {
   const { isDarkMode } = useTheme();
+  const { user } = useCombinedContext(); // Changed from useAuth to useCombinedContext
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    patrolStats: null,
+    incidentStats: null,
+    ratings: [],
+    upcomingPatrols: [],
+  });
+  const mapRef = useRef(null);
+  const [notifications, setNotifications] = useState([]);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const navigate = useNavigate();
   const [equipment, setEquipment] = useState([]);
   const [currentScheduleId, setCurrentScheduleId] = useState(null);
   const [patrolLogs, setPatrolLogs] = useState([]);
@@ -59,8 +75,6 @@ const TanodDashboard = () => {
   const [notes, setNotes] = useState([]);
   const [currentNote, setCurrentNote] = useState("");
   const [activeTab, setActiveTab] = useState('notes'); // 'notes' or 'calendar'
-  const [loading, setLoading] = useState(true);
-  // Add missing state variables
   const [showAllRatings, setShowAllRatings] = useState(false);
 
   // Dashboard data state
@@ -106,14 +120,19 @@ const TanodDashboard = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
+      // Sort ratings by date (newest first)
+      const sortedComments = ratingsRes.data.comments ? 
+        [...ratingsRes.data.comments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) :
+        [];
+
       // Update dashboard data
       setDashboardData({
         patrolsCompleted: patrolRes.data.filter(p => p.status === 'Completed').length,
         incidentsResolved: myIncidents.filter(i => i.status === 'Resolved').length,
         ratings: {
           average: parseFloat(ratingsRes.data.overallRating || 0),
-          total: ratingsRes.data.comments?.length || 0,
-          comments: ratingsRes.data.comments || []
+          total: sortedComments.length || 0,
+          comments: sortedComments || []
         },
         monthlyIncidents: getMonthlyIncidentCounts(myIncidents),
         upcomingPatrols: patrolRes.data
@@ -123,6 +142,13 @@ const TanodDashboard = () => {
           .sort((a, b) => new Date(b.date) - new Date(a.date))
           .slice(0, 5)
       });
+
+      // Also update the stats state for compatibility with renderRatingSection
+      setStats(prevStats => ({
+        ...prevStats,
+        ratings: sortedComments,
+        overallRating: ratingsRes.data.overallRating,
+      }));
 
       // Set incidents for chart data
       setIncidents(myIncidents);
@@ -667,6 +693,154 @@ const TanodDashboard = () => {
     );
   };
 
+  // Fetch ratings - Update this function to properly sort and display all ratings
+  const fetchRatings = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/auth/${user.id}/rating`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch ratings");
+      }
+
+      const data = await response.json();
+      
+      // Sort ratings by date - newest first
+      const sortedRatings = data.comments.sort((a, b) => 
+        new Date(b.createdAt) - new Date(a.createdAt)
+      );
+
+      setStats(prevStats => ({
+        ...prevStats,
+        ratings: sortedRatings,
+        overallRating: data.overallRating,
+      }));
+    } catch (error) {
+      console.error("Error fetching ratings:", error);
+      toast.error("Failed to load ratings");
+    }
+  }, [user?.id]);
+
+  // Update the rendering of ratings in the dashboard
+  const renderRatingSection = () => {
+    return (
+      <div className={`${cardClass} rounded-xl shadow-md p-5 overflow-hidden`}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold flex items-center">
+            <FaStar className={`${isDarkMode ? "text-yellow-400" : "text-yellow-500"} mr-2`} />
+            Feedback & Ratings
+          </h3>
+          <div className="flex items-center">
+            <span className={`text-lg font-bold ${isDarkMode ? "text-yellow-400" : "text-yellow-600"}`}>
+              {stats.overallRating || "0.0"}
+            </span>
+            <span className="text-sm text-gray-500 ml-1">/5</span>
+          </div>
+        </div>
+
+        {/* Rating distribution bars */}
+        <div className="space-y-1 mb-4">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="flex items-center text-sm">
+              <span className="w-12">{5 - index} stars</span>
+              <div className="flex-1 mx-2 h-2 rounded-full bg-gray-200 overflow-hidden">
+                <div
+                  className={`h-full ${isDarkMode ? "bg-yellow-400" : "bg-yellow-500"}`}
+                  style={{
+                    width: `${
+                      ((stats.ratings?.filter(r => r.rating === 5 - index)?.length || 0) /
+                        (stats.ratings?.length || 1)) *
+                      100
+                    }%`,
+                  }}
+                ></div>
+              </div>
+              <span className="w-8 text-right">
+                {stats.ratings?.filter(r => r.rating === 5 - index)?.length || 0}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {stats.ratings && stats.ratings.length > 0 ? (
+          <>
+            {/* Only show 3 ratings at a time with scrolling */}
+            <div className="space-y-4 max-h-48 overflow-y-auto pr-2 scroll-smooth" style={{ scrollbarWidth: "thin" }}>
+              {stats.ratings.map((rating, index) => (
+                <div
+                  key={index}
+                  className={`p-3 rounded-lg ${
+                    isDarkMode ? "bg-gray-700" : "bg-gray-100"
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <p className="font-medium">
+                      {rating.fullName || "Anonymous"}
+                    </p>
+                    <div className="flex space-x-1 text-sm">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <FaStar
+                          key={i}
+                          className={`${
+                            i < rating.rating
+                              ? isDarkMode
+                                ? "text-yellow-400"
+                                : "text-yellow-500"
+                              : isDarkMode
+                              ? "text-gray-600"
+                              : "text-gray-300"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <p className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"} italic`}>
+                    "{rating.comment}"
+                  </p>
+                  <div className="flex justify-between items-center mt-2 text-xs">
+                    <span className={isDarkMode ? "text-gray-400" : "text-gray-500"}>
+                      {new Date(rating.createdAt).toLocaleDateString()}
+                    </span>
+                    
+                    {/* Display source info for ticket-based ratings */}
+                    {rating.identifier && rating.identifier.startsWith('ticket-') && (
+                      <span className={`${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>
+                        via Incident Report
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* View all ratings button */}
+            {stats.ratings.length > 3 && (
+              <div className="mt-3 text-center">
+                <button
+                  onClick={() => setShowAllRatings(true)}
+                  className={`text-sm ${isDarkMode ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"} hover:underline font-medium`}
+                >
+                  View all {stats.ratings.length} ratings
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-center py-8">
+            <FaRegStar className={`mx-auto text-4xl mb-2 ${isDarkMode ? "text-gray-600" : "text-gray-400"}`} />
+            <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>No ratings yet</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <motion.div 
       initial="hidden"
@@ -1081,32 +1255,55 @@ const TanodDashboard = () => {
                 <p className="opacity-70">No feedback yet</p>
               </div>
             ) : (
-              <ul className="space-y-3">
-                {dashboardData.ratings.comments?.slice(0, 3).map((comment, index) => (
-                  <motion.li 
-                    key={index}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0, transition: { delay: index * 0.1 } }}
-                    className={`p-4 rounded-lg ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center mb-2">
-                      <div className="text-yellow-500 mr-2">
-                        {"★".repeat(comment.rating) + "☆".repeat(5 - comment.rating)}
+              <>
+                {/* Set max-h-[360px] to approximately fit 3 ratings */}
+                <ul className="space-y-3 overflow-y-auto max-h-[360px] pr-1 scrollbar-thin">
+                  {/* Display all ratings without slicing, scrolling will handle overflow */}
+                  {dashboardData.ratings.comments?.map((comment, index) => (
+                    <motion.li 
+                      key={index}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0, transition: { delay: index * 0.1 } }}
+                      className={`p-4 rounded-lg ${
+                        isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-yellow-500">
+                          {"★".repeat(comment.rating) + "☆".repeat(5 - comment.rating)}
+                        </div>
+                        <span className="text-xs opacity-70">
+                          {comment.createdAt ? formatDate(comment.createdAt) : 'Unknown date'}
+                        </span>
                       </div>
-                      <span className="text-xs opacity-70">
-                        {comment.createdAt ? formatDate(comment.createdAt) : 'Unknown date'}
-                      </span>
-                    </div>
-                    {/* Add commenter name here */}
-                    <p className={`text-sm ${isDarkMode ? 'text-blue-400' : 'text-blue-600'} mb-1`}>
-                      From: {comment.fullName || "Anonymous"}
-                    </p>
-                    <p>{comment.comment}</p>
-                  </motion.li>
-                ))}
-              </ul>
+                      <p className={`text-sm ${isDarkMode ? 'text-blue-400' : 'text-blue-600'} mb-1`}>
+                        From: {comment.fullName || "Anonymous"}
+                      </p>
+                      <p>{comment.comment}</p>
+                      
+                      {/* Add indicator for ticket-based ratings */}
+                      {comment.identifier && comment.identifier.startsWith('ticket-') && (
+                        <div className={`mt-1 text-xs ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>
+                          via Incident Report
+                        </div>
+                      )}
+                    </motion.li>
+                  ))}
+                </ul>
+                
+                {/* Show view all button if there are more than 3 ratings */}
+                {dashboardData.ratings.comments?.length > 3 && (
+                  <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    onClick={() => setShowAllRatings(true)}
+                    className={`w-full py-2 mt-3 text-sm ${
+                      isDarkMode ? 'text-blue-400 hover:bg-gray-600' : 'text-blue-600 hover:bg-gray-100'
+                    } rounded transition-colors`}
+                  >
+                  </motion.button>
+                )}
+              </>
             )}
           </div>
         </motion.div>

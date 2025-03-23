@@ -363,11 +363,11 @@ const EmergencyReportForm = ({ onClose }) => {
       exit="exit"
     >
       <motion.div 
-        className={`w-full max-w-md rounded-xl shadow-2xl overflow-hidden ${bgColor} ${textColor}`}
+        className={`w-full max-w-md rounded-xl shadow-2xl overflow-hidden ${bgColor} ${textColor} max-h-[90vh] flex flex-col`}
         variants={modalVariants}
       >
-        {/* Modal Header */}
-        <div className={`${headerBgColor} text-white p-5 relative`}>
+        {/* Modal Header - Fixed */}
+        <div className={`${headerBgColor} text-white p-5 relative flex-shrink-0`}>
           <div className="flex items-center gap-3">
             <FaExclamationTriangle className="text-2xl" />
             <h2 className="text-xl font-bold">Emergency Report</h2>
@@ -383,8 +383,8 @@ const EmergencyReportForm = ({ onClose }) => {
           <p className="mt-2 text-sm text-red-100">This form is for immediate assistance in emergency situations only.</p>
         </div>
         
-        {/* Emergency Alert */}
-        <div className={`${isDarkMode ? 'bg-red-900/30' : 'bg-red-50'} p-4 border-l-4 border-red-500`}>
+        {/* Emergency Alert - Fixed */}
+        <div className={`${isDarkMode ? 'bg-red-900/30' : 'bg-red-50'} p-4 border-l-4 border-red-500 flex-shrink-0`}>
           <div className="flex">
             <div className="flex-shrink-0">
               <FaInfoCircle className={`h-5 w-5 ${isDarkMode ? 'text-red-300' : 'text-red-500'}`} />
@@ -400,8 +400,8 @@ const EmergencyReportForm = ({ onClose }) => {
           </div>
         </div>
         
-        {/* Form */}
-        <div className="p-6">
+        {/* Form - Scrollable */}
+        <div className="p-6 overflow-y-auto" style={{ maxHeight: "calc(90vh - 180px)" }}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="fullName" className="block font-medium mb-1 flex items-center">
@@ -600,7 +600,7 @@ const EmergencyReportForm = ({ onClose }) => {
           </form>
         </div>
         
-        <div className={`mt-2 p-3 ${isDarkMode ? 'bg-red-900/20' : 'bg-red-50'} text-center text-sm ${isDarkMode ? 'text-red-200' : 'text-red-600'}`}>
+        <div className={`mt-2 p-3 ${isDarkMode ? 'bg-red-900/20' : 'bg-red-50'} text-center text-sm ${isDarkMode ? 'text-red-200' : 'text-red-600'} flex-shrink-0`}>
           <div className="relative overflow-hidden h-6">
             <p className="absolute text-center flex items-center animate-slide-infinite whitespace-nowrap">
               <span role="img" aria-label="warning" className="mr-1">⚠️</span>

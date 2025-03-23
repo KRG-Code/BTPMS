@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FaArrowLeft, FaSearch, FaUserShield, FaStar, FaSpinner } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
-import { motion, AnimatePresence } from "framer-motion";
-import { FaArrowLeft, FaSearch, FaUserShield, FaStar } from "react-icons/fa";
 import "react-toastify/dist/ReactToastify.css";
 import TanodCard from "./TanodCard";
 import { useTheme } from "../../../contexts/ThemeContext";
@@ -56,36 +56,26 @@ export default function TanodPersonels() {
   // Fetch tanods list using public endpoint
   useEffect(() => {
     const fetchTanods = async () => {
-      setLoading(true);
       try {
-        // Use public endpoint that doesn't require authentication
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/user`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
+        setLoading(true);
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/users`);
+        
         if (!response.ok) {
-          throw new Error("Network response was not ok");
+          throw new Error(`Error fetching tanods: ${response.status}`);
         }
-
-        const users = await response.json();
-
-        if (Array.isArray(users)) {
-          const tanods = users.filter((user) => user.userType === "tanod");
-          setTanods(tanods);
-          setFilteredTanods(tanods);
-        } else {
-          toast.error("Unexpected response format.");
-        }
+        
+        const data = await response.json();
+        // Filter only tanod users
+        const tanodUsers = data.filter((user) => user.userType === "tanod");
+        setTanods(tanodUsers);
+        setFilteredTanods(tanodUsers);
       } catch (error) {
         console.error("Error fetching tanods:", error);
-        toast.error("Error fetching Tanods.");
       } finally {
         setLoading(false);
       }
     };
+
     fetchTanods();
   }, []);
 
@@ -94,11 +84,10 @@ export default function TanodPersonels() {
     if (searchTerm.trim() === "") {
       setFilteredTanods(tanods);
     } else {
-      const filtered = tanods.filter(
-        (tanod) =>
-          tanod.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          tanod.lastName.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      const filtered = tanods.filter((tanod) => {
+        const fullName = `${tanod.firstName} ${tanod.lastName}`.toLowerCase();
+        return fullName.includes(searchTerm.toLowerCase());
+      });
       setFilteredTanods(filtered);
     }
   }, [searchTerm, tanods]);

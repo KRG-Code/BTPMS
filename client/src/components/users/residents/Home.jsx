@@ -1,15 +1,18 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaBars, FaTimes, FaShieldAlt, FaExclamationTriangle, FaBuilding, FaNewspaper, FaCalendarAlt, FaUsers, FaHandshake, FaQuoteLeft, FaEnvelope, FaPhone } from "react-icons/fa";
+import { FaBars, FaTimes, FaShieldAlt, FaExclamationTriangle, FaClock, FaUserClock, FaCheckCircle, FaBuilding, FaNewspaper, FaCalendarAlt, FaUsers, FaHandshake, FaQuoteLeft, FaEnvelope, FaPhone, FaTicketAlt } from "react-icons/fa";
 import { useTheme } from "../../../contexts/ThemeContext";
 import ReportIncidents from "./ReportIncident";
 import EmergencyReportForm from "./EmergencyReportForm";
+import TicketLookup from "./TicketLookup";
+import ThemeToggle from "../../../components/forms/ThemeToggle"; // Import ThemeToggle component
 
 const Home = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showEmergencyForm, setShowEmergencyForm] = useState(false);
+  const [showTicketLookup, setShowTicketLookup] = useState(false);
   const navigate = useNavigate();
   const { isDarkMode } = useTheme();
 
@@ -43,6 +46,10 @@ const Home = () => {
     setShowReportModal(true);
   };
 
+  const handleTicketLookupClick = () => {
+    setShowTicketLookup(true);
+  };
+
   const handleTanodClick = () => {
     navigate("/Tanodevaluation");
   };
@@ -55,7 +62,11 @@ const Home = () => {
     setShowEmergencyForm(false);
   };
 
-  // Theme-aware colors
+  const handleTicketLookupClose = () => {
+    setShowTicketLookup(false);
+  };
+
+  // Theme-aware colors - Fixed color values for better contrast
   const bgColor = isDarkMode ? "bg-gray-900" : "bg-gray-50";
   const textColor = isDarkMode ? "text-gray-100" : "text-gray-800";
   const sectionBgColor = isDarkMode ? "bg-gray-800" : "bg-white";
@@ -65,6 +76,7 @@ const Home = () => {
   const buttonHoverBgColor = isDarkMode ? "hover:bg-blue-700" : "hover:bg-blue-600";
   const navbarBgColor = isDarkMode ? "bg-gray-800 bg-opacity-90" : "bg-white bg-opacity-90";
   const navLinkHoverColor = isDarkMode ? "hover:bg-gray-700" : "hover:bg-gray-100";
+  const borderColor = isDarkMode ? "border-gray-700" : "border-gray-200";
   
   return (
     <div className={`min-h-screen ${bgColor} ${textColor}`}>
@@ -81,7 +93,7 @@ const Home = () => {
           </motion.div>
           
           {/* Desktop Navigation Links */}
-          <div className="hidden md:flex space-x-6">
+          <div className="hidden md:flex items-center space-x-6">
             {['About', 'Services', 'News', 'Events', 'Community', 'Programs', 'Contact'].map((item, index) => (
               <motion.a 
                 key={item} 
@@ -99,18 +111,39 @@ const Home = () => {
                 {item}
               </motion.a>
             ))}
+            
+            {/* Theme Toggle Button */}
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0, transition: { delay: 0.5 } }}
+              className="flex items-center justify-center"
+            >
+              <div className={`p-1 rounded-full ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'} flex items-center justify-center`}>
+                <ThemeToggle />
+              </div>
+            </motion.div>
           </div>
           
-          {/* Mobile Menu Button */}
-          <motion.button
-            className="md:hidden p-2 rounded-md text-gray-500 hover:text-blue-600 focus:outline-none"
-            onClick={toggleMenu}
-            whileTap={{ scale: 0.9 }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            {isMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
-          </motion.button>
+          {/* Mobile Menu Button and Theme Toggle */}
+          <div className="md:hidden flex items-center space-x-2">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className={`p-1 rounded-full ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
+            >
+              <ThemeToggle />
+            </motion.div>
+            
+            <motion.button
+              className="p-2 rounded-md text-gray-500 hover:text-blue-600 focus:outline-none"
+              onClick={toggleMenu}
+              whileTap={{ scale: 0.9 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              {isMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
+            </motion.button>
+          </div>
         </div>
         
         {/* Mobile Menu */}
@@ -140,7 +173,7 @@ const Home = () => {
         </AnimatePresence>
       </nav>
 
-      {/* Hero Section */}
+      {/* Hero Section - Updated with Ticket Lookup */}
       <section className="relative pt-16 overflow-hidden">
         <div 
           className={`${
@@ -168,10 +201,14 @@ const Home = () => {
             transition={{ duration: 0.6 }}
             className="max-w-3xl mx-auto"
           >
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
+            <h1 className={`text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight ${
+              isDarkMode ? 'text-gray-100' : 'text-black'
+            }`}>
               Welcome to the Barangay Tanod Patrol Management System
             </h1>
-            <p className="text-lg md:text-xl text-white/90 mb-8">
+            <p className={`text-lg md:text-xl mb-8 ${
+              isDarkMode ? 'text-gray-200/90' : 'text-black'
+            }`}>
               Ensuring community safety and responsive security services for all residents
             </p>
             
@@ -184,6 +221,16 @@ const Home = () => {
               >
                 <FaExclamationTriangle className="mr-2" /> Report an Incident
               </motion.button>
+              
+              <motion.button
+                onClick={handleTicketLookupClick}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-6 py-3 bg-purple-700 text-white rounded-lg shadow-lg font-medium w-full sm:w-auto flex items-center justify-center"
+              >
+                <FaTicketAlt className="mr-2" /> Track Ticket Status
+              </motion.button>
+              
               <motion.button
                 onClick={handleTanodClick}
                 whileHover={{ scale: 1.05 }}
@@ -206,7 +253,7 @@ const Home = () => {
       >
         {/* About Section */}
         <motion.section id="about" className="mb-20" variants={itemVariants}>
-          <div className={`${sectionBgColor} rounded-2xl shadow-xl overflow-hidden`}>
+          <div className={`${sectionBgColor} rounded-2xl shadow-xl overflow-hidden border ${borderColor}`}>
             <div className="md:flex">
               <div className="md:w-1/2 p-8 md:p-12">
                 <h2 className="text-3xl font-bold mb-6 flex items-center">
@@ -281,7 +328,7 @@ const Home = () => {
         <div className="flex flex-col lg:flex-row gap-8 mb-20">
           {/* News Section */}
           <motion.section id="news" className="lg:w-1/2" variants={itemVariants}>
-            <div className={`${sectionBgColor} rounded-2xl shadow-lg p-8 h-full`}>
+            <div className={`${sectionBgColor} rounded-2xl shadow-lg p-8 h-full border ${borderColor}`}>
               <h2 className="text-3xl font-bold mb-6 flex items-center">
                 <FaNewspaper className="mr-3 text-blue-500" /> Latest News
               </h2>
@@ -320,7 +367,7 @@ const Home = () => {
 
           {/* Events Section */}
           <motion.section id="events" className="lg:w-1/2" variants={itemVariants}>
-            <div className={`${sectionBgColor} rounded-2xl shadow-lg p-8 h-full`}>
+            <div className={`${sectionBgColor} rounded-2xl shadow-lg p-8 h-full border ${borderColor}`}>
               <h2 className="text-3xl font-bold mb-6 flex items-center">
                 <FaCalendarAlt className="mr-3 text-blue-500" /> Upcoming Events
               </h2>
@@ -377,7 +424,7 @@ const Home = () => {
         <div className="flex flex-col lg:flex-row gap-8 mb-20">
           {/* Community Section */}
           <motion.section id="community" className="lg:w-1/2" variants={itemVariants}>
-            <div className={`${sectionBgColor} rounded-2xl shadow-lg p-8 h-full`}>
+            <div className={`${sectionBgColor} rounded-2xl shadow-lg p-8 h-full border ${borderColor}`}>
               <h2 className="text-3xl font-bold mb-6 flex items-center">
                 <FaUsers className="mr-3 text-blue-500" /> Our Community
               </h2>
@@ -417,7 +464,7 @@ const Home = () => {
 
           {/* Programs Section */}
           <motion.section id="programs" className="lg:w-1/2" variants={itemVariants}>
-            <div className={`${sectionBgColor} rounded-2xl shadow-lg p-8 h-full`}>
+            <div className={`${sectionBgColor} rounded-2xl shadow-lg p-8 h-full border ${borderColor}`}>
               <h2 className="text-3xl font-bold mb-6 flex items-center">
                 <FaHandshake className="mr-3 text-blue-500" /> Programs
               </h2>
@@ -474,6 +521,60 @@ const Home = () => {
           </motion.section>
         </div>
 
+        {/* Add a Ticket Tracker Section */}
+        <motion.section className="mb-20" variants={itemVariants}>
+          <div className={`${sectionBgColor} rounded-2xl shadow-xl overflow-hidden border ${borderColor}`}>
+            <div className="md:flex">
+              <div className="md:w-1/2 p-8 md:p-12">
+                <h2 className="text-3xl font-bold mb-6 flex items-center">
+                  <FaTicketAlt className="mr-3 text-purple-500" /> Track Your Report
+                </h2>
+                <p className="mb-4">
+                  Already submitted an incident report? You can easily track the status of your report using your ticket ID.
+                </p>
+                <p className="mb-6">
+                  Our system provides real-time updates on the progress of your reported incident, including response and resolution information.
+                </p>
+                <motion.button 
+                  onClick={handleTicketLookupClick}
+                  className={`${buttonBgColor} ${buttonHoverBgColor} text-white px-6 py-3 rounded-lg shadow-md font-medium inline-flex items-center`}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <FaTicketAlt className="mr-2" />
+                  Check Ticket Status
+                </motion.button>
+              </div>
+              <div className="md:w-1/2 bg-gradient-to-br from-purple-500 to-indigo-700 h-auto min-h-[300px] relative overflow-hidden">
+                <div className="absolute inset-0 flex items-center justify-center p-8">
+                  <div className="text-white text-center">
+                    <div className="flex justify-center mb-4">
+                      <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                        <FaTicketAlt className="text-white text-3xl" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-bold mb-2">Ticket Statuses</h3>
+                    <div className="space-y-3 mt-4">
+                      <div className="flex items-center justify-between bg-white/10 backdrop-blur-sm rounded-lg p-2 px-4">
+                        <span className="flex items-center"><FaClock className="mr-2 text-yellow-300" /> Pending</span>
+                        <span>Under Review</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-white/10 backdrop-blur-sm rounded-lg p-2 px-4">
+                        <span className="flex items-center"><FaUserClock className="mr-2 text-blue-300" /> In Progress</span>
+                        <span>Tanod Assigned</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-white/10 backdrop-blur-sm rounded-lg p-2 px-4">
+                        <span className="flex items-center"><FaCheckCircle className="mr-2 text-green-300" /> Resolved</span>
+                        <span>Issue Addressed</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
         {/* Testimonials Section */}
         <motion.section id="testimonials" className="mb-20" variants={itemVariants}>
           <h2 className="text-3xl font-bold mb-8 text-center">Resident Testimonials</h2>
@@ -524,7 +625,7 @@ const Home = () => {
 
         {/* Contact Section */}
         <motion.section id="contact" className="mb-10" variants={itemVariants}>
-          <div className={`${sectionBgColor} rounded-2xl shadow-lg overflow-hidden`}>
+          <div className={`${sectionBgColor} rounded-2xl shadow-lg overflow-hidden border ${borderColor}`}>
             <div className="flex flex-col md:flex-row">
               <div className="md:w-1/2 p-8 md:p-12">
                 <h2 className="text-3xl font-bold mb-6">Contact Us</h2>
@@ -608,8 +709,8 @@ const Home = () => {
         </motion.section>
       </motion.div>
 
-      {/* Footer */}
-      <footer className={`${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'} py-8`}>
+      {/* Footer with improved contrast */}
+      <footer className={`${isDarkMode ? 'bg-gray-800 border-t border-gray-700' : 'bg-gray-100 border-t border-gray-200'} py-8`}>
         <div className="container mx-auto px-4 text-center">
           <div className="flex items-center justify-center mb-4">
             <FaShieldAlt className="h-6 w-6 text-blue-600 mr-2" />
@@ -656,6 +757,24 @@ const Home = () => {
             className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           >
             <EmergencyReportForm onClose={handleEmergencyFormClose} />
+          </motion.div>
+        )}
+        
+        {showTicketLookup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-xl"
+            >
+              <TicketLookup onClose={handleTicketLookupClose} />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

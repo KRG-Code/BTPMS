@@ -570,14 +570,20 @@ exports.getTanodRatings = async (req, res) => {
       ratingCounts[r.rating - 1]++;
     });
 
+    // Make sure all properties are included in the comments array
+    // Including identifier and visitorIdentifier to distinguish ticket-based ratings
     const comments = ratings.map(r => ({
       userId: r.userId?._id,
-      // Fix: Use stored fullName when available, otherwise construct from userId or use "Anonymous"
       fullName: r.fullName || (r.userId ? `${r.userId.firstName} ${r.userId.lastName}` : "Anonymous"),
       comment: r.comment,
       rating: r.rating,
-      createdAt: r.createdAt
+      createdAt: r.createdAt,
+      identifier: r.identifier || null,
+      visitorIdentifier: r.visitorIdentifier || null
     }));
+
+    // Sort comments by createdAt date, newest first
+    comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     res.json({
       overallRating: overallRating.toFixed(1),

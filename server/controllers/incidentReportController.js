@@ -181,3 +181,24 @@ exports.getIncidentDetails = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
+// Add this new function to get incident by ticket ID
+exports.getIncidentByTicketId = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    
+    // Find the incident report by ticket ID
+    const incident = await IncidentReport.findOne({ ticketId })
+      .populate('responder', 'firstName lastName')
+      .populate('resolvedBy', 'firstName lastName');
+    
+    if (!incident) {
+      return res.status(404).json({ message: 'Incident report not found' });
+    }
+
+    res.status(200).json(incident);
+  } catch (error) {
+    console.error('Error fetching incident by ticket ID:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};

@@ -200,59 +200,91 @@ router.get('/:userId/debug-equipment', protect, async (req, res) => {
 // Add public routes for tanod evaluation
 router.get('/auth/:tanodId/rating', getTanodRatings);  // Keep this existing route
 
-// New route for anonymous ratings
+// Update the anonymous rating route to handle additional identifier
 router.post('/public/tanods/:tanodId/rate', async (req, res) => {
   const { tanodId } = req.params;
-  const { rating, comment, fullName, identifier } = req.body;
+  const { rating, comment, fullName, identifier, visitorIdentifier } = req.body;
 
   if (!rating || !comment || rating < 1 || rating > 5) {
     return res.status(400).json({ message: "Invalid rating or comment" });
   }
 
   try {
+    // Ensure tanodId is a valid MongoDB ObjectId
+    const validTanodId = mongoose.Types.ObjectId.isValid(tanodId) 
+      ? new mongoose.Types.ObjectId(tanodId) 
+      : null;
+    
+    if (!validTanodId) {
+      console.error(`Invalid tanodId format: ${tanodId}`);
+      return res.status(400).json({ message: "Invalid tanod ID format" });
+    }
+    
+    // Check if a rating with either identifier already exists
+    const identifiersToCheck = [identifier];
+    if (visitorIdentifier) identifiersToCheck.push(visitorIdentifier);
+    
+    const existingRating = await TanodRating.findOne({
+      'ratings.identifier': { $in: identifiersToCheck }
+    });
+      
+    if (existingRating) {
+      return res.status(200).json({ 
+        message: "You've already submitted feedback for this incident",
+        alreadyRated: true
+      });
+    }
+
     // Find or create rating document for this tanod
-    let tanodRating = await TanodRating.findOne({ tanodId });
+    let tanodRating = await TanodRating.findOne({ tanodId: validTanodId });
     
     if (!tanodRating) {
       tanodRating = new TanodRating({
-        tanodId,
+        tanodId: validTanodId,
         ratings: []
       });
     }
 
-    // For public ratings, we use the identifier to track anonymous users
-    const ratingIndex = tanodRating.ratings.findIndex(
-      r => r.identifier === identifier
-    );
-
-    if (ratingIndex > -1) {
-      // Update existing rating from this anonymous user
-      tanodRating.ratings[ratingIndex] = {
-        ...tanodRating.ratings[ratingIndex],
-        rating,
-        comment,
-        fullName: fullName || "Anonymous",
-        createdAt: new Date()
-      };
-    } else {
-      // Add new rating
-      tanodRating.ratings.push({
-        rating,
-        comment,
-        fullName: fullName || "Anonymous",
-        identifier,
-        createdAt: new Date()
-      });
-    }
+    // Add new rating with both identifiers for better tracking
+    tanodRating.ratings.push({
+      rating,
+      comment,
+      fullName: fullName || "Anonymous",
+      identifier, // Primary identifier
+      visitorIdentifier, // Secondary identifier if available
+      createdAt: new Date()
+    });
 
     await tanodRating.save();
     
     return res.status(200).json({ 
-      message: ratingIndex > -1 ? "Rating updated successfully" : "Rating submitted successfully",
+      message: "Rating submitted successfully"
     });
   } catch (error) {
     console.error("Error saving rating:", error);
     res.status(500).json({ message: "Error submitting rating" });
+  }
+});
+
+// Update the rating check route to check both identifiers
+router.get('/public/rating-check/:identifier', async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    
+    // Find any rating with this identifier
+    const existingRating = await TanodRating.findOne({
+      $or: [
+        { 'ratings.identifier': identifier },
+        { 'ratings.visitorIdentifier': identifier }
+      ]
+    });
+    
+    res.status(200).json({ 
+      hasRated: !!existingRating 
+    });
+  } catch (error) {
+    console.error("Error checking rating status:", error);
+    res.status(500).json({ message: "Error checking rating status" });
   }
 });
 

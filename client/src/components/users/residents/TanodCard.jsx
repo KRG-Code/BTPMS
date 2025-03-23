@@ -63,7 +63,13 @@ const TanodCard = ({ tanod, isDarkMode }) => {
       }
 
       const data = await response.json();
-      setRatings(data.comments);
+      
+      // Sort comments by date in descending order (newest first)
+      const sortedComments = data.comments.sort((a, b) => 
+        new Date(b.createdAt) - new Date(a.createdAt)
+      );
+      
+      setRatings(sortedComments);
 
       // Calculate the average rating
       const totalRating = data.comments.reduce((sum, rating) => sum + rating.rating, 0);
@@ -222,7 +228,8 @@ const TanodCard = ({ tanod, isDarkMode }) => {
             </h4>
             {ratings.length > 0 ? (
               <ul className="space-y-2">
-                {ratings.slice(0, 3).map((rating, index) => (
+                {/* Display up to 4 most recent ratings */}
+                {ratings.slice(0, 4).map((rating, index) => (
                   <li 
                     key={index} 
                     className={`text-sm ${
@@ -243,6 +250,13 @@ const TanodCard = ({ tanod, isDarkMode }) => {
                       <span>•</span>
                       <span>{new Date(rating.createdAt).toLocaleDateString()}</span>
                     </div>
+                    
+                    {/* Show ticket ID if present (from ticket-based ratings) */}
+                    {rating.identifier && rating.identifier.startsWith('ticket-') && (
+                      <div className={`mt-1 text-xs ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>
+                        via Incident Report
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

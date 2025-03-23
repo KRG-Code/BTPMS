@@ -41,12 +41,12 @@ function App() {
               <ToastContainer />
               <Routes>
                 {/* Public Routes */}
-                <Route path="/" element={<SelectionPage />} />
+
                 <Route path="/tanod-login" element={<LoginTanod />} />
                 <Route path="/signup" element={<SignupPage />} />
                 
                 {/* Public Resident Routes - No authentication needed */}
-                <Route path="/Home" element={<Home />} />
+                <Route path="/" element={<Home />} />
                 <Route path="/Tanodevaluation" element={<ResidentRating />} />
                 <Route path="/Reportincidents" element={<ReportIncident />} />
                 

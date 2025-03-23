@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
-import { FaCloudUploadAlt, FaEdit, FaSave, FaTimes, FaKey } from 'react-icons/fa';
+import { FaCloudUploadAlt, FaEdit, FaSave, FaTimes, FaKey, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { useTheme } from '../../../contexts/ThemeContext'; // Import useTheme hook
+import { useNavigate } from 'react-router-dom'; // Import useNavigate hook
 
 export default function MyAcc() {
   const { isDarkMode } = useTheme(); // Use theme context
+  const navigate = useNavigate(); // Initialize navigation
   const [user, setUser] = useState({
     firstName: '',
     middleName: '',
@@ -30,6 +32,11 @@ export default function MyAcc() {
     confirmPassword: ''
   });
   const [passwordErrors, setPasswordErrors] = useState({});
+
+  // Add password visibility states
+  const [currentPasswordVisible, setCurrentPasswordVisible] = useState(false);
+  const [newPasswordVisible, setNewPasswordVisible] = useState(false);
+  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
 
   // Animation variants
   const containerVariants = {
@@ -70,23 +77,227 @@ export default function MyAcc() {
   };
 
   const handleProfilePictureChange = async (e) => {
-    // ...existing code...
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (limit to 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    // Check file type
+    if (!file.type.match('image.*')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    try {
+      // Create a form data object
+      const formData = new FormData();
+      formData.append('profilePicture', file);
+      
+      // Display loading toast
+      const loadingToast = toast.loading('Uploading image...');
+      
+      // Upload to your server or a storage service
+      // This is a placeholder - implement your actual upload logic
+      // For example, if using Firebase Storage:
+      /*
+      const storageRef = ref(storage, `profilePictures/${user._id}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      */
+      
+      // For now, let's create a local object URL as a placeholder
+      const imageUrl = URL.createObjectURL(file);
+      
+      // Update user state with the new profile picture URL
+      setUser(prev => ({
+        ...prev,
+        profilePicture: imageUrl
+      }));
+      
+      // Dismiss loading toast and show success
+      toast.dismiss(loadingToast);
+      toast.success('Profile picture updated');
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast.error('Failed to upload image');
+    }
   };
 
   const handleSubmit = async (e) => {
-    // ...existing code...
+    e.preventDefault();
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+      
+      // Display loading toast and store its ID
+      const loadingToastId = toast.loading('Saving changes...');
+      
+      // Send update request to the backend
+      const response = await axios.put(
+        `${process.env.REACT_APP_API_URL}/auth/update`,
+        user,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      
+      // Update user state with the response data
+      setUser(response.data);
+      
+      // Exit edit mode
+      setEditing(false);
+      
+      // Dismiss loading toast and show success
+      toast.dismiss(loadingToastId);
+      toast.success('Profile updated successfully');
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      
+      // Make sure to dismiss any loading toast
+      toast.dismiss();
+      
+      // Show more specific error messages
+      if (error.response) {
+        const status = error.response.status;
+        const errorMessage = error.response.data?.message || 'Unknown server error';
+        
+        if (status === 400) {
+          toast.error(`Validation error: ${errorMessage}`);
+        } else if (status === 401) {
+          toast.error('Authentication expired. Please login again.');
+        } else if (status === 500) {
+          toast.error(`Server error: ${errorMessage}. Please try again later.`);
+        } else {
+          toast.error(`Error: ${errorMessage}`);
+        }
+      } else if (error.request) {
+        toast.error('No response from server. Please check your connection.');
+      } else {
+        toast.error('Failed to update profile. Please try again.');
+      }
+    }
   };
 
   const handlePasswordChange = (e) => {
-    // ...existing code...
+    const { name, value } = e.target;
+    setPasswords(prevPasswords => ({
+      ...prevPasswords,
+      [name]: value
+    }));
   };
 
   const validatePasswords = () => {
-    // ...existing code...
+    const errors = {};
+    
+    // Check if current password is provided
+    if (!passwords.currentPassword) {
+      errors.currentPassword = 'Current password is required';
+    }
+    
+    // Check if new password is provided and meets requirements
+    if (!passwords.newPassword) {
+      errors.newPassword = 'New password is required';
+    } else if (passwords.newPassword.length < 6) {
+      errors.newPassword = 'Password must be at least 6 characters long';
+    }
+    
+    // Check if confirmation matches new password
+    if (!passwords.confirmPassword) {
+      errors.confirmPassword = 'Please confirm your new password';
+    } else if (passwords.newPassword !== passwords.confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match';
+    }
+    
+    setPasswordErrors(errors);
+    return Object.keys(errors).length === 0; // Return true if no errors
   };
 
   const handlePasswordSubmit = async (e) => {
-    // ...existing code...
+    e.preventDefault();
+    
+    // Validate passwords before submission
+    if (!validatePasswords()) {
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+      
+      // Display loading toast
+      const loadingToast = toast.loading('Updating password...');
+      
+      // Send password change request
+      await axios.put(
+        `${process.env.REACT_APP_API_URL}/auth/change-password`,
+        {
+          currentPassword: passwords.currentPassword,
+          newPassword: passwords.newPassword
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      
+      // Reset password form
+      setPasswords({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      
+      // Close modal
+      setShowPasswordModal(false);
+      
+      // Dismiss loading toast and show success
+      toast.dismiss(loadingToast);
+      toast.success('Password updated successfully! Please login again.', { autoClose: 3000 });
+      
+      // Log the user out
+      try {
+        await axios.post(
+          `${process.env.REACT_APP_API_URL}/auth/logout`, 
+          {}, 
+          { headers: { Authorization: `Bearer ${token}` }}
+        );
+      } catch (logoutError) {
+        console.error('Error during logout:', logoutError);
+      }
+      
+      // Clear local storage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
+      // Redirect after a brief delay to allow the user to see the success message
+      setTimeout(() => {
+        navigate('/tanod-login');
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error changing password:', error);
+      
+      // Show appropriate error message
+      if (error.response?.status === 401) {
+        setPasswordErrors({
+          ...passwordErrors,
+          currentPassword: 'Current password is incorrect'
+        });
+        toast.error('Current password is incorrect');
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to change password');
+      }
+    }
   };
 
   // Theme-aware styles
@@ -125,7 +336,7 @@ export default function MyAcc() {
       variants={containerVariants}
       className="p-6"
     >
-      <ToastContainer position="top-right" />
+      <ToastContainer position="top-right" autoClose={5000} />
       
       <motion.div 
         className={cardClasses}
@@ -265,7 +476,8 @@ export default function MyAcc() {
                           <option value="">Select Gender</option>
                           <option value="Male">Male</option>
                           <option value="Female">Female</option>
-                          <option value="Other">Other</option>
+                          <option value="Others">Others</option>
+                          <option value="None">None</option>
                         </select>
                       </div>
 
@@ -357,13 +569,22 @@ export default function MyAcc() {
             <form onSubmit={handlePasswordSubmit}>
               <div className="mb-4">
                 <label className={labelClasses}>Current Password</label>
-                <input
-                  type="password"
-                  name="currentPassword"
-                  value={passwords.currentPassword}
-                  onChange={handlePasswordChange}
-                  className={inputClasses}
-                />
+                <div className="relative">
+                  <input
+                    type={currentPasswordVisible ? "text" : "password"}
+                    name="currentPassword"
+                    value={passwords.currentPassword}
+                    onChange={handlePasswordChange}
+                    className={inputClasses}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPasswordVisible(!currentPasswordVisible)}
+                    className={`absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none`}
+                  >
+                    {currentPasswordVisible ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                  </button>
+                </div>
                 {passwordErrors.currentPassword && (
                   <p className="text-red-500 text-sm mt-1">{passwordErrors.currentPassword}</p>
                 )}
@@ -371,13 +592,22 @@ export default function MyAcc() {
               
               <div className="mb-4">
                 <label className={labelClasses}>New Password</label>
-                <input
-                  type="password"
-                  name="newPassword"
-                  value={passwords.newPassword}
-                  onChange={handlePasswordChange}
-                  className={inputClasses}
-                />
+                <div className="relative">
+                  <input
+                    type={newPasswordVisible ? "text" : "password"}
+                    name="newPassword"
+                    value={passwords.newPassword}
+                    onChange={handlePasswordChange}
+                    className={inputClasses}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewPasswordVisible(!newPasswordVisible)}
+                    className={`absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none`}
+                  >
+                    {newPasswordVisible ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                  </button>
+                </div>
                 {passwordErrors.newPassword && (
                   <p className="text-red-500 text-sm mt-1">{passwordErrors.newPassword}</p>
                 )}
@@ -385,13 +615,22 @@ export default function MyAcc() {
               
               <div className="mb-6">
                 <label className={labelClasses}>Confirm New Password</label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={passwords.confirmPassword}
-                  onChange={handlePasswordChange}
-                  className={inputClasses}
-                />
+                <div className="relative">
+                  <input
+                    type={confirmPasswordVisible ? "text" : "password"}
+                    name="confirmPassword"
+                    value={passwords.confirmPassword}
+                    onChange={handlePasswordChange}
+                    className={inputClasses}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
+                    className={`absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none`}
+                  >
+                    {confirmPasswordVisible ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                  </button>
+                </div>
                 {passwordErrors.confirmPassword && (
                   <p className="text-red-500 text-sm mt-1">{passwordErrors.confirmPassword}</p>
                 )}

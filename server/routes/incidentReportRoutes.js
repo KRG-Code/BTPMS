@@ -3,7 +3,8 @@ const {
   createIncidentReport, 
   getIncidentReports, 
   updateIncidentStatus,
-  getIncidentDetails
+  getIncidentDetails,
+  getIncidentByTicketId
 } = require('../controllers/incidentReportController');
 
 const router = express.Router();
@@ -19,5 +20,8 @@ router.put('/:id/status', updateIncidentStatus);
 
 // Get incident details
 router.get('/:id/details', getIncidentDetails);
+
+// Get incident by ticket ID
+router.get('/ticket/:ticketId', getIncidentByTicketId);
 
 module.exports = router;
