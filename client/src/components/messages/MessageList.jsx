@@ -45,6 +45,16 @@ export default function MessageList({ onClose, onConversationClick }) { // Accep
   const [showTanodList, setShowTanodList] = useState(false);
   const refreshIntervalRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     fetchConversations();
@@ -269,7 +279,10 @@ export default function MessageList({ onClose, onConversationClick }) { // Accep
         className={`rounded-xl shadow-xl overflow-hidden ${
           isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'
         }`}
-        style={{ width: '320px' }}
+        style={{ 
+          width: isMobile ? '100%' : '320px',
+          maxHeight: isMobile ? '80vh' : '60vh'
+        }}
       >
         {/* Header */}
         <div className={`p-4 border-b flex justify-between items-center ${
@@ -311,7 +324,7 @@ export default function MessageList({ onClose, onConversationClick }) { // Accep
         </div>
 
         {/* Content area */}
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className={`overflow-y-auto ${isMobile ? 'max-h-[70vh]' : 'max-h-[60vh]'}`}>
           {showTanodList ? (
             <motion.div 
               variants={containerVariants}

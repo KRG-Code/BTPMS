@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import L from 'leaflet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaVideo, FaMapMarkedAlt, FaCalendarAlt, FaClock, FaArrowRight, FaExclamationTriangle, FaTimes, FaRuler, FaInfoCircle } from 'react-icons/fa';
 import { useTheme } from '../../../../contexts/ThemeContext';
+import CctvReviewModal from './CctvReviewModal'; // Add this import
 
 // Animation variants
 const panelVariants = {
@@ -28,6 +29,8 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [friendlyLocation, setFriendlyLocation] = useState('');
+  const [showCctvModal, setShowCctvModal] = useState(false); // Add this state
+  const reviewLayerGroupRef = useRef(null); // Add a ref to track the layer group
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; // Earth's radius in kilometers
@@ -228,22 +231,23 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
 
   useEffect(() => {
     if (mapRef.current && nearestCctv) {
-      // Clear all existing layers first
+      // Clear all existing layers except the tile layer
       mapRef.current.eachLayer((layer) => {
         if (!(layer instanceof L.TileLayer)) {
           mapRef.current.removeLayer(layer);
         }
       });
 
+      // Create a new layer group and store it in the ref
+      reviewLayerGroupRef.current = L.layerGroup().addTo(mapRef.current);
+
       const incidentCoords = getIncidentCoordinates();
       if (!incidentCoords) return;
 
-      const reviewLayerGroup = L.layerGroup().addTo(mapRef.current);
-
-      // Add incident marker
+      // Add incident marker to our layer group
       const incidentMarker = L.marker(incidentCoords, {
         icon: createIncidentMarker()
-      }).addTo(reviewLayerGroup);
+      }).addTo(reviewLayerGroupRef.current);
 
       incidentMarker.bindTooltip('Incident Location', {
         permanent: false,
@@ -251,11 +255,11 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
         className: isDarkMode ? 'dark-tooltip' : 'light-tooltip'
       });
 
-      // Add nearest CCTV marker
+      // Add nearest CCTV marker to our layer group
       const nearestCctvMarker = L.marker(
         [nearestCctv.latitude, nearestCctv.longitude],
         { icon: createNearestCctvMarker() }
-      ).addTo(reviewLayerGroup);
+      ).addTo(reviewLayerGroupRef.current);
 
       nearestCctvMarker.bindTooltip(`CCTV: ${nearestCctv.name}`, {
         permanent: false,
@@ -263,7 +267,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
         className: isDarkMode ? 'dark-tooltip' : 'light-tooltip'
       });
 
-      // Add line between incident and CCTV
+      // Add line between incident and CCTV to our layer group
       const line = L.polyline([
         incidentCoords,
         [nearestCctv.latitude, nearestCctv.longitude]
@@ -272,7 +276,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
         weight: 2,
         opacity: 0.7,
         dashArray: '5, 5',
-      }).addTo(reviewLayerGroup);
+      }).addTo(reviewLayerGroupRef.current);
 
       // Add distance label
       const midPoint = [
@@ -289,7 +293,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
         iconAnchor: [30, 10],
       });
 
-      L.marker(midPoint, { icon: distanceLabel }).addTo(reviewLayerGroup);
+      L.marker(midPoint, { icon: distanceLabel }).addTo(reviewLayerGroupRef.current);
 
       // Zoom to show both markers
       const bounds = L.latLngBounds([incidentCoords, [nearestCctv.latitude, nearestCctv.longitude]]);
@@ -298,7 +302,8 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
       // Cleanup function
       return () => {
         if (mapRef.current) {
-          reviewLayerGroup.remove();
+          reviewLayerGroupRef.current.remove();
+          reviewLayerGroupRef.current = null;
         }
       };
     }
@@ -311,6 +316,13 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
     }
   }, [incident, loading]);
 
+  // Add handler for opening the CCTV modal
+  const handleOpenCctvModal = () => {
+    if (nearestCctv) {
+      setShowCctvModal(true);
+    }
+  };
+
   return (
     <AnimatePresence>
       <motion.div
@@ -322,7 +334,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
           isDarkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-800'
         }`}
       >
-        {/* Header */}
+        {/* Header - Make CCTV name more prominent */}
         <div className={`sticky top-0 z-10 px-6 py-4 flex justify-between items-center ${
           isDarkMode ? 'bg-gray-900 border-b border-gray-700' : 'bg-blue-50 border-b border-blue-100'
         }`}>
@@ -332,7 +344,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
             animate={{ opacity: 1 }}
           >
             <FaVideo className={`mr-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-            CCTV Review
+            {nearestCctv ? `CCTV: ${nearestCctv.name}` : "CCTV Review"}
           </motion.h3>
           <motion.button
             variants={buttonVariants}
@@ -554,7 +566,7 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
                 custom={3}
                 initial="hidden"
                 animate="visible"
-                className="flex justify-end space-x-3"
+                className="flex justify-between space-x-3 p-6"
               >
                 <motion.button
                   variants={buttonVariants}
@@ -569,18 +581,36 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
                 >
                   Close
                 </motion.button>
+                
+                {/* Add new CCTV Footage button */}
+                <motion.button
+                  variants={buttonVariants}
+                  whileHover="hover"
+                  whileTap="tap"
+                  onClick={handleOpenCctvModal}
+                  disabled={!nearestCctv}
+                  className={`px-4 py-2 rounded-lg ${
+                    isDarkMode 
+                    ? 'bg-purple-700 hover:bg-purple-600 text-white' 
+                    : 'bg-purple-500 hover:bg-purple-600 text-white'
+                  } ${!nearestCctv && 'opacity-50 cursor-not-allowed'}`}
+                >
+                  <FaVideo className="inline mr-2" />
+                  View Footage
+                </motion.button>
+                
                 <motion.a
                   variants={buttonVariants}
                   whileHover="hover"
                   whileTap="tap"
-                  href={`https://maps.google.com/?q=${nearestCctv.latitude},${nearestCctv.longitude}`}
+                  href={nearestCctv ? `https://maps.google.com/?q=${nearestCctv.latitude},${nearestCctv.longitude}` : '#'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={`px-4 py-2 rounded-lg ${
                     isDarkMode 
                     ? 'bg-blue-600 hover:bg-blue-700 text-white' 
                     : 'bg-blue-500 hover:bg-blue-600 text-white'
-                  }`}
+                  } ${!nearestCctv && 'opacity-50 cursor-not-allowed'}`}
                 >
                   Get Directions
                 </motion.a>
@@ -620,6 +650,16 @@ const CctvReviewPanel = ({ incident, onClose, mapRef }) => {
           )}
         </div>
       </motion.div>
+      
+      {/* Add CCTV Review Modal */}
+      {showCctvModal && nearestCctv && (
+        <CctvReviewModal
+          isOpen={showCctvModal}
+          onClose={() => setShowCctvModal(false)}
+          incident={incident}
+          cctv={nearestCctv}
+        />
+      )}
     </AnimatePresence>
   );
 };

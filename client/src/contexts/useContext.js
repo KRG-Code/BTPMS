@@ -83,7 +83,7 @@ export const CombinedProvider = ({ children }) => {
     localStorage.removeItem('isTracking'); // Add this line
     setToken(null);
     setUserType(null);
-    navigate('/');
+    navigate('/tanod-login'); // Redirect to login page
   };
 
   const refetchUserProfile = async () => {

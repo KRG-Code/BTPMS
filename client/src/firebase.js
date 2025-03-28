@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getStorage } from "firebase/storage";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // Optional: Import analytics if needed
 import { getAnalytics } from "firebase/analytics";
 
@@ -18,4 +18,19 @@ const app = initializeApp(firebaseConfig);
 const storage = getStorage(app);
 const analytics = getAnalytics(app); // Optional
 
-export { storage, analytics };
+// Add a function to upload profile image
+const uploadProfileImage = async (file, userId) => {
+  if (!file) return null;
+  
+  try {
+    const storageRef = ref(storage, `profilePictures/${userId}/${Date.now()}-${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    return downloadURL;
+  } catch (error) {
+    console.error("Error uploading image:", error);
+    throw error;
+  }
+};
+
+export { storage, analytics, uploadProfileImage };

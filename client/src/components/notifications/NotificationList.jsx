@@ -49,6 +49,7 @@ export default function NotificationList({ onClose }) {
   const holdTimeoutRef = useRef(null);
   const [activeCategory, setActiveCategory] = useState("all");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     fetchNotifications();
@@ -65,6 +66,15 @@ export default function NotificationList({ onClose }) {
       clearTimeout(holdTimeoutRef.current);
     };
   }, [onClose]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchNotifications = async () => {
     const token = localStorage.getItem("token");
@@ -412,7 +422,10 @@ export default function NotificationList({ onClose }) {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 10 }}
         className={`${bgClass} rounded-xl shadow-xl overflow-hidden`}
-        style={{ width: '360px' }}
+        style={{ 
+          width: isMobile ? '100%' : '360px',
+          maxHeight: isMobile ? '80vh' : 'auto'
+        }}
       >
         {/* Header */}
         <div className={`px-4 py-3 ${headerClass} border-b flex items-center justify-between`}>
@@ -546,7 +559,7 @@ export default function NotificationList({ onClose }) {
         </div>
 
         {/* Notifications List */}
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className={`overflow-y-auto ${isMobile ? 'max-h-[70vh]' : 'max-h-[60vh]'}`}>
           {loading ? (
             <div className="flex flex-col items-center justify-center h-40">
               <div className={`w-8 h-8 border-4 border-t-transparent rounded-full animate-spin mb-3 ${

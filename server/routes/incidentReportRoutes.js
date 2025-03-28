@@ -4,8 +4,10 @@ const {
   getIncidentReports, 
   updateIncidentStatus,
   getIncidentDetails,
-  getIncidentByTicketId
+  getIncidentByTicketId,
+  markAsFalseAlarm // Add this import
 } = require('../controllers/incidentReportController');
+const { protect } = require('../middleware/authMiddleware'); // Add this if not already imported
 
 const router = express.Router();
 
@@ -23,5 +25,8 @@ router.get('/:id/details', getIncidentDetails);
 
 // Get incident by ticket ID
 router.get('/ticket/:ticketId', getIncidentByTicketId);
+
+// Add this new route for marking an incident as a false alarm
+router.put('/:id/false-alarm', protect, markAsFalseAlarm);
 
 module.exports = router;

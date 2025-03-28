@@ -58,19 +58,22 @@ export default function TanodPersonels() {
     const fetchTanods = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/users`);
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/public/tanods`);
         
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Error fetching tanods: ${response.status}`, errorText);
           throw new Error(`Error fetching tanods: ${response.status}`);
         }
         
         const data = await response.json();
-        // Filter only tanod users
-        const tanodUsers = data.filter((user) => user.userType === "tanod");
-        setTanods(tanodUsers);
-        setFilteredTanods(tanodUsers);
+        console.log("Tanods received:", data);
+        
+        setTanods(data);
+        setFilteredTanods(data);
       } catch (error) {
         console.error("Error fetching tanods:", error);
+        toast.error("Failed to load tanod personnel");
       } finally {
         setLoading(false);
       }
@@ -110,7 +113,7 @@ export default function TanodPersonels() {
           variants={headerVariants}
         >
           <motion.button
-            onClick={() => navigate('/Home')}
+            onClick={() => navigate('/')}
             className={`${
               isDarkMode 
                 ? "bg-gray-800 text-blue-400 hover:bg-gray-700" 
@@ -119,7 +122,7 @@ export default function TanodPersonels() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            <FaArrowLeft /> Back to Home
+            <FaArrowLeft /> Go Back
           </motion.button>
           
           <motion.div 

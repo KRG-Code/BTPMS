@@ -25,6 +25,8 @@ const PatrolTracking = () => {
   const [showCctvModal, setShowCctvModal] = useState(false); // Add state for modal visibility
   const [cctvLocations, setCctvLocations] = useState([]); // Add state for CCTV locations
   const [activePanel, setActivePanel] = useState(null); // Add this line with the other state declarations
+  const [lastLocationUpdate, setLastLocationUpdate] = useState({}); // Track the timestamp of last location update per user
+  const [isCctvReviewActive, setIsCctvReviewActive] = useState(false); // Ensure we properly track CCTV review state to prevent marker conflicts
 
   const fetchPatrolAreas = async () => {
     const token = localStorage.getItem('token');
@@ -168,25 +170,34 @@ const PatrolTracking = () => {
     return marker;
   };
 
+  // Improved refreshMap function to properly handle markers
   const refreshMap = () => {
     if (!mapRef.current || !isTrackingVisible) return;
 
+    // Clean up all existing markers first
     Object.values(userMarkerRefs.current).forEach(marker => {
       if (marker && mapRef.current) {
         mapRef.current.removeLayer(marker);
       }
     });
+    
+    // Reset the markers reference object
     userMarkerRefs.current = {};
 
-    tanodLocations.forEach(location => {
-      if (location.latitude && location.longitude) {
-        const userMarker = createMarker(location);
-        if (userMarker) {
-          userMarker.addTo(mapRef.current);
-          userMarkerRefs.current[location.userId] = userMarker;
+    // Only add markers if tracking is enabled
+    if (isTrackingVisible) {
+      tanodLocations.forEach(location => {
+        if (location.latitude && location.longitude && location.userId) {
+          const userMarker = createMarker(location);
+          if (userMarker) {
+            userMarker.addTo(mapRef.current);
+            // Store marker reference with userId as key
+            const userId = typeof location.userId === 'object' ? location.userId._id : location.userId;
+            userMarkerRefs.current[userId] = userMarker;
+          }
         }
-      }
-    });
+      });
+    }
   };
 
   const initializeWebSocket = () => {
@@ -267,28 +278,35 @@ const PatrolTracking = () => {
     // ...existing socket event handlers...
   };
 
-  // Add this new function to handle marker updates
+  // Improved updateMarker function to properly handle existing markers
   const updateMarker = (location) => {
     if (!mapRef.current || !isTrackingVisible) return;
 
-    // Remove existing marker if it exists
-    if (userMarkerRefs.current[location.userId]) {
-      mapRef.current.removeLayer(userMarkerRefs.current[location.userId]);
+    // Extract userId correctly whether it's an object or string
+    const userId = typeof location.userId === 'object' ? location.userId._id : location.userId;
+    
+    // Check if we already have a marker for this user
+    if (userMarkerRefs.current[userId]) {
+      // Just update the position of the existing marker
+      userMarkerRefs.current[userId].setLatLng([location.latitude, location.longitude]);
+    } else {
+      // Create a new marker if one doesn't exist
+      const marker = createMarker(location);
+      if (marker) {
+        marker.addTo(mapRef.current);
+        userMarkerRefs.current[userId] = marker;
+      }
     }
-
-    // Create new marker
-    const marker = createMarker(location);
-    marker.addTo(mapRef.current);
-    userMarkerRefs.current[location.userId] = marker;
   };
 
   const handleRefreshMap = async () => {
     try {
       // Clear all existing markers and layers
       if (mapRef.current) {
-        mapRef.current.eachLayer((layer) => {
-          if (!(layer instanceof L.TileLayer)) {
-            layer.remove();
+        // Only remove custom markers, not base tile layers
+        Object.values(userMarkerRefs.current).forEach(marker => {
+          if (marker) {
+            mapRef.current.removeLayer(marker);
           }
         });
       }
@@ -298,7 +316,9 @@ const PatrolTracking = () => {
       setTanodLocations([]);
       setPatrolAreas([]);
       setCctvLocations([]);
-      setIncidentLocations({});
+      
+      // Don't clear incident locations as they are managed separately
+      // setIncidentLocations({});
   
       // Disconnect and reconnect socket
       if (socketRef.current) {
@@ -311,7 +331,8 @@ const PatrolTracking = () => {
       await Promise.all([
         fetchPatrolAreas(),
         fetchIncidentReports(),
-        fetchCctvLocations()
+        fetchCctvLocations(),
+        fetchLocations() // Added missing function call
       ]);
   
       // Force map to update view
@@ -343,19 +364,22 @@ const PatrolTracking = () => {
     };
   }, []);
 
+  // Improved effect to handle tracking visibility changes
   useEffect(() => {
     if (isTrackingVisible) {
+      // Rebuild all markers when tracking is turned on
       refreshMap();
     } else {
       // Clear all markers when tracking is disabled
       Object.values(userMarkerRefs.current).forEach(marker => {
         if (marker && mapRef.current) {
-          marker.remove();
+          mapRef.current.removeLayer(marker);
         }
       });
+      // Reset the markers object
       userMarkerRefs.current = {};
     }
-  }, [tanodLocations, isTrackingVisible]);
+  }, [isTrackingVisible]);
 
   // Add CSS for marker animation
   useEffect(() => {
@@ -381,63 +405,22 @@ const PatrolTracking = () => {
     return () => document.head.removeChild(style);
   }, []);
 
-  // Remove these cleanup intervals as they're causing markers to disappear
-  // Remove or comment out this useEffect
-  /*
-  useEffect(() => {
-    const cleanupInterval = setInterval(() => {
-      const now = Date.now();
-      setTanodLocations(prev => {
-        const filtered = prev.filter(loc => (now - loc.lastUpdate) < MARKER_TIMEOUT);
-        
-        // Remove markers for stale locations
-        prev.forEach(loc => {
-          if (!filtered.find(f => f.userId === loc.userId)) {
-            if (userMarkerRefs.current[loc.userId] && mapRef.current) {
-              userMarkerRefs.current[loc.userId].remove();
-              delete userMarkerRefs.current[loc.userId];
-            }
-          }
-        });
-        
-        return filtered;
-      });
-    }, 5000);
-
-    return () => clearInterval(cleanupInterval);
-  }, []);
-  */
-
-  // Remove this redundant cleanup interval
-  /*
-  useEffect(() => {
-    const cleanup = setInterval(() => {
-      const now = Date.now();
-      setTanodLocations(prev => 
-        prev.filter(loc => now - loc.lastUpdate < MARKER_TIMEOUT)
-      );
-    }, 5000);
-
-    return () => clearInterval(cleanup);
-  }, []);
-  */
-
-  // Only clear markers when explicitly stopping tracking
+  // Improved toggleTrackingVisibility to properly handle marker cleanup
   const toggleTrackingVisibility = () => {
     const newVisibilityState = !isTrackingVisible;
     setIsTrackingVisible(newVisibilityState);
     localStorage.setItem("isTrackingVisible", newVisibilityState);
 
     if (!newVisibilityState) {
-      // Clear markers only when turning off tracking
+      // Clean up all markers when disabling tracking
       Object.values(userMarkerRefs.current).forEach(marker => {
-        if (mapRef.current && mapRef.current.hasLayer(marker)) {
-          marker.remove();
+        if (mapRef.current && marker) {
+          mapRef.current.removeLayer(marker);
         }
       });
       userMarkerRefs.current = {};
     } else {
-      // Refresh markers when turning on tracking
+      // Refresh all markers when enabling tracking
       refreshMap();
     }
   };
@@ -475,21 +458,12 @@ const PatrolTracking = () => {
     };
   }, []);
 
-  // Add this useEffect to persist markers
+  // Improved effect to persist markers
   useEffect(() => {
     if (isTrackingVisible && mapRef.current) {
-      // Clear existing markers
-      Object.values(userMarkerRefs.current).forEach(marker => {
-        if (marker) marker.remove();
-      });
-      userMarkerRefs.current = {};
-
-      // Re-add all markers
-      tanodLocations.forEach(location => {
-        updateMarker(location);
-      });
+      refreshMap();
     }
-  }, [isTrackingVisible]);
+  }, [isTrackingVisible, tanodLocations]);
 
   const MapEvents = () => {
     const map = useMap();
@@ -688,6 +662,7 @@ const PatrolTracking = () => {
     };
   }, []);
 
+  // Improved handleLocationUpdate function to properly handle marker updates
   const handleLocationUpdate = async (data) => {
     try {
       // Check if current user is admin - don't track their location
@@ -696,20 +671,45 @@ const PatrolTracking = () => {
         return; // Skip updating location for admin user
       }
 
+      const userId = typeof data.userId === 'object' ? data.userId._id : data.userId;
+
+      // Check if this is a newer update than what we already have
+      if (lastLocationUpdate[userId] && lastLocationUpdate[userId] > data.lastUpdate) {
+        return; // Skip older updates
+      }
+
+      // Update the last location timestamp for this user
+      setLastLocationUpdate(prev => ({
+        ...prev,
+        [userId]: data.lastUpdate || Date.now()
+      }));
+
+      // Update the locations state
       setTanodLocations(prev => {
-        const others = prev.filter(loc => loc.userId?._id !== data.userId?._id);
+        // Filter out the old location for this user
+        const others = prev.filter(loc => {
+          const locUserId = typeof loc.userId === 'object' ? loc.userId._id : loc.userId;
+          return locUserId !== userId;
+        });
+        
+        // Add the new location data
         return [...others, {
           ...data,
-          lastUpdate: Date.now()
+          lastUpdate: data.lastUpdate || Date.now()
         }];
       });
 
+      // Only update the marker if tracking is enabled
       if (isTrackingVisible && mapRef.current) {
         updateMarker(data);
       }
     } catch (error) {
       console.error('Error updating location:', error);
     }
+  };
+
+  const handleActivateCctvReview = (isActive) => {
+    setIsCctvReviewActive(isActive);
   };
 
   return (
@@ -725,7 +725,9 @@ const PatrolTracking = () => {
         draggable
         pauseOnHover
         theme="light"
-        limit={3} // Add this to limit number of toasts shown at once
+        limit={3} 
+        style={{ zIndex: 9999 }} // Add high z-index to ensure it's above all other elements
+        enableMultiContainer={false} // Ensure we don't have multiple containers
       />
       <div className="flex w-full h-full">
         <div className="relative w-3/5 h-full mr-6" style={{ zIndex: 1 }}>
@@ -740,7 +742,7 @@ const PatrolTracking = () => {
                   location={incidentLocations[key].location}
                   incidentType={incidentLocations[key].type} 
                   markerId={key}
-                  isVisible={!!incidentLocations[key]}
+                  isVisible={!!incidentLocations[key] && !isCctvReviewActive}
                   incident={incident}
                   onMarkerClick={() => {
                     setSelectedReport(incident);
@@ -780,8 +782,17 @@ const PatrolTracking = () => {
               setSelectedReport={setSelectedReport}
               mapRef={mapRef} 
               zoomToLocation={zoomToLocation}
-              activePanel={activePanel}       // Add this line
-              setActivePanel={setActivePanel} // Add this line
+              activePanel={activePanel}
+              setActivePanel={(panel) => {
+                setActivePanel(panel);
+                // When setting CCTV panel, track it
+                if (panel === 'cctv') {
+                  handleActivateCctvReview(true);
+                } else if (panel === null) {
+                  handleActivateCctvReview(false);
+                }
+              }}
+              incidentLocations={incidentLocations}
             />
           </div>
         </div>

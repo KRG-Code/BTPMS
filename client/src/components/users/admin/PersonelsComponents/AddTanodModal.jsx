@@ -127,7 +127,7 @@ export default function AddTanodModal({ showModal, closeModal, handleAddTanod, l
                       <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="firstName">
                         First Name*
                       </label>
-                      <div className={`relative rounded-md shadow-sm ${errors.firstName ? 'ring-1 ring-red-500' : ''}`}>
+                      <div className={`relative rounded-md shadow-sm  ${errors.firstName ? 'ring-1 ring-red-500' : ''}`}>
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                           <FaIdCard className="h-4 w-4 text-gray-400" />
                         </div>
@@ -137,7 +137,7 @@ export default function AddTanodModal({ showModal, closeModal, handleAddTanod, l
                           id="firstName"
                           value={formData.firstName}
                           onChange={handleChange}
-                          className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 ${
+                          className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 text-black ${
                             errors.firstName ? 'border-red-500' : ''
                           }`}
                           placeholder="John"
@@ -160,7 +160,7 @@ export default function AddTanodModal({ showModal, closeModal, handleAddTanod, l
                           id="middleName"
                           value={formData.middleName}
                           onChange={handleChange}
-                          className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2"
+                          className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 text-black"
                           placeholder="M."
                         />
                       </div>
@@ -180,7 +180,7 @@ export default function AddTanodModal({ showModal, closeModal, handleAddTanod, l
                           id="lastName"
                           value={formData.lastName}
                           onChange={handleChange}
-                          className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 ${
+                          className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 text-black ${
                             errors.lastName ? 'border-red-500' : ''
                           }`}
                           placeholder="Doe"
@@ -205,7 +205,7 @@ export default function AddTanodModal({ showModal, closeModal, handleAddTanod, l
                         id="username"
                         value={formData.username}
                         onChange={handleChange}
-                        className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 ${
+                        className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 text-black ${
                           errors.username ? 'border-red-500' : ''
                         }`}
                         placeholder="johndoe"
@@ -229,7 +229,7 @@ export default function AddTanodModal({ showModal, closeModal, handleAddTanod, l
                         id="email"
                         value={formData.email}
                         onChange={handleChange}
-                        className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 ${
+                        className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 text-black ${
                           errors.email ? 'border-red-500' : ''
                         }`}
                         placeholder="john@example.com"
@@ -253,7 +253,7 @@ export default function AddTanodModal({ showModal, closeModal, handleAddTanod, l
                         id="password"
                         value={formData.password}
                         onChange={handleChange}
-                        className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 ${
+                        className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 text-black ${
                           errors.password ? 'border-red-500' : ''
                         }`}
                         placeholder="••••••"
@@ -287,7 +287,7 @@ export default function AddTanodModal({ showModal, closeModal, handleAddTanod, l
                         id="confirmPassword"
                         value={formData.confirmPassword}
                         onChange={handleChange}
-                        className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 ${
+                        className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 text-black ${
                           errors.confirmPassword ? 'border-red-500' : ''
                         }`}
                         placeholder="••••••"

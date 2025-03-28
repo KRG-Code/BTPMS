@@ -12,6 +12,7 @@ import ResolvedIncidentsModal from './ResolvedIncidentsModal';
 import ViewLocation from './ViewLocation';
 import CctvReviewPanel from './CctvReviewPanel';
 import { useTheme } from '../../../../contexts/ThemeContext';
+import CctvReviewModal from './CctvReviewModal'; // Add this import at the top with other imports
 
 // Animation variants
 const containerVariants = {
@@ -65,6 +66,7 @@ const contentVariants = {
   visible: i => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5 } }),
 };
 
+// Update the props in the component definition to include incidentLocations
 const IncidentReports = ({ 
   setIncidentLocations, 
   selectedReport, 
@@ -72,7 +74,8 @@ const IncidentReports = ({
   mapRef, 
   zoomToLocation,
   activePanel,
-  setActivePanel
+  setActivePanel,
+  incidentLocations // Add this prop
 }) => {
   const { isDarkMode } = useTheme();
   const [incidentReports, setIncidentReports] = useState([]);
@@ -100,6 +103,8 @@ const IncidentReports = ({
   });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showCctvModal, setShowCctvModal] = useState(false); // Add this state
+  const [selectedCctv, setSelectedCctv] = useState(null); // Add this state
 
   const rejectionReasons = [
     'Insufficient details provided',
@@ -243,7 +248,33 @@ const IncidentReports = ({
 
   // ... existing helper functions ...
 
+  // Add new function to handle CCTV modal
+  const handleOpenCctvModal = (report) => {
+    setSelectedReport(report);
+    setSelectedCctv({
+      name: 'Nearest CCTV',
+      description: 'Camera nearest to incident location',
+      location: report.location
+    });
+    setShowCctvModal(true);
+  };
+
+  // Update handleCctvModalClose to only close the modal
+const handleCctvModalClose = () => {
+  // Simply close the modal without other side effects
+  setShowCctvModal(false);
+  
+  // We'll handle the re-fetching of data at the component level 
+  // after a small delay to ensure the modal is fully closed
+  setTimeout(() => {
+    setSelectedCctv(null);
+    fetchIncidentReports(); // Re-fetch incidents to update after false alarm marking
+  }, 500);
+};
+
+  // Modify handleCctvReview to not open the modal directly from the table
   const handleCctvReview = (report) => {
+    // Only update the panel and map, don't open modal
     setSelectedReport(report);
     setActivePanel('cctv');
     // Clear all other incident locations, only show the selected one
@@ -265,6 +296,7 @@ const IncidentReports = ({
     return classification === 'Emergency Incident' ? 'Emergency' : 'Normal';
   };
 
+  // Update handleToggleLocation to synchronize with details panel button
   const handleToggleLocation = (report) => {
     if (!report || !report.location) {
       toast.error('Invalid location data');
@@ -294,24 +326,39 @@ const IncidentReports = ({
 
     setVisibleLocations((prev) => {
       const newVisibleLocations = { ...prev };
+      
+      // Toggle visibility for the clicked report
       if (newVisibleLocations[report._id]) {
         delete newVisibleLocations[report._id];
       } else {
-        Object.keys(newVisibleLocations).forEach(key => {
-          delete newVisibleLocations[key];
-        });
+        // When showing a new location, hide all other markers first if we're not in "show all" mode
+        if (!showAll) {
+          Object.keys(newVisibleLocations).forEach(key => {
+            delete newVisibleLocations[key];
+          });
+        }
+        
         newVisibleLocations[report._id] = {
           location: report.location,
           type: getIncidentType(report.incidentClassification),
           status: report.status
         };
       }
+      
+      // Update incident locations based on the new visible locations
       setIncidentLocations(newVisibleLocations);
       return newVisibleLocations;
     });
+    
     setShowAll(false);
+    
+    // If we're in the details panel and this is the selected report, update the button state
+    if (selectedReport && selectedReport._id === report._id && activePanel === 'details') {
+      // No need to change activePanel here, as it should stay on 'details'
+    }
   };
-
+  
+  // Update handleToggleAllLocations to properly sync state
   const handleToggleAllLocations = () => {
     setShowAll(!showAll);
     if (!showAll) {
@@ -347,6 +394,11 @@ const IncidentReports = ({
       setVisibleLocations({});
       setIncidentLocations({});
     }
+  };
+
+  // Function to check if a report is visible on the map
+  const isReportVisible = (reportId) => {
+    return !!incidentLocations[reportId];
   };
 
   const getStatusColor = (status) => {
@@ -879,786 +931,801 @@ const IncidentReports = ({
 
   return (
     <div className={`w-full ${isDarkMode ? 'text-gray-100' : 'text-gray-800'} relative`}>
-      <motion.div 
-        initial="hidden"
-        animate="visible"
-        variants={containerVariants}
-        className="space-y-4"
-      >
-        {/* Header with title, filter toggle and buttons */}
-        <div className="flex flex-wrap justify-between items-center gap-3">
-          <motion.h3 
-            variants={itemVariants}
-            className={`text-xl font-bold flex items-center ${
-              isDarkMode ? 'text-gray-100' : 'text-gray-800'
+    {/* Don't include ToastContainer here since it's in the parent component */}
+    <motion.div 
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+      className="space-y-4"
+    >
+      {/* Header with title, filter toggle and buttons */}
+      <div className="flex flex-wrap justify-between items-center gap-3">
+        <motion.h3 
+          variants={itemVariants}
+          className={`text-xl font-bold flex items-center ${
+            isDarkMode ? 'text-gray-100' : 'text-gray-800'
+          }`}
+        >
+          <FaExclamationTriangle className={`mr-2 ${
+            isDarkMode ? 'text-red-400' : 'text-red-500'
+          }`} />
+          Incident Reports
+          <span className={`ml-3 text-sm px-2.5 py-0.5 rounded-full ${
+            isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+          }`}>
+            {sortedIncidents.length}
+          </span>
+        </motion.h3>
+        
+        <div className="flex flex-wrap gap-2">
+          <motion.button
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            className={`px-3 py-2 rounded-lg flex items-center ${
+              isDarkMode
+              ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
             }`}
           >
-            <FaExclamationTriangle className={`mr-2 ${
-              isDarkMode ? 'text-red-400' : 'text-red-500'
-            }`} />
-            Incident Reports
-            <span className={`ml-3 text-sm px-2.5 py-0.5 rounded-full ${
-              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-            }`}>
-              {sortedIncidents.length}
-            </span>
-          </motion.h3>
+            <FaFilter className="mr-2" />
+            Filters
+            {isFilterOpen ? <FaChevronUp className="ml-2" /> : <FaChevronDown className="ml-2" />}
+          </motion.button>
+
+          <motion.button
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap" 
+            onClick={handleOpenResolvedModal}
+            className={`px-3 py-2 rounded-lg flex items-center ${
+              isDarkMode
+              ? 'bg-green-700 hover:bg-green-600 text-white'
+              : 'bg-green-500 hover:bg-green-600 text-white'
+            }`}
+          >
+            <FaArchive className="mr-2" />
+            Resolved
+          </motion.button>
           
-          <div className="flex flex-wrap gap-2">
-            <motion.button
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
-              className={`px-3 py-2 rounded-lg flex items-center ${
-                isDarkMode
-                ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-              }`}
-            >
-              <FaFilter className="mr-2" />
-              Filters
-              {isFilterOpen ? <FaChevronUp className="ml-2" /> : <FaChevronDown className="ml-2" />}
-            </motion.button>
-
-            <motion.button
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap" 
-              onClick={handleOpenResolvedModal}
-              className={`px-3 py-2 rounded-lg flex items-center ${
-                isDarkMode
-                ? 'bg-green-700 hover:bg-green-600 text-white'
-                : 'bg-green-500 hover:bg-green-600 text-white'
-              }`}
-            >
-              <FaArchive className="mr-2" />
-              Resolved
-            </motion.button>
-            
-            <motion.button
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-              onClick={handleToggleAllLocations}
-              className={`px-3 py-2 rounded-lg flex items-center ${
-                isDarkMode
-                ? showAll ? 'bg-red-700 hover:bg-red-600' : 'bg-blue-700 hover:bg-blue-600'
-                : showAll ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'
-              } text-white`}
-            >
-              <FaMapMarked className="mr-2" />
-              {showAll ? 'Hide Locations' : 'Show Locations'}
-            </motion.button>
-            
-            <motion.button
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-              onClick={fetchIncidentReports}
-              disabled={refreshing}
-              className={`px-3 py-2 rounded-lg flex items-center ${
-                isDarkMode
-                ? 'bg-purple-700 hover:bg-purple-600 text-white'
-                : 'bg-purple-500 hover:bg-purple-600 text-white'
-              }`}
-            >
-              <FaSyncAlt className={`mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </motion.button>
-          </div>
+          <motion.button
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={handleToggleAllLocations}
+            className={`px-3 py-2 rounded-lg flex items-center ${
+              isDarkMode
+              ? showAll ? 'bg-red-700 hover:bg-red-600' : 'bg-blue-700 hover:bg-blue-600'
+              : showAll ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'
+            } text-white`}
+          >
+            <FaMapMarked className="mr-2" />
+            {showAll ? 'Hide Locations' : 'Show Locations'}
+          </motion.button>
+          
+          <motion.button
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            onClick={fetchIncidentReports}
+            disabled={refreshing}
+            className={`px-3 py-2 rounded-lg flex items-center ${
+              isDarkMode
+              ? 'bg-purple-700 hover:bg-purple-600 text-white'
+              : 'bg-purple-500 hover:bg-purple-600 text-white'
+            }`}
+          >
+            <FaSyncAlt className={`mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </motion.button>
         </div>
+      </div>
 
-        {/* Filter Panel */}
-        <AnimatePresence>
-          {isFilterOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className={`overflow-hidden rounded-lg p-4 ${
-                isDarkMode ? 'bg-gray-800' : 'bg-white'
-              } shadow`}
-            >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Search
-                  </label>
-                  <div className="relative">
-                    <FaSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${
-                      isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                    }`} />
-                    <input
-                      type="text"
-                      placeholder="Search incidents..."
-                      value={filterOptions.search}
-                      onChange={(e) => setFilterOptions({...filterOptions, search: e.target.value})}
-                      className={`pl-9 w-full p-2 rounded-lg border ${
-                        isDarkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                      }`}
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Status
-                  </label>
-                  <select
-                    value={filterOptions.status}
-                    onChange={(e) => setFilterOptions({...filterOptions, status: e.target.value})}
-                    className={`w-full p-2 rounded-lg border ${
+      {/* Filter Panel */}
+      <AnimatePresence>
+        {isFilterOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className={`overflow-hidden rounded-lg p-4 ${
+              isDarkMode ? 'bg-gray-800' : 'bg-white'
+            } shadow`}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}>
+                  Search
+                </label>
+                <div className="relative">
+                  <FaSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${
+                    isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                  }`} />
+                  <input
+                    type="text"
+                    placeholder="Search incidents..."
+                    value={filterOptions.search}
+                    onChange={(e) => setFilterOptions({...filterOptions, search: e.target.value})}
+                    className={`pl-9 w-full p-2 rounded-lg border ${
                       isDarkMode 
-                      ? 'bg-gray-700 border-gray-600 text-white' 
-                      : 'bg-white border-gray-300 text-gray-900'
+                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
                     }`}
-                  >
-                    <option value="all" className={isDarkMode ? 'bg-gray-700' : ''}>All Statuses</option>
-                    <option value="Pending" className={isDarkMode ? 'bg-gray-700' : ''}>Pending</option>
-                    <option value="In Progress" className={isDarkMode ? 'bg-gray-700' : ''}>In Progress</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Type
-                  </label>
-                  <select
-                    value={filterOptions.type}
-                    onChange={(e) => setFilterOptions({...filterOptions, type: e.target.value})}
-                    className={`w-full p-2 rounded-lg border ${
-                      isDarkMode 
-                      ? 'bg-gray-700 border-gray-600 text-white' 
-                      : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                  >
-                    <option value="all" className={isDarkMode ? 'bg-gray-700' : ''}>All Types</option>
-                    <option value="emergency" className={isDarkMode ? 'bg-gray-700' : ''}>Emergency</option>
-                    <option value="normal" className={isDarkMode ? 'bg-gray-700' : ''}>Normal</option>
-                  </select>
+                  />
                 </div>
               </div>
               
-              <div className="flex justify-end mt-4">
-                <motion.button
-                  variants={buttonVariants}
-                  whileHover="hover"
-                  whileTap="tap"
-                  onClick={() => setFilterOptions({
-                    search: '',
-                    status: 'all',
-                    type: 'all'
-                  })}
-                  className={`px-4 py-2 rounded-lg ${
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}>
+                  Status
+                </label>
+                <select
+                  value={filterOptions.status}
+                  onChange={(e) => setFilterOptions({...filterOptions, status: e.target.value})}
+                  className={`w-full p-2 rounded-lg border ${
                     isDarkMode 
-                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                    : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+                    ? 'bg-gray-700 border-gray-600 text-white' 
+                    : 'bg-white border-gray-300 text-gray-900'
                   }`}
                 >
-                  Reset Filters
-                </motion.button>
+                  <option value="all" className={isDarkMode ? 'bg-gray-700' : ''}>All Statuses</option>
+                  <option value="Pending" className={isDarkMode ? 'bg-gray-700' : ''}>Pending</option>
+                  <option value="In Progress" className={isDarkMode ? 'bg-gray-700' : ''}>In Progress</option>
+                </select>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Incidents Table */}
-        {loading ? (
-          <div className="flex justify-center items-center p-12">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }}
-              className="flex flex-col items-center"
-            >
-              <FaSpinner className={`animate-spin text-4xl mb-4 ${
-                isDarkMode ? 'text-blue-400' : 'text-blue-500'
-              }`} />
-              <p className="text-lg">Loading incidents...</p>
-            </motion.div>
-          </div>
-        ) : !hasIncidents ? (
-          <motion.div 
-            variants={itemVariants}
-            className={`flex flex-col items-center justify-center p-12 rounded-lg ${
-              isDarkMode ? 'bg-gray-800' : 'bg-gray-50'
-            }`}
-          >
-            <FaInfoCircle className={`text-5xl mb-4 ${
-              isDarkMode ? 'text-blue-400' : 'text-blue-500'
-            }`} />
-            <h4 className="text-xl font-medium mb-2">No Active Incidents</h4>
-            <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
-              {filterOptions.search || filterOptions.status !== 'all' || filterOptions.type !== 'all'
-                ? 'Try changing your search or filter criteria'
-                : 'There are no active incident reports at this time'
-              }
-            </p>
-          </motion.div>
-        ) : (
-          <div className={`overflow-x-auto rounded-lg ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          } shadow`}>
-            {/* Add fixed height table container for 5 rows with scrolling */}
-            <div className="overflow-y-auto" style={{ 
-              maxHeight: sortedIncidents.length > 5 ? '400px' : 'auto' 
-            }}>
-              <table className="w-full divide-y divide-gray-200">
-                <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-                  <tr>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                    }`}>
-                      Incident
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                    }`}>
-                      Status
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                    }`}>
-                      Backup Request
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                    }`}>
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className={isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'}>
-                  <AnimatePresence>
-                    {sortedIncidents.map((report, index) => {
-                      const assistanceRequest = assistanceRequests[report._id];
-                      
-                      return (
-                        <motion.tr 
-                          key={report._id}
-                          variants={tableRowVariants}
-                          custom={index}
-                          initial="hidden"
-                          animate="visible"
-                          exit="exit"
-                          className={isDarkMode ? 'hover:bg-gray-750' : 'hover:bg-gray-50'}
-                        >
-                          <td className="px-4 py-3">
-                            <div className="flex items-start">
-                              <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
-                                report.incidentClassification === 'Emergency Incident' 
-                                ? isDarkMode ? 'bg-red-900 text-red-300' : 'bg-red-100 text-red-600'
-                                : isDarkMode ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-600'
-                              }`}>
-                                {getIncidentTypeIcon(report.incidentClassification)}
-                              </div>
-                              <div className="ml-3">
-                                <div className={`font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                  {report.type}
-                                </div>
-                                <div className={`text-sm ${
-                                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                                }`}>
-                                  {report.incidentClassification || 'Normal Incident'}
-                                </div>
-                                {/* Added date and time here */}
-                                <div className={`mt-1 text-xs flex items-center ${
-                                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                                }`}>
-                                  <FaCalendarAlt className="mr-1" />
-                                  {formatDate(report.date)}
-                                  {report.time && (
-                                    <>
-                                      <span className="mx-1">•</span>
-                                      <FaClock className="mr-1" /> 
-                                      {report.time}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          
-                          <td className="px-4 py-3 whitespace-nowrap text-center">
-                            <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              getStatusColor(report.status || 'Pending')
-                            }`}>
-                              {report.status || 'Pending'}
-                            </span>
-                          </td>
-                          
-                          {/* Backup Request Column - Updated with all status handling */}
-                          <td className="px-4 py-3">
-                            {assistanceRequest ? (
-                              <div className="flex flex-col items-center space-y-2">
-                                <span 
-                                  onClick={() => handleAssistanceStatusClick(assistanceRequest)}
-                                  className={`cursor-pointer font-medium ${
-                                    getStatusColorClass(assistanceRequest.status)
-                                  }`}
-                                >
-                                  {assistanceRequest.status}
-                                </span>
-                                
-                                {assistanceRequest.status === 'Pending' && (
-                                  <div className="flex flex-col space-y-2">
-                                    <motion.button
-                                      variants={buttonVariants}
-                                      whileHover="hover"
-                                      whileTap="tap"
-                                      onClick={() => handleAssistanceAction(report._id, 'Approved')}
-                                      className={`bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600 transition-colors flex items-center justify-center`}
-                                    >
-                                      <FaCheck className="mr-1" />
-                                      Approve
-                                    </motion.button>
-                                    <motion.button
-                                      variants={buttonVariants}
-                                      whileHover="hover"
-                                      whileTap="tap"
-                                      onClick={() => handleAssistanceAction(report._id, 'Rejected')}
-                                      className={`bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600 transition-colors flex items-center justify-center`}
-                                    >
-                                      <FaTimes className="mr-1" />
-                                      Reject
-                                    </motion.button>
-                                  </div>
-                                )}
-
-                                {/* Processing status */}
-                                {assistanceRequest.status === 'Processing' && (
-                                  <div className="flex flex-col space-y-2">
-                                    <div className={`text-xs ${
-                                      isDarkMode ? 'text-blue-300' : 'text-blue-600'
-                                    }`}>
-                                      <FaSpinner className="inline-block mr-1 animate-spin" />
-                                      Processing request...
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Deployed status */}
-                                {assistanceRequest.status === 'Deployed' && (
-                                  <div className="flex flex-col space-y-1">
-                                    <div className={`text-xs ${
-                                      isDarkMode ? 'text-indigo-300' : 'text-indigo-600'
-                                    }`}>
-                                      Help is on the way
-                                    </div>
-                                    {assistanceRequest.responderDetails && 
-                                     assistanceRequest.responderDetails.length > 0 && (
-                                      <div className={`text-xs ${
-                                        isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                      }`}>
-                                        {assistanceRequest.responderDetails[0].responderName}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Completed status */}
-                                {assistanceRequest.status === 'Completed' && (
-                                  <div className="flex flex-col space-y-1">
-                                    <div className={`text-xs ${
-                                      isDarkMode ? 'text-green-300' : 'text-green-600'
-                                    }`}>
-                                      <FaCheck className="inline-block mr-1" />
-                                      Assistance completed
-                                    </div>
-                                    {assistanceRequest.completionDetails && (
-                                      <div className={`text-xs ${
-                                        isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                      }`}>
-                                        {new Date(assistanceRequest.completionDetails.completionDateTime).toLocaleString()}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Rejected status */}
-                                {assistanceRequest.status === 'Rejected' && (
-                                  <div className={`text-xs ${
-                                    isDarkMode ? 'text-red-300' : 'text-red-600'
-                                  }`}>
-                                    <FaTimes className="inline-block mr-1" />
-                                    Request rejected
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>
-                                None
-                              </span>
-                            )}
-                          </td>
-                          
-                          <td className="px-4 py-3">
-                            <div className="flex flex-col space-y-2 items-center">
-                              <motion.button
-                                variants={buttonVariants}
-                                whileHover="hover"
-                                whileTap="tap"
-                                onClick={() => handleViewDetails(report)}
-                                className={`bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs flex items-center justify-center w-full`}
-                              >
-                                <FaEye className="mr-1" />
-                                Details
-                              </motion.button>
-                              
-                              <motion.button
-                                variants={buttonVariants}
-                                whileHover="hover"
-                                whileTap="tap"
-                                onClick={() => handleToggleLocation(report)}
-                                className={`${
-                                  visibleLocations[report._id] 
-                                  ? 'bg-red-500 hover:bg-red-600' 
-                                  : 'bg-green-500 hover:bg-green-600'
-                                } text-white px-2 py-1 rounded text-xs flex items-center justify-center w-full`}
-                              >
-                                <FaMapMarkerAlt className="mr-1" />
-                                {visibleLocations[report._id] ? 'Hide' : 'Map'}
-                              </motion.button>
-                              
-                              <motion.button
-                                variants={buttonVariants}
-                                whileHover="hover"
-                                whileTap="tap"
-                                onClick={() => handleCctvReview(report)}
-                                className={`bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-xs flex items-center justify-center w-full`}
-                              >
-                                <FaVideo className="mr-1" />
-                                CCTV
-                              </motion.button>
-                            </div>
-                          </td>
-                        </motion.tr>
-                      );
-                    })}
-                  </AnimatePresence>
-                </tbody>
-              </table>
+              
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}>
+                  Type
+                </label>
+                <select
+                  value={filterOptions.type}
+                  onChange={(e) => setFilterOptions({...filterOptions, type: e.target.value})}
+                  className={`w-full p-2 rounded-lg border ${
+                    isDarkMode 
+                    ? 'bg-gray-700 border-gray-600 text-white' 
+                    : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                >
+                  <option value="all" className={isDarkMode ? 'bg-gray-700' : ''}>All Types</option>
+                  <option value="emergency" className={isDarkMode ? 'bg-gray-700' : ''}>Emergency</option>
+                  <option value="normal" className={isDarkMode ? 'bg-gray-700' : ''}>Normal</option>
+                </select>
+              </div>
             </div>
-          </div>
-        )}
-      </motion.div>
-
-      {/* Resolved Incidents Modal */}
-      {showResolvedModal && (
-        <ResolvedIncidentsModal
-          isOpen={showResolvedModal}
-          onClose={handleCloseResolvedModal}
-          resolvedIncidents={resolvedIncidents}
-        />
-      )}
-      
-      {/* CCTV Review Panel */}
-      <AnimatePresence>
-        {selectedReport && activePanel === 'cctv' && (
-          <CctvReviewPanel 
-            incident={selectedReport} 
-            onClose={handleCloseCctvReview}
-            mapRef={mapRef}
-          />
-        )}
-      </AnimatePresence>
-      
-      {/* Assistance Details Modal */}
-      <AnimatePresence>
-        {showAssistanceModal && selectedAssistance && (
-          <AssistanceDetailsModal
-            details={selectedAssistance}
-            onClose={() => setShowAssistanceModal(false)}
-          />
-        )}
-      </AnimatePresence>
-      
-      {/* Rejection Modal */}
-      <AnimatePresence>
-        {showRejectionModal && (
-          <RejectionModal
-            onClose={() => setShowRejectionModal(false)}
-            onSubmit={handleRejectionSubmit}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Details Panel - Modified to slide in from right */}
-      <AnimatePresence>
-        {selectedReport && activePanel === 'details' && (
-          <motion.div
-            variants={panelVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className={`fixed right-0 top-0 bottom-0 w-[400px] z-20 shadow-2xl overflow-y-auto ${
-              isDarkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-800'
-            }`}
-          >
-            {/* Header */}
-            <div className={`sticky top-0 z-10 px-6 py-4 flex justify-between items-center ${
-              isDarkMode ? 'bg-gray-900 border-b border-gray-700' : 'bg-blue-50 border-b border-blue-100'
-            }`}>
-              <motion.h3 
-                className="text-lg font-semibold flex items-center" 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                <FaInfoCircle className={`mr-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                Incident Details
-              </motion.h3>
+            
+            <div className="flex justify-end mt-4">
               <motion.button
                 variants={buttonVariants}
                 whileHover="hover"
                 whileTap="tap"
-                onClick={handleCloseDetails}
-                className={`p-2 rounded-full ${
+                onClick={() => setFilterOptions({
+                  search: '',
+                  status: 'all',
+                  type: 'all'
+                })}
+                className={`px-4 py-2 rounded-lg ${
                   isDarkMode 
                   ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                  : 'bg-white hover:bg-gray-100 text-gray-700 shadow-sm'
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
                 }`}
               >
-                <FaTimes />
+                Reset Filters
               </motion.button>
             </div>
-            
-            {/* Content */}
-            <div className="p-6 space-y-4">
-              <motion.div 
-                variants={contentVariants}
-                custom={0}
-                initial="hidden"
-                animate="visible"
-              >
-                <div className={`p-4 rounded-lg ${
-                  isDarkMode ? 'bg-gray-700' : 'bg-blue-50'
-                }`}>
-                  <h4 className={`font-semibold text-lg mb-3 ${
-                    isDarkMode ? 'text-blue-300' : 'text-blue-800'
-                  }`}>General Information</h4>
-                  <div className="space-y-2">
-                    <div className="flex">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 flex-shrink-0 ${
-                        selectedReport.incidentClassification === 'Emergency Incident' 
-                        ? isDarkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-600'
-                        : isDarkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-600'
-                      }`}>
-                        {getIncidentTypeIcon(selectedReport.incidentClassification)}
-                      </div>
-                      <div>
-                        <div className="font-medium">{selectedReport.type}</div>
-                        <div className={`text-sm ${
-                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>{selectedReport.incidentClassification || 'Normal Incident'}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-              
-              <motion.div 
-                variants={contentVariants}
-                custom={1}
-                initial="hidden"
-                animate="visible"
-              >
-                <div className={`p-4 rounded-lg ${
-                  isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
-                }`}>
-                  <h4 className={`font-semibold text-lg mb-3 ${
-                    isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                  }`}>Details</h4>
-                  
-                  <div className="space-y-3">
-                    <div className="flex items-start">
-                      <FaCalendarAlt className={`mt-1 mr-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                      <div>
-                        <div className="font-medium">Date & Time</div>
-                        <div className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
-                          {formatDate(selectedReport.date)} • {selectedReport.time || 'N/A'}
-                        </div>
-                      </div>
-                    </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Incidents Table */}
+      {loading ? (
+        <div className="flex justify-center items-center p-12">
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }}
+            className="flex flex-col items-center"
+          >
+            <FaSpinner className={`animate-spin text-4xl mb-4 ${
+              isDarkMode ? 'text-blue-400' : 'text-blue-500'
+            }`} />
+            <p className="text-lg">Loading incidents...</p>
+          </motion.div>
+        </div>
+      ) : !hasIncidents ? (
+        <motion.div 
+          variants={itemVariants}
+          className={`flex flex-col items-center justify-center p-12 rounded-lg ${
+            isDarkMode ? 'bg-gray-800' : 'bg-gray-50'
+          }`}
+        >
+          <FaInfoCircle className={`text-5xl mb-4 ${
+            isDarkMode ? 'text-blue-400' : 'text-blue-500'
+          }`} />
+          <h4 className="text-xl font-medium mb-2">No Active Incidents</h4>
+          <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
+            {filterOptions.search || filterOptions.status !== 'all' || filterOptions.type !== 'all'
+              ? 'Try changing your search or filter criteria'
+              : 'There are no active incident reports at this time'
+            }
+          </p>
+        </motion.div>
+      ) : (
+        <div className={`overflow-x-auto rounded-lg ${
+          isDarkMode ? 'bg-gray-800' : 'bg-white'
+        } shadow`}>
+          {/* Add fixed height table container for 5 rows with scrolling */}
+          <div className="overflow-y-auto" style={{ 
+            maxHeight: sortedIncidents.length > 5 ? '400px' : 'auto' 
+          }}>
+            <table className="w-full divide-y divide-gray-200">
+              <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+                <tr>
+                  <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    Incident
+                  </th>
+                  <th scope="col" className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    Status
+                  </th>
+                  <th scope="col" className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    Backup Request
+                  </th>
+                  <th scope="col" className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className={isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'}>
+                <AnimatePresence>
+                  {sortedIncidents.map((report, index) => {
+                    const assistanceRequest = assistanceRequests[report._id];
                     
-                    <div className="flex items-start">
-                      <FaMapMarkerAlt className={`mt-1 mr-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                      <div>
-                        <div className="font-medium">Location</div>
-                        <div className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
-                          {/* Use address field if available */}
-                          {friendlyLocation}
-                          {friendlyLocation !== selectedReport.location && !selectedReport.address && (
-                            <span className={`block text-xs mt-1 ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    return (
+                      <motion.tr 
+                        key={report._id}
+                        variants={tableRowVariants}
+                        custom={index}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        className={isDarkMode ? 'hover:bg-gray-750' : 'hover:bg-gray-50'}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-start">
+                            <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
+                              report.incidentClassification === 'Emergency Incident' 
+                              ? isDarkMode ? 'bg-red-900 text-red-300' : 'bg-red-100 text-red-600'
+                              : isDarkMode ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-600'
                             }`}>
-                              ({selectedReport.location})
+                              {getIncidentTypeIcon(report.incidentClassification)}
+                            </div>
+                            <div className="ml-3">
+                              <div className={`font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                {report.type}
+                              </div>
+                              <div className={`text-sm ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}>
+                                {report.incidentClassification || 'Normal Incident'}
+                              </div>
+                              {/* Added date and time here */}
+                              <div className={`mt-1 text-xs flex items-center ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}>
+                                <FaCalendarAlt className="mr-1" />
+                                {formatDate(report.date)}
+                                {report.time && (
+                                  <>
+                                    <span className="mx-1">•</span>
+                                    <FaClock className="mr-1" /> 
+                                    {report.time}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            getStatusColor(report.status || 'Pending')
+                          }`}>
+                            {report.status || 'Pending'}
+                          </span>
+                        </td>
+                        
+                        {/* Backup Request Column - Updated with all status handling */}
+                        <td className="px-4 py-3">
+                          {assistanceRequest ? (
+                            <div className="flex flex-col items-center space-y-2">
+                              <span 
+                                onClick={() => handleAssistanceStatusClick(assistanceRequest)}
+                                className={`cursor-pointer font-medium ${
+                                  getStatusColorClass(assistanceRequest.status)
+                                }`}
+                              >
+                                {assistanceRequest.status}
+                              </span>
+                              
+                              {assistanceRequest.status === 'Pending' && (
+                                <div className="flex flex-col space-y-2">
+                                  <motion.button
+                                    variants={buttonVariants}
+                                    whileHover="hover"
+                                    whileTap="tap"
+                                    onClick={() => handleAssistanceAction(report._id, 'Approved')}
+                                    className={`bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600 transition-colors flex items-center justify-center`}
+                                  >
+                                    <FaCheck className="mr-1" />
+                                    Approve
+                                  </motion.button>
+                                  <motion.button
+                                    variants={buttonVariants}
+                                    whileHover="hover"
+                                    whileTap="tap"
+                                    onClick={() => handleAssistanceAction(report._id, 'Rejected')}
+                                    className={`bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600 transition-colors flex items-center justify-center`}
+                                  >
+                                    <FaTimes className="mr-1" />
+                                    Reject
+                                  </motion.button>
+                                </div>
+                              )}
+
+                              {/* Processing status */}
+                              {assistanceRequest.status === 'Processing' && (
+                                <div className="flex flex-col space-y-2">
+                                  <div className={`text-xs ${
+                                    isDarkMode ? 'text-blue-300' : 'text-blue-600'
+                                  }`}>
+                                    <FaSpinner className="inline-block mr-1 animate-spin" />
+                                    Processing request...
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Deployed status */}
+                              {assistanceRequest.status === 'Deployed' && (
+                                <div className="flex flex-col space-y-1">
+                                  <div className={`text-xs ${
+                                    isDarkMode ? 'text-indigo-300' : 'text-indigo-600'
+                                  }`}>
+                                    Help is on the way
+                                  </div>
+                                  {assistanceRequest.responderDetails && 
+                                   assistanceRequest.responderDetails.length > 0 && (
+                                    <div className={`text-xs ${
+                                      isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                    }`}>
+                                      {assistanceRequest.responderDetails[0].responderName}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Completed status */}
+                              {assistanceRequest.status === 'Completed' && (
+                                <div className="flex flex-col space-y-1">
+                                  <div className={`text-xs ${
+                                    isDarkMode ? 'text-green-300' : 'text-green-600'
+                                  }`}>
+                                    <FaCheck className="inline-block mr-1" />
+                                    Assistance completed
+                                  </div>
+                                  {assistanceRequest.completionDetails && (
+                                    <div className={`text-xs ${
+                                      isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                    }`}>
+                                      {new Date(assistanceRequest.completionDetails.completionDateTime).toLocaleString()}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Rejected status */}
+                              {assistanceRequest.status === 'Rejected' && (
+                                <div className={`text-xs ${
+                                  isDarkMode ? 'text-red-300' : 'text-red-600'
+                                }`}>
+                                  <FaTimes className="inline-block mr-1" />
+                                  Request rejected
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>
+                              None
                             </span>
                           )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {selectedReport.locationNote && (
-                      <div className="flex items-start">
-                        <FaInfoCircle className={`mt-1 mr-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                        <div>
-                          <div className="font-medium">Location Note</div>
-                          <div className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
-                            {selectedReport.locationNote}
+                        </td>
+                        
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col space-y-2 items-center">
+                            <motion.button
+                              variants={buttonVariants}
+                              whileHover="hover"
+                              whileTap="tap"
+                              onClick={() => handleViewDetails(report)}
+                              className={`bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs flex items-center justify-center w-full`}
+                            >
+                              <FaEye className="mr-1" />
+                              Details
+                            </motion.button>
+                            
+                            <motion.button
+                              variants={buttonVariants}
+                              whileHover="hover"
+                              whileTap="tap"
+                              onClick={() => handleToggleLocation(report)}
+                              className={`${
+                                visibleLocations[report._id] 
+                                ? 'bg-red-500 hover:bg-red-600' 
+                                : 'bg-green-500 hover:bg-green-600'
+                              } text-white px-2 py-1 rounded text-xs flex items-center justify-center w-full`}
+                            >
+                              <FaMapMarkerAlt className="mr-1" />
+                              {visibleLocations[report._id] ? 'Hide' : 'Map'}
+                            </motion.button>
+                            
+                            <motion.button
+                              variants={buttonVariants}
+                              whileHover="hover"
+                              whileTap="tap"
+                              onClick={() => handleCctvReview(report)}
+                              className={`bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-xs flex items-center justify-center w-full`}
+                            >
+                              <FaVideo className="mr-1" />
+                              CCTV
+                            </motion.button>
                           </div>
-                        </div>
-                      </div>
-                    )}
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </motion.div>
+
+    {/* Resolved Incidents Modal */}
+    {showResolvedModal && (
+      <ResolvedIncidentsModal
+        isOpen={showResolvedModal}
+        onClose={handleCloseResolvedModal}
+        resolvedIncidents={resolvedIncidents}
+      />
+    )}
+    
+    {/* CCTV Review Panel */}
+    <AnimatePresence>
+      {selectedReport && activePanel === 'cctv' && (
+        <CctvReviewPanel 
+          incident={selectedReport} 
+          onClose={handleCloseCctvReview}
+          mapRef={mapRef}
+        />
+      )}
+    </AnimatePresence>
+    
+    {/* Assistance Details Modal */}
+    <AnimatePresence>
+      {showAssistanceModal && selectedAssistance && (
+        <AssistanceDetailsModal
+          details={selectedAssistance}
+          onClose={() => setShowAssistanceModal(false)}
+        />
+      )}
+    </AnimatePresence>
+    
+    {/* Rejection Modal */}
+    <AnimatePresence>
+      {showRejectionModal && (
+        <RejectionModal
+          onClose={() => setShowRejectionModal(false)}
+          onSubmit={handleRejectionSubmit}
+        />
+      )}
+    </AnimatePresence>
+
+    {/* Details Panel - Modified to slide in from right */}
+    <AnimatePresence>
+      {selectedReport && activePanel === 'details' && (
+        <motion.div
+          variants={panelVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          className={`fixed right-0 top-0 bottom-0 w-[400px] z-20 shadow-2xl overflow-y-auto ${
+            isDarkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-800'
+          }`}
+        >
+          {/* Header */}
+          <div className={`sticky top-0 z-10 px-6 py-4 flex justify-between items-center ${
+            isDarkMode ? 'bg-gray-900 border-b border-gray-700' : 'bg-blue-50 border-b border-blue-100'
+          }`}>
+            <motion.h3 
+              className="text-lg font-semibold flex items-center" 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              <FaInfoCircle className={`mr-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+              Incident Details
+            </motion.h3>
+            <motion.button
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              onClick={handleCloseDetails}
+              className={`p-2 rounded-full ${
+                isDarkMode 
+                ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
+                : 'bg-white hover:bg-gray-100 text-gray-700 shadow-sm'
+              }`}
+            >
+              <FaTimes />
+            </motion.button>
+          </div>
+          
+          {/* Content */}
+          <div className="p-6 space-y-4">
+            <motion.div 
+              variants={contentVariants}
+              custom={0}
+              initial="hidden"
+              animate="visible"
+            >
+              <div className={`p-4 rounded-lg ${
+                isDarkMode ? 'bg-gray-700' : 'bg-blue-50'
+              }`}>
+                <h4 className={`font-semibold text-lg mb-3 ${
+                  isDarkMode ? 'text-blue-300' : 'text-blue-800'
+                }`}>General Information</h4>
+                <div className="space-y-2">
+                  <div className="flex">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 flex-shrink-0 ${
+                      selectedReport.incidentClassification === 'Emergency Incident' 
+                      ? isDarkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-600'
+                      : isDarkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-600'
+                    }`}>
+                      {getIncidentTypeIcon(selectedReport.incidentClassification)}
+                    </div>
+                    <div>
+                      <div className="font-medium">{selectedReport.type}</div>
+                      <div className={`text-sm ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                      }`}>{selectedReport.incidentClassification || 'Normal Incident'}</div>
+                    </div>
                   </div>
                 </div>
-              </motion.div>
-              
-              <motion.div 
-                variants={contentVariants}
-                custom={2}
-                initial="hidden"
-                animate="visible"
-              >
-                <div className={`p-4 rounded-lg ${
-                  isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
-                }`}>
-                  <h4 className={`font-semibold text-lg mb-3 ${
-                    isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                  }`}>Status & Reporter</h4>
-                  
-                  <div className="flex items-center mb-3">
-                    <div className={`px-3 py-1 rounded-full ${
-                      getStatusColor(selectedReport.status || 'Pending')
-                    }`}>
-                      {selectedReport.status || 'Pending'}
+              </div>
+            </motion.div>
+            
+            <motion.div 
+              variants={contentVariants}
+              custom={1}
+              initial="hidden"
+              animate="visible"
+            >
+              <div className={`p-4 rounded-lg ${
+                isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
+              }`}>
+                <h4 className={`font-semibold text-lg mb-3 ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                }`}>Details</h4>
+                
+                <div className="space-y-3">
+                  <div className="flex items-start">
+                    <FaCalendarAlt className={`mt-1 mr-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                    <div>
+                      <div className="font-medium">Date & Time</div>
+                      <div className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                        {formatDate(selectedReport.date)} • {selectedReport.time || 'N/A'}
+                      </div>
                     </div>
                   </div>
                   
-                  {selectedReport.fullName && (
+                  <div className="flex items-start">
+                    <FaMapMarkerAlt className={`mt-1 mr-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                    <div>
+                      <div className="font-medium">Location</div>
+                      <div className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                        {/* Use address field if available */}
+                        {friendlyLocation}
+                        {friendlyLocation !== selectedReport.location && !selectedReport.address && (
+                          <span className={`block text-xs mt-1 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                          }`}>
+                            ({selectedReport.location})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {selectedReport.locationNote && (
                     <div className="flex items-start">
-                      <FaUserAlt className={`mt-1 mr-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                      <FaInfoCircle className={`mt-1 mr-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
                       <div>
-                        <div className="font-medium">Reported By</div>
+                        <div className="font-medium">Location Note</div>
                         <div className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
-                          {selectedReport.fullName}
-                          {selectedReport.contactNumber && (
-                            <div className="flex items-center mt-1 text-sm">
-                              <FaPhone className="mr-1" />
-                              {selectedReport.contactNumber}
-                            </div>
-                          )}
+                          {selectedReport.locationNote}
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
-              </motion.div>
-              
+              </div>
+            </motion.div>
+            
+            <motion.div 
+              variants={contentVariants}
+              custom={2}
+              initial="hidden"
+              animate="visible"
+            >
+              <div className={`p-4 rounded-lg ${
+                isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
+              }`}>
+                <h4 className={`font-semibold text-lg mb-3 ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                }`}>Status & Reporter</h4>
+                
+                <div className="flex items-center mb-3">
+                  <div className={`px-3 py-1 rounded-full ${
+                    getStatusColor(selectedReport.status || 'Pending')
+                  }`}>
+                    {selectedReport.status || 'Pending'}
+                  </div>
+                </div>
+                
+                {selectedReport.fullName && (
+                  <div className="flex items-start">
+                    <FaUserAlt className={`mt-1 mr-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                    <div>
+                      <div className="font-medium">Reported By</div>
+                      <div className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                        {selectedReport.fullName}
+                        {selectedReport.contactNumber && (
+                          <div className="flex items-center mt-1 text-sm">
+                            <FaPhone className="mr-1" />
+                            {selectedReport.contactNumber}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+            
+            <motion.div 
+              variants={contentVariants}
+              custom={3}
+              initial="hidden"
+              animate="visible"
+            >
+              <div className={`p-4 rounded-lg ${
+                isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
+              }`}>
+                <h4 className={`font-semibold text-lg mb-3 ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                }`}>Description</h4>
+                <p className={`whitespace-pre-line ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {selectedReport.description || 'No description provided'}
+                </p>
+              </div>
+            </motion.div>
+            
+            {selectedReport.status === 'In Progress' && (
               <motion.div 
                 variants={contentVariants}
-                custom={3}
+                custom={4}
                 initial="hidden"
                 animate="visible"
+                className={`p-4 rounded-lg ${
+                  isDarkMode ? 'bg-blue-900 bg-opacity-20' : 'bg-blue-50 border border-blue-100'
+                }`}
               >
-                <div className={`p-4 rounded-lg ${
-                  isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
-                }`}>
-                  <h4 className={`font-semibold text-lg mb-3 ${
-                    isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                  }`}>Description</h4>
-                  <p className={`whitespace-pre-line ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    {selectedReport.description || 'No description provided'}
+                <h4 className={`font-semibold text-lg mb-3 ${
+                  isDarkMode ? 'text-blue-300' : 'text-blue-700'
+                }`}>Response Details</h4>
+                <div className="space-y-2">
+                  <p className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                    <strong>Responding Officer:</strong> {selectedReport.responderName || 'Unknown'}
+                  </p>
+                  <p className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                    <strong>Response Started:</strong> {
+                      selectedReport.respondedAt 
+                      ? new Date(selectedReport.respondedAt).toLocaleString() 
+                      : 'N/A'
+                    }
                   </p>
                 </div>
               </motion.div>
-              
-              {selectedReport.status === 'In Progress' && (
-                <motion.div 
-                  variants={contentVariants}
-                  custom={4}
-                  initial="hidden"
-                  animate="visible"
-                  className={`p-4 rounded-lg ${
-                    isDarkMode ? 'bg-blue-900 bg-opacity-20' : 'bg-blue-50 border border-blue-100'
-                  }`}
-                >
-                  <h4 className={`font-semibold text-lg mb-3 ${
-                    isDarkMode ? 'text-blue-300' : 'text-blue-700'
-                  }`}>Response Details</h4>
-                  <div className="space-y-2">
-                    <p className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
-                      <strong>Responding Officer:</strong> {selectedReport.responderName || 'Unknown'}
-                    </p>
-                    <p className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
-                      <strong>Response Started:</strong> {
-                        selectedReport.respondedAt 
-                        ? new Date(selectedReport.respondedAt).toLocaleString() 
-                        : 'N/A'
-                      }
-                    </p>
-                  </div>
-                </motion.div>
-              )}
-              
-              {/* Actions */}
-              <motion.div 
-                variants={contentVariants}
-                custom={5}
-                initial="hidden"
-                animate="visible"
-                className="flex justify-end space-x-3 pt-4"
+            )}
+            
+            {/* Actions */}
+            <motion.div 
+              variants={contentVariants}
+              custom={5}
+              initial="hidden"
+              animate="visible"
+              className="flex justify-end space-x-3 pt-4"
+            >
+              <motion.button
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={() => {
+                  if (selectedReport && selectedReport.location) {
+                    handleToggleLocation(selectedReport);
+                    // Don't close the details panel when toggling the map
+                  }
+                }}
+                className={`px-4 py-2 rounded-lg ${
+                  isDarkMode 
+                  ? (isReportVisible(selectedReport?._id) ? 'bg-red-700 hover:bg-red-600' : 'bg-green-700 hover:bg-green-600')
+                  : (isReportVisible(selectedReport?._id) ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600')
+                } text-white`}
               >
-                <motion.button
-                  variants={buttonVariants}
-                  whileHover="hover"
-                  whileTap="tap"
-                  onClick={() => {
-                    if (selectedReport && selectedReport.location) {
-                      handleToggleLocation(selectedReport);
-                      handleCloseDetails();
-                    }
-                  }}
-                  className={`px-4 py-2 rounded-lg ${
-                    isDarkMode 
-                    ? 'bg-green-700 hover:bg-green-600 text-white' 
-                    : 'bg-green-500 hover:bg-green-600 text-white'
-                  }`}
-                >
-                  <FaMapMarkerAlt className="inline mr-2" />
-                  Show on Map
-                </motion.button>
-                
-                <motion.button
-                  variants={buttonVariants}
-                  whileHover="hover"
-                  whileTap="tap"
-                  onClick={() => {
-                    handleCctvReview(selectedReport);
-                    handleCloseDetails();
-                  }}
-                  className={`px-4 py-2 rounded-lg ${
-                    isDarkMode 
-                    ? 'bg-purple-700 hover:bg-purple-600 text-white' 
-                    : 'bg-purple-500 hover:bg-purple-600 text-white'
-                  }`}
-                >
-                  <FaVideo className="inline mr-2" />
-                  CCTV Review
-                </motion.button>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+                <FaMapMarkerAlt className="inline mr-2" />
+                {isReportVisible(selectedReport?._id) ? 'Hide on Map' : 'Show on Map'}
+              </motion.button>
+              
+              <motion.button
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={() => {
+                  handleOpenCctvModal(selectedReport);
+                  // Don't close the details panel when opening the modal
+                }}
+                className={`px-4 py-2 rounded-lg ${
+                  isDarkMode 
+                  ? 'bg-purple-700 hover:bg-purple-600 text-white' 
+                  : 'bg-purple-500 hover:bg-purple-600 text-white'
+                }`}
+              >
+                <FaVideo className="inline mr-2" />
+                CCTV Review
+              </motion.button>
+            </motion.div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* Add the CCTV Review Modal */}
+    {showCctvModal && selectedReport && (
+      <CctvReviewModal
+        isOpen={showCctvModal}
+        onClose={handleCctvModalClose}
+        incident={selectedReport}
+        cctv={selectedCctv || {
+          name: 'Nearest CCTV',
+          description: 'Camera nearest to incident location',
+          location: selectedReport.location
+        }}
+      />
+    )}
+  </div>
   );
 };
 

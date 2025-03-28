@@ -144,10 +144,40 @@ const TanodMap = () => {
   };
 
   useEffect(() => {
-    fetchUserProfile();
-    fetchPatrolAreas();
-    fetchCurrentPatrolArea();
-    fetchIncidentReports(); // Add this call
+    const fetchData = async () => {
+      await fetchUserProfile();
+      await fetchPatrolAreas();
+      await fetchCurrentPatrolArea();
+      await fetchIncidentReports();
+    };
+
+    fetchData();
+    
+    // Always set tracking to visible and enabled on component mount
+    setIsTrackingVisible(true);
+    localStorage.setItem("isTrackingVisible", "true");
+    localStorage.setItem("isTracking", "true");
+    
+    // Initialize socket connection
+    socketRef.current = io(`${process.env.REACT_APP_API_URL}/namespace`, {
+      query: { userId: localStorage.getItem("userId") },
+    });
+
+    socketRef.current.on('connect', () => {
+      console.log('Connected to socket server');
+      socketRef.current.emit('joinTrackingRoom');
+    });
+
+    socketRef.current.on('locationUpdate', (data) => {
+      // Handle incoming location updates
+      // ...existing socket handling code...
+    });
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
   }, []);
 
   useEffect(() => {

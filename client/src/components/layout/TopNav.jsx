@@ -10,6 +10,7 @@ import NotificationList from "../notifications/NotificationList";
 import MessageList from "../messages/MessageList";
 import ConversationModal from "../messages/ConversationModal"; // Add this import
 import { io } from "socket.io-client";
+import { useTheme } from "../../contexts/ThemeContext"; // Add this import
 
 export default function TopNav() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -31,6 +32,7 @@ export default function TopNav() {
   const notificationListRef = useRef(null);
   const navigate = useNavigate();
   const { toggleSideNav, logout } = useCombinedContext();
+  const { isDarkMode } = useTheme(); // Add this hook to get theme state
 
   const handleClickOutside = useCallback((event) => {
     const isOutsideMessage = messageRef.current && 
@@ -59,7 +61,7 @@ export default function TopNav() {
     const fetchUserProfile = async () => {
       const token = localStorage.getItem("token");
       if (!token) {
-        navigate("/login");
+        navigate("/tanod-login");
         return;
       }
 
@@ -230,7 +232,7 @@ export default function TopNav() {
     
     logout(); // Call existing logout function
     closeAllDropdowns();
-    navigate("/");
+    navigate("/tanod-login"); // Redirect to login page
   };
 
   const handleMyAccount = () => {
@@ -261,6 +263,19 @@ export default function TopNav() {
   ];
 
   const storedUserType = localStorage.getItem("userType");
+
+  // Add state for screen width
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  // Update screen width state on resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   return (
     <>
@@ -298,13 +313,32 @@ export default function TopNav() {
                   {showMessageList && (
                     <div 
                       ref={messageListRef}
-                      className="absolute right-0 mt-2 z-50"
-                      style={{ width: '320px' }}
+                      className={`z-50 ${isMobile ? 'fixed inset-x-0 top-16 px-2' : 'absolute right-0 mt-2'}`}
                     >
-                      <MessageList 
-                        onClose={() => setShowMessageList(false)} 
-                        onConversationClick={handleConversationClick} // Pass this prop
-                      />
+                      <div 
+                        className={`relative ${isMobile ? 'mx-auto' : ''}`}
+                        style={{ 
+                          width: isMobile ? 'calc(100% - 16px)' : '320px',
+                          maxWidth: isMobile ? '100%' : '95vw'
+                        }}
+                      >
+                        {/* Visual connector triangle for mobile */}
+                        {isMobile && (
+                          <div 
+                            className={`absolute h-3 w-3 rotate-45 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}
+                            style={{ 
+                              right: '16px', 
+                              top: '-6px',
+                              borderLeft: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
+                              borderTop: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`
+                            }}
+                          />
+                        )}
+                        <MessageList 
+                          onClose={() => setShowMessageList(false)} 
+                          onConversationClick={handleConversationClick}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -323,10 +357,29 @@ export default function TopNav() {
                   {showNotificationList && (
                     <div 
                       ref={notificationListRef}
-                      className="absolute right-0 mt-2 z-50"
-                      style={{ width: '360px' }}
+                      className={`z-50 ${isMobile ? 'fixed inset-x-0 top-16 px-2' : 'absolute right-0 mt-2'}`}
                     >
-                      <NotificationList onClose={() => setShowNotificationList(false)} />
+                      <div 
+                        className={`relative ${isMobile ? 'mx-auto' : ''}`}
+                        style={{ 
+                          width: isMobile ? 'calc(100% - 16px)' : '360px',
+                          maxWidth: isMobile ? '100%' : '95vw'
+                        }}
+                      >
+                        {/* Visual connector triangle for mobile */}
+                        {isMobile && (
+                          <div 
+                            className={`absolute h-3 w-3 rotate-45 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}
+                            style={{ 
+                              right: '16px', 
+                              top: '-6px',
+                              borderLeft: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
+                              borderTop: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`
+                            }}
+                          />
+                        )}
+                        <NotificationList onClose={() => setShowNotificationList(false)} />
+                      </div>
                     </div>
                   )}
                 </div>

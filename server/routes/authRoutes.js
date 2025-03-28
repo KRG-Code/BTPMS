@@ -3,6 +3,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const mongoose = require('mongoose'); // Add this import
 const TanodRating = require('../models/Rating'); // Add this import
+const User = require('../models/User'); // Add this import
 const {
   registerUser,
   registerTanod,
@@ -116,6 +117,28 @@ router.get('/equipments', protect, getEquipments); // Get all borrowed equipment
 router.post('/equipments', protect, addEquipment); // Borrow equipment
 router.put('/equipments/:id', protect, updateEquipment); // Return equipment
 
+// Add this new route to get equipment by user ID
+router.get('/equipments/user/:userId/equipments', protect, async (req, res) => {
+  const { userId } = req.params;
+  
+  try {
+    // Check if userId is valid
+    const isValidUser = mongoose.Types.ObjectId.isValid(userId);
+    if (!isValidUser) {
+      return res.status(400).json({ message: 'Invalid userId' });
+    }
+    
+    // Fetch the equipment for the user
+    const equipments = await Equipment.find({ user: userId });
+  
+    // Return equipment even if it's an empty array
+    res.status(200).json(equipments);
+  } catch (error) {
+    console.error('Error fetching equipment:', error.message);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Inventory Routes
 router.get('/inventory', protect, getInventory);          // Get inventory
 router.post('/inventory', protect, addInventoryItem);     // Add item to inventory
@@ -199,6 +222,21 @@ router.get('/:userId/debug-equipment', protect, async (req, res) => {
 
 // Add public routes for tanod evaluation
 router.get('/auth/:tanodId/rating', getTanodRatings);  // Keep this existing route
+
+// New public endpoint to get all tanod users
+router.get('/public/tanods', async (req, res) => {
+  try {
+    const tanods = await User.find({ userType: 'tanod' })
+      .select('_id firstName lastName profilePicture')
+      .sort({ firstName: 1 });
+    
+    console.log(`Found ${tanods.length} tanod users`);
+    res.status(200).json(tanods);
+  } catch (error) {
+    console.error('Error fetching public tanod list:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
 
 // Update the anonymous rating route to handle additional identifier
 router.post('/public/tanods/:tanodId/rate', async (req, res) => {

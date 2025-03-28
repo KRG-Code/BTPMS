@@ -6,6 +6,7 @@ import { FaCloudUploadAlt, FaEdit, FaSave, FaTimes, FaKey, FaEye, FaEyeSlash } f
 import { motion } from 'framer-motion';
 import { useTheme } from '../../../contexts/ThemeContext'; // Import useTheme hook
 import { useNavigate } from 'react-router-dom'; // Import useNavigate hook
+import { uploadProfileImage } from '../../../firebase'; // Import the upload function
 
 export default function MyAcc() {
   const { isDarkMode } = useTheme(); // Use theme context
@@ -23,6 +24,9 @@ export default function MyAcc() {
     profilePicture: null
   });
 
+  // Add a state for the profile image file
+  const [profileImageFile, setProfileImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -57,6 +61,11 @@ export default function MyAcc() {
           headers: { Authorization: `Bearer ${token}` }
         });
         setUser(response.data);
+        
+        // Add a cache-busting parameter to the profile picture URL to force refresh
+        if (response.data.profilePicture) {
+          setImagePreview(`${response.data.profilePicture}?t=${new Date().getTime()}`);
+        }
       } catch (error) {
         toast.error('Failed to load user data');
         console.error('Error loading user data:', error);
@@ -93,37 +102,15 @@ export default function MyAcc() {
     }
 
     try {
-      // Create a form data object
-      const formData = new FormData();
-      formData.append('profilePicture', file);
+      // Create a local preview of the selected image
+      const previewURL = URL.createObjectURL(file);
+      setImagePreview(previewURL);
+      setProfileImageFile(file);
       
-      // Display loading toast
-      const loadingToast = toast.loading('Uploading image...');
-      
-      // Upload to your server or a storage service
-      // This is a placeholder - implement your actual upload logic
-      // For example, if using Firebase Storage:
-      /*
-      const storageRef = ref(storage, `profilePictures/${user._id}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      */
-      
-      // For now, let's create a local object URL as a placeholder
-      const imageUrl = URL.createObjectURL(file);
-      
-      // Update user state with the new profile picture URL
-      setUser(prev => ({
-        ...prev,
-        profilePicture: imageUrl
-      }));
-      
-      // Dismiss loading toast and show success
-      toast.dismiss(loadingToast);
-      toast.success('Profile picture updated');
+      toast.info('Image selected. Click Save to upload your new profile picture.');
     } catch (error) {
-      console.error('Error uploading image:', error);
-      toast.error('Failed to upload image');
+      console.error('Error preparing image:', error);
+      toast.error('Failed to prepare image preview');
     }
   };
 
@@ -139,11 +126,32 @@ export default function MyAcc() {
       
       // Display loading toast and store its ID
       const loadingToastId = toast.loading('Saving changes...');
+
+      let updatedUser = { ...user };
+      
+      // If a new profile image was selected, upload it
+      if (profileImageFile) {
+        try {
+          // Get the user ID from local storage
+          const userInfo = JSON.parse(localStorage.getItem('user'));
+          const userId = userInfo?._id || user._id;
+          
+          // Upload the image to Firebase
+          const imageUrl = await uploadProfileImage(profileImageFile, userId);
+          
+          if (imageUrl) {
+            updatedUser.profilePicture = imageUrl;
+          }
+        } catch (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          toast.error('Failed to upload image, but continuing with other profile updates');
+        }
+      }
       
       // Send update request to the backend
       const response = await axios.put(
         `${process.env.REACT_APP_API_URL}/auth/update`,
-        user,
+        updatedUser,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -152,12 +160,27 @@ export default function MyAcc() {
       // Update user state with the response data
       setUser(response.data);
       
+      // Reset the image file state
+      setProfileImageFile(null);
+      
+      // Update the image preview with the new profile picture URL
+      if (response.data.profilePicture) {
+        setImagePreview(`${response.data.profilePicture}?t=${new Date().getTime()}`);
+      }
+      
       // Exit edit mode
       setEditing(false);
       
       // Dismiss loading toast and show success
       toast.dismiss(loadingToastId);
       toast.success('Profile updated successfully');
+      
+      // Update the user info in local storage to ensure it displays correctly everywhere
+      const userInfo = JSON.parse(localStorage.getItem('user'));
+      if (userInfo) {
+        userInfo.profilePicture = response.data.profilePicture;
+        localStorage.setItem('user', JSON.stringify(userInfo));
+      }
     } catch (error) {
       console.error('Error updating profile:', error);
       
@@ -359,7 +382,7 @@ export default function MyAcc() {
                 <div className="w-full md:w-1/3 flex flex-col items-center mb-6 md:mb-0">
                   <div className="relative">
                     <img
-                      src={user.profilePicture || '/default-avatar.png'}
+                      src={imagePreview || user.profilePicture || '/default-avatar.png'}
                       alt="Profile"
                       className="w-40 h-40 rounded-full object-cover border-4 border-white shadow-lg"
                     />
@@ -378,6 +401,13 @@ export default function MyAcc() {
                   </div>
 
                   <div className="mt-4">
+                    {/* Show filename if a file has been selected */}
+                    {profileImageFile && (
+                      <p className={`text-sm italic mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                        Selected: {profileImageFile.name}
+                      </p>
+                    )}
+                    
                     {!editing ? (
                       <button
                         type="button"
@@ -396,7 +426,11 @@ export default function MyAcc() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditing(false)}
+                          onClick={() => {
+                            setEditing(false);
+                            setProfileImageFile(null);
+                            setImagePreview(user.profilePicture);
+                          }}
                           className={`flex items-center ${buttonClasses.secondary}`}
                         >
                           <FaTimes className="mr-2" /> Cancel

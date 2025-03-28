@@ -3,9 +3,12 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import { CombinedProvider } from "./contexts/useContext";
 import { ThemeProvider } from "./contexts/ThemeContext";  // Import the ThemeProvider
-import { ToastContainer } from "react-toastify";
 import ProtectedRoute from "./utils/ProtectedRoute";
 import Loading from "./utils/Loading";
+import { ToastContainer } from "react-toastify";
+
+// Import NotFound component
+const NotFound = lazy(() => import("./components/common/NotFound"));
 
 const SelectionPage = lazy(() => import("./pages/SelectionPage"));
 const SignupPage = lazy(() => import("./pages/Signup"));
@@ -38,10 +41,10 @@ function App() {
         <BrowserRouter>
           <CombinedProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen" ><Loading type="spinner" /></div>}>
+              {/* We don't want a ToastContainer here, as components have their own */}
               <ToastContainer />
               <Routes>
                 {/* Public Routes */}
-
                 <Route path="/tanod-login" element={<LoginTanod />} />
                 <Route path="/signup" element={<SignupPage />} />
                 
@@ -101,6 +104,9 @@ function App() {
                     element={<ProtectedRoute userTypeAllowed={["admin"]}><PatrolTrack /></ProtectedRoute>}
                   />
                 </Route>
+                
+                {/* 404 Not Found - This must be the last route */}
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
           </CombinedProvider>

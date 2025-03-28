@@ -21,6 +21,7 @@ import {
   RiFilterLine,
   RiDeleteBin7Line
 } from 'react-icons/ri';
+import { FaExclamationTriangle, FaSearch, FaSearchMinus, FaMapMarkerAlt, FaCalendarAlt, FaClock, FaFileAlt, FaUser, FaPhone, FaUserShield, FaClipboardCheck, FaCheckCircle } from 'react-icons/fa';
 
 // Animation variants
 const modalVariants = {
@@ -151,81 +152,84 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
   const [friendlyLocation, setFriendlyLocation] = useState('');
   const [activeTab, setActiveTab] = useState('details'); // 'details' or 'map'
   const [mobileView, setMobileView] = useState(window.innerWidth < 768);
+  const [falseAlarms, setFalseAlarms] = useState([]); // Add state for false alarms
+  const [viewType, setViewType] = useState('resolved'); // 'resolved' or 'falseAlarm'
+  const [loading, setLoading] = useState(false); // Add loading state
 
   useEffect(() => {
     const handleResize = () => {
       setMobileView(window.innerWidth < 768);
     };
-    
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
   const handleViewDetails = (incident) => {
-    // Switch to details view in mobile mode
+    setSelectedIncident(incident);
+    setShowDetails(true);
+    setShowMap(false);
     if (mobileView) {
       setActiveTab('details');
-    }
-
-    if (selectedIncident?._id === incident._id && showDetails && !mobileView) {
-      setShowDetails(false);
-      setSelectedIncident(null);
-    } else {
-      setSelectedIncident(incident);
-      setShowDetails(true);
-      setShowMap(false);
     }
   };
 
   const handleViewLocation = (incident) => {
-    const latLngMatch = incident.location.match(/Lat:\s*([0-9.-]+),\s*Lon:\s*([0-9.-]+)/);
-    if (!latLngMatch) {
-      toast.warning(
-        <div>
-          <p>Cannot display location on map</p>
-          <p className="text-sm mt-1">Location provided: {incident.location}</p>
-          <p className="text-sm mt-1">Exact coordinates are required to show on map</p>
-        </div>,
-        { autoClose: 5000, icon: '📍' }
-      );
-      return;
-    }
-
-    // Switch to map view in mobile mode
+    setSelectedIncident(incident);
+    setShowDetails(false);
+    setShowMap(true);
     if (mobileView) {
       setActiveTab('map');
     }
+  };
 
-    if (selectedIncident?._id === incident._id && showMap && !mobileView) {
-      setShowMap(false);
-      setSelectedIncident(null);
-    } else {
-      setSelectedIncident(incident);
-      setShowMap(true);
-      setShowDetails(false);
+  // Fetch false alarms when the modal opens
+  const fetchFalseAlarms = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/false-alarms`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setFalseAlarms(response.data);
+    } catch (error) {
+      console.error('Error fetching false alarms:', error);
+      toast.error('Failed to load false alarm records');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Add this new function to filter incidents
-  const filteredIncidents = resolvedIncidents.filter(incident => {
-    const matchesSearch = incident.type.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDate = dateFilter ? formatDate(incident.date) === formatDate(dateFilter) : true;
-    const matchesType = typeFilter === 'all' ? true : 
-      typeFilter === 'emergency' ? incident.incidentClassification === 'Emergency Incident' : 
-      incident.incidentClassification !== 'Emergency Incident';
+  // Add this new function to filter incidents based on view type
+  const filteredIncidents = (viewType === 'resolved' ? resolvedIncidents : falseAlarms).filter(incident => {
+    // Common filter logic for both resolved incidents and false alarms
+    const matchesSearch = 
+      !searchTerm ||
+      incident.type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      incident.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      incident.incidentClassification?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesDate = 
+      !dateFilter || 
+      (incident.date && new Date(incident.date).toLocaleDateString() === new Date(dateFilter).toLocaleDateString());
+    
+    const matchesType = 
+      typeFilter === 'all' || 
+      (typeFilter === 'emergency' && incident.incidentClassification === 'Emergency Incident') ||
+      (typeFilter === 'normal' && incident.incidentClassification !== 'Emergency Incident');
     
     return matchesSearch && matchesDate && matchesType;
   });
 
   const handleClose = () => {
+    setSelectedIncident(null);
     setShowDetails(false);
     setShowMap(false);
-    setSelectedIncident(null);
     onClose();
   };
 
@@ -250,21 +254,18 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
   useEffect(() => {
     if (isOpen) {
       fetchAssistanceRequests();
+      fetchFalseAlarms(); // Fetch false alarms when modal opens
     }
   }, [isOpen]);
 
   useEffect(() => {
-    const getFriendlyLocation = async () => {
-      if (selectedIncident) {
-        // Use the address field if available, otherwise use location
-        const friendly = selectedIncident.address || selectedIncident.location;
-        setFriendlyLocation(friendly);
-      }
-    };
-    getFriendlyLocation();
+    if (selectedIncident) {
+      // Use address field if available, otherwise use location
+      const friendly = selectedIncident.address || selectedIncident.location;
+      setFriendlyLocation(friendly);
+    }
   }, [selectedIncident]);
 
-  // You can keep this as a fallback or remove it
   const reverseGeocode = async (location) => {
     return location;
   };
@@ -412,179 +413,141 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
 
     const assistanceRequest = assistanceRequests[selectedIncident._id];
 
-    return (
+    const commonDetails = (
       <motion.div 
-        variants={contentVariants}
-        initial="hidden"
-        animate="visible"
-        className={`w-full ${mobileView ? '' : 'md:w-1/2'} pl-0 ${mobileView ? 'mt-4' : 'md:pl-6'} flex-shrink-0`}
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }}
+        className={`p-6 rounded-xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg overflow-y-auto`}
+        style={{ maxHeight: mobileView ? 'calc(100vh - 240px)' : '100%' }}
       >
-        <motion.div 
-          variants={itemVariants}
-          className={`${
-            isDarkMode 
-              ? 'bg-gray-800 border border-gray-700' 
-              : 'bg-white border border-gray-100 shadow-lg'
-          } rounded-2xl overflow-hidden h-full`}
-        >
-          {/* Header */}
-          <div className={`p-4 flex justify-between items-center ${
-            isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-          } border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <h3 className="text-lg font-bold flex items-center">
-              <RiInformationLine className={`mr-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-              Incident Details
+        <div className="space-y-6">
+          {/* Incident type and classification */}
+          <div>
+            <h3 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              {selectedIncident.type}
             </h3>
-            <motion.button
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-              onClick={() => mobileView ? setActiveTab('list') : setShowDetails(false)}
-              className="p-2 rounded-full hover:bg-opacity-20 hover:bg-gray-500"
-            >
-              <RiCloseLine size={20} />
-            </motion.button>
-          </div>
-          
-          {/* Content */}
-          <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 120px)' }}>
-            {/* Incident Type and Classification */}
-            <div className="flex flex-wrap gap-3 mb-4">
-              <span className={`text-sm font-medium px-3 py-1 rounded-full ${getIncidentTypeBadgeClass(selectedIncident.incidentClassification)}`}>
-                {selectedIncident.incidentClassification || 'Normal Incident'}
-              </span>
-              <span className={`text-sm font-medium px-3 py-1 rounded-full ${getStatusBadgeClass(selectedIncident.status)}`}>
-                {selectedIncident.status}
-              </span>
-            </div>
-
-            {/* Main details */}
-            <motion.div variants={itemVariants} className="space-y-4">
-              <DetailItem 
-                icon={<RiAlertLine />} 
-                label="Incident Type" 
-                value={selectedIncident.type} 
-              />
-              
-              <DetailItem 
-                icon={<RiCalendarCheckLine />} 
-                label="Date & Time" 
-                value={`${formatDate(selectedIncident.date)} at ${selectedIncident.time || 'N/A'}`} 
-              />
-              
-              <DetailItem 
-                icon={<RiMapPin2Line />} 
-                label="Location" 
-                value={
-                  <>
-                    {friendlyLocation}
-                    {friendlyLocation !== selectedIncident.location && !selectedIncident.address && (
-                      <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        ({selectedIncident.location})
-                      </div>
-                    )}
-                  </>
-                }
-              />
-              
-              {selectedIncident.locationNote && (
-                <DetailItem 
-                  icon={<RiInformationLine />} 
-                  label="Location Note" 
-                  value={selectedIncident.locationNote} 
-                />
-              )}
-              
-              <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                <div className="flex items-center mb-2">
-                  <RiFileTextLine className={`mr-2 ${isDarkMode ? 'text-blue-300' : 'text-blue-500'}`} />
-                  <span className="font-medium">Description:</span>
-                </div>
-                <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} whitespace-pre-wrap`}>
-                  {selectedIncident.description || 'No description provided'}
-                </p>
-              </div>
-            </motion.div>
-
-            {/* Resolution Information */}
-            <motion.div 
-              variants={itemVariants}
-              className={`mt-6 p-4 rounded-lg ${
-                isDarkMode ? 'bg-green-900 bg-opacity-20 border border-green-900' : 'bg-green-50 border border-green-100'
-              }`}
-            >
-              <h4 className={`text-lg font-semibold flex items-center mb-4 ${
-                isDarkMode ? 'text-green-300' : 'text-green-700'
+            <span className={getIncidentTypeBadgeClass(selectedIncident.incidentClassification)}>
+              {selectedIncident.incidentClassification || 'Normal Incident'}
+            </span>
+            
+            {/* Show false alarm marker if we're viewing a false alarm */}
+            {viewType === 'falseAlarm' && (
+              <div className={`mt-3 p-2 rounded-lg ${
+                isDarkMode ? 'bg-orange-900 bg-opacity-30 text-orange-300' : 'bg-orange-100 text-orange-800'
               }`}>
-                <RiCheckboxCircleLine className="mr-2" />
-                Resolution Details
-              </h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <DetailItem 
-                  icon={<RiUserLine />} 
-                  label="Resolved By" 
-                  value={selectedIncident.resolvedByFullName} 
-                  theme="green"
-                />
-                
-                <DetailItem 
-                  icon={<RiTimeLine />} 
-                  label="Resolved At" 
-                  value={new Date(selectedIncident.resolvedAt).toLocaleString()} 
-                  theme="green"
-                />
-              </div>
-              
-              <div className={`mt-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-4 rounded-lg shadow-sm`}>
-                <div className="flex items-center mb-2">
-                  <RiFileTextLine className={`mr-2 ${isDarkMode ? 'text-green-300' : 'text-green-500'}`} />
-                  <span className="font-medium">Resolution Notes:</span>
+                <div className="flex items-center">
+                  <FaExclamationTriangle className="mr-2" />
+                  <span className="font-semibold">Marked as False Alarm</span>
                 </div>
-                <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} whitespace-pre-wrap`}>
-                  {selectedIncident.log || 'No resolution notes provided'}
-                </p>
+                {selectedIncident.markedByUser && (
+                  <div className={`mt-1 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    by {selectedIncident.markedByUser.firstName} {selectedIncident.markedByUser.lastName} 
+                    {selectedIncident.markedAt && ` on ${formatDate(selectedIncident.markedAt)}`}
+                  </div>
+                )}
               </div>
-            </motion.div>
-
-            {/* Assistance Request Info */}
-            {assistanceRequest && (
-              <motion.div 
-                variants={itemVariants}
-                className={`mt-6 p-4 rounded-lg ${
-                  isDarkMode ? 'bg-blue-900 bg-opacity-20 border border-blue-900' : 'bg-blue-50 border border-blue-100'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <h4 className={`text-lg font-semibold ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>
-                    Assistance Request
-                  </h4>
-                  <span className={`px-3 py-1 rounded-full text-sm ${renderAssistanceStatus(assistanceRequest.status)}`}>
-                    {assistanceRequest.status}
-                  </span>
-                </div>
-                <motion.button
-                  variants={buttonVariants}
-                  whileHover="hover"
-                  whileTap="tap" 
-                  onClick={() => {
-                    setSelectedAssistance(assistanceRequest);
-                    setShowAssistanceDetails(true);
-                  }}
-                  className={`mt-3 w-full py-2 rounded-lg text-center font-medium ${
-                    isDarkMode 
-                      ? 'bg-blue-700 hover:bg-blue-600 text-white' 
-                      : 'bg-blue-500 hover:bg-blue-600 text-white'
-                  }`}
-                >
-                  View Details
-                </motion.button>
-              </motion.div>
             )}
           </div>
-        </motion.div>
+
+          {/* Location */}
+          <DetailItem 
+            icon={<FaMapMarkerAlt />} 
+            label="Location" 
+            value={friendlyLocation || selectedIncident.location}
+          />
+
+          {/* Date and Time */}
+          <div className="grid grid-cols-2 gap-4">
+            <DetailItem 
+              icon={<FaCalendarAlt />} 
+              label="Date" 
+              value={formatDate(selectedIncident.date).split(',')[0]}
+            />
+            <DetailItem 
+              icon={<FaClock />} 
+              label="Time" 
+              value={selectedIncident.time || 'Not specified'}
+            />
+          </div>
+
+          {/* Description */}
+          <DetailItem 
+            icon={<FaFileAlt />} 
+            label="Description" 
+            value={selectedIncident.description || 'No description provided'} 
+            fullWidth={true}
+          />
+
+          {/* Reporter Information if available */}
+          {selectedIncident.fullName && (
+            <div className="space-y-3">
+              <h4 className={`font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Reporter Information</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <DetailItem 
+                  icon={<FaUser />} 
+                  label="Name" 
+                  value={selectedIncident.fullName}
+                />
+                {selectedIncident.contactNumber && (
+                  <DetailItem 
+                    icon={<FaPhone />} 
+                    label="Contact" 
+                    value={selectedIncident.contactNumber}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </motion.div>
     );
+
+    // Additional details specific to resolved incidents
+    if (viewType === 'resolved') {
+      return (
+        <>
+          {commonDetails}
+          {selectedIncident.resolvedAt && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className={`mt-4 p-6 rounded-xl ${isDarkMode ? 'bg-green-900 bg-opacity-20' : 'bg-green-50'} border ${isDarkMode ? 'border-green-800' : 'border-green-200'}`}
+            >
+              <h3 className={`text-lg font-semibold mb-3 ${isDarkMode ? 'text-green-300' : 'text-green-800'}`}>Resolution Details</h3>
+              <div className="space-y-4">
+                <DetailItem
+                  icon={<FaCheckCircle />}
+                  label="Resolved Date"
+                  value={formatDate(selectedIncident.resolvedAt)}
+                  theme="success"
+                />
+                {selectedIncident.resolvedByFullName && (
+                  <DetailItem
+                    icon={<FaUserShield />}
+                    label="Resolved By"
+                    value={selectedIncident.resolvedByFullName}
+                    theme="success"
+                  />
+                )}
+                {selectedIncident.log && (
+                  <DetailItem
+                    icon={<FaClipboardCheck />}
+                    label="Resolution Notes"
+                    value={selectedIncident.log}
+                    theme="success"
+                    fullWidth={true}
+                  />
+                )}
+              </div>
+            </motion.div>
+          )}
+        </>
+      );
+    }
+    
+    // Just return common details for false alarms
+    return commonDetails;
   };
 
   const renderMap = () => {
@@ -736,6 +699,46 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
     );
   };
 
+  // Add a toggle component for switching between resolved incidents and false alarms
+  const ViewToggle = () => (
+    <div className={`flex p-1 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} mb-4`}>
+      <button
+        onClick={() => setViewType('resolved')}
+        className={`flex-1 py-2 px-4 rounded-lg transition-all duration-200 text-sm font-medium ${
+          viewType === 'resolved'
+            ? isDarkMode
+              ? 'bg-blue-600 text-white'
+              : 'bg-blue-500 text-white'
+            : isDarkMode
+            ? 'text-gray-300 hover:text-white'
+            : 'text-gray-700 hover:text-gray-900'
+        }`}
+      >
+        <div className="flex items-center justify-center">
+          <FaCheckCircle className="mr-2" />
+          Resolved Incidents
+        </div>
+      </button>
+      <button
+        onClick={() => setViewType('falseAlarm')}
+        className={`flex-1 py-2 px-4 rounded-lg transition-all duration-200 text-sm font-medium ${
+          viewType === 'falseAlarm'
+            ? isDarkMode
+              ? 'bg-orange-600 text-white'
+              : 'bg-orange-500 text-white'
+            : isDarkMode
+            ? 'text-gray-300 hover:text-white'
+            : 'text-gray-700 hover:text-gray-900'
+        }`}
+      >
+        <div className="flex items-center justify-center">
+          <FaExclamationTriangle className="mr-2" />
+          False Alarms
+        </div>
+      </button>
+    </div>
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -769,7 +772,7 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
                 <RiCheckboxCircleLine size={24} />
               </motion.div>
               <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                Resolved Incidents
+                {viewType === 'resolved' ? 'Resolved Incidents' : 'False Alarm Reports'}
               </h3>
             </div>
             <motion.button
@@ -794,6 +797,9 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
                 animate="visible"
                 className={`${(showDetails || showMap) && !mobileView ? 'w-1/2' : 'w-full'} overflow-y-auto flex-shrink-0 p-6`}
               >
+                {/* View toggle */}
+                <ViewToggle />
+
                 {/* Search and Filter Controls */}
                 <motion.div 
                   variants={itemVariants}

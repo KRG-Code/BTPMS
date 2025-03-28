@@ -1377,3 +1377,17 @@ exports.getPerformanceComparison = async (req, res) => {
     res.status(500).json({ message: "Error generating performance comparison" });
   }
 };
+
+// Get public tanod list
+exports.getPublicTanodList = async (req, res) => {
+  try {
+    const tanods = await User.find({ userType: 'tanod' })
+      .select('_id firstName lastName profilePicture')
+      .sort({ firstName: 1 });
+      
+    res.status(200).json(tanods);
+  } catch (error) {
+    console.error('Error fetching public tanod list:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};

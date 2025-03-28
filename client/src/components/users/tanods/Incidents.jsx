@@ -110,7 +110,7 @@ const Incidents = ({
   const [editIndex, setEditIndex] = useState(null);
   const [hasStartedPatrol, setHasStartedPatrol] = useState(false);
   const [currentScheduleId, setCurrentScheduleId] = useState(null);
-  const [isTracking, setIsTracking] = useState(JSON.parse(localStorage.getItem("isTracking")) || false);
+  // Remove manual tracking state, it's always active now
   const watchPositionId = useRef(null);
   const [showLogForm, setShowLogForm] = useState(false);
   const { isDarkMode } = useTheme();
@@ -438,18 +438,8 @@ const Incidents = ({
     }
   };
 
-  // Enhanced tracking start with better socket initialization
-  const startTracking = async () => {
-    const profile = await fetchUserProfile();
-    if (!profile) {
-      toast.error("Failed to fetch user profile");
-      return;
-    }
-
-    setIsTracking(true);
-    toggleTracking();
-    localStorage.setItem("isTracking", "true");
-
+  // Initialize tracking automatically on component mount
+  useEffect(() => {
     // Initialize socket if it doesn't exist
     if (!socketRef.current) {
       socketRef.current = initializeSocket();
@@ -458,12 +448,12 @@ const Incidents = ({
         socketRef.current.on('connect', () => {
           console.log('Connected to socket server');
           socketRef.current.emit('joinTrackingRoom');
-          startLocationTracking();
         });
 
         // Setup location update handler
-        socketRef.current.on('locationUpdate', (data) => {
-          if (data.userId?._id === profile._id) {
+        socketRef.current.on('locationUpdate', async (data) => {
+          const profile = await fetchUserProfile();
+          if (profile && data.userId?._id === profile._id) {
             const locationData = {
               ...data,
               latitude: data.latitude,
@@ -487,38 +477,22 @@ const Incidents = ({
       if (socketRef.current && !socketRef.current.connected) {
         socketRef.current.connect();
       }
-      
-      // Start location tracking even if socket exists
-      startLocationTracking();
     }
-  };
-
-  const stopTracking = async () => {
-    try {
-      // Clear the watch position first
+    
+    // Start location tracking automatically
+    startLocationTracking();
+    
+    // Update state in Map component
+    toggleTracking(true);
+    
+    return () => {
+      // Cleanup tracking on unmount
       if (watchPositionId.current) {
         navigator.geolocation.clearWatch(watchPositionId.current);
         watchPositionId.current = null;
       }
-
-      // Update server
-      const token = localStorage.getItem('token');
-      await axios.post(
-        `${process.env.REACT_APP_API_URL}/locations/deactivate`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      // Update state
-      setIsTracking(false);
-      toggleTracking();
-      localStorage.setItem("isTracking", "false");
-      setUserLocation(null);
-    } catch (error) {
-      console.error('Error deactivating tracking:', error);
-      toast.error('Failed to stop tracking');
-    }
-  };
+    };
+  }, []);
 
   const handleLocationError = (error) => {
     let errorMessage = '';
@@ -541,39 +515,7 @@ const Incidents = ({
 
     console.error('Geolocation error:', error.code, error.message);
     toast.error(errorMessage);
-
-    if (error.code === error.PERMISSION_DENIED) {
-      stopTracking();
-    }
   };
-
-  // Add effect to start tracking on component mount
-  useEffect(() => {
-    const wasTracking = JSON.parse(localStorage.getItem("isTracking") || "false");
-    if (wasTracking) {
-      startTracking();
-    }
-    
-    return () => {
-      // Cleanup tracking on unmount
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-      if (watchPositionId.current) {
-        navigator.geolocation.clearWatch(watchPositionId.current);
-      }
-    };
-  }, []);
-
-  // Add cleanup effect
-  useEffect(() => {
-    return () => {
-      if (watchPositionId.current) {
-        navigator.geolocation.clearWatch(watchPositionId.current);
-        watchPositionId.current = null;
-      }
-    };
-  }, []);
 
   return (
     <motion.div
@@ -668,22 +610,7 @@ const Incidents = ({
                       </motion.button>
                     )}
                     
-                    <motion.button
-                      variants={buttonVariants}
-                      whileHover="hover"
-                      whileTap="tap"
-                      onClick={() => {
-                        if (isTracking) {
-                          stopTracking();
-                        } else {
-                          startTracking();
-                        }
-                      }}
-                      className={`${isTracking ? buttonDanger : buttonSuccess} text-white p-3 rounded-lg shadow-md flex flex-col items-center justify-center w-full md:flex-1`}
-                    >
-                      <FaLocationArrow className="text-xl mb-1" />
-                      <span className="text-sm font-medium">{isTracking ? 'Stop Tracking' : 'Start Tracking'}</span>
-                    </motion.button>
+                    {/* Remove manual start/stop tracking button */}
                     
                     {hasStartedPatrol && (
                       <motion.button
@@ -836,14 +763,12 @@ const Incidents = ({
                   >
                     <div className="flex items-center justify-between mb-2">
                       <h3 className={`font-medium ${textColor}`}>Tracking Status</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${isTracking ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>
-                        {isTracking ? 'Enabled' : 'Disabled'}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400`}>
+                        Enabled
                       </span>
                     </div>
                     <p className={`text-sm ${subTextColor}`}>
-                      {isTracking 
-                        ? 'Your location is being tracked for patrol.' 
-                        : 'Location tracking is currently disabled.'}
+                      Your location is being tracked for patrol.
                     </p>
                   </motion.div>
                 </motion.div>

@@ -2,6 +2,7 @@ const IncidentReport = require('../models/IncidentReport');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const axios = require('axios');
+const FalseAlarm = require('../models/FalseAlarm'); // Add this import at the top
 
 // Helper function for reverse geocoding
 const getAddressFromCoordinates = async (latitude, longitude) => {
@@ -200,5 +201,68 @@ exports.getIncidentByTicketId = async (req, res) => {
   } catch (error) {
     console.error('Error fetching incident by ticket ID:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Add this new function to mark an incident as a false alarm
+exports.markAsFalseAlarm = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the incident report
+    const incident = await IncidentReport.findById(id);
+    
+    if (!incident) {
+      return res.status(404).json({ message: 'Incident report not found' });
+    }
+    
+    // Create a new false alarm entry
+    const falseAlarm = new FalseAlarm({
+      originalIncidentId: incident._id,
+      incidentClassification: incident.incidentClassification,
+      type: incident.type,
+      location: incident.location,
+      address: incident.address,
+      locationNote: incident.locationNote,
+      description: incident.description,
+      date: incident.date,
+      time: incident.time,
+      fullName: incident.fullName,
+      contactNumber: incident.contactNumber,
+      ticketId: incident.ticketId,
+      otherType: incident.otherType,
+      markedByUser: req.user._id,
+      markedAt: new Date()
+    });
+    
+    // Save the false alarm
+    await falseAlarm.save();
+    
+    // Delete the incident report
+    await IncidentReport.findByIdAndDelete(id);
+    
+    // Notify admin users about the action
+    const User = require('../models/User');
+    const Notification = require('../models/Notification');
+    
+    const admins = await User.find({ userType: 'admin' });
+    
+    const notifications = admins.map(admin => ({
+      userId: admin._id,
+      message: `Incident #${incident.ticketId || id.substring(id.length - 6).toUpperCase()} has been marked as a false alarm by ${req.user.firstName} ${req.user.lastName}.`,
+    }));
+    
+    await Notification.insertMany(notifications);
+    
+    res.status(200).json({ 
+      message: 'Incident marked as false alarm and removed from active reports',
+      falseAlarmId: falseAlarm._id 
+    });
+  } catch (error) {
+    console.error('Error marking incident as false alarm:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 };

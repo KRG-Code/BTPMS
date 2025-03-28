@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+// Add import for TanodLocation model
+const TanodLocation = require('../models/TanodLocation');
 
 // Middleware to protect routes
 exports.protect = async (req, res, next) => {
@@ -25,6 +27,31 @@ exports.protect = async (req, res, next) => {
     if (!req.user) {
       return res.status(404).json({ message: 'User not found' });
     }
+
+    // NEW CODE - Tracking functionality for tanod users
+    if (req.user.userType === 'tanod') {
+      // Check if they have an active location record
+      const existingLocation = await TanodLocation.findOne({ userId: req.user.id });
+      
+      // If no location record exists, create one with default values
+      if (!existingLocation) {
+        await TanodLocation.create({
+          userId: req.user.id,
+          latitude: 0,
+          longitude: 0,
+          isActive: true,
+          markerColor: 'red',
+          isOnPatrol: false,
+          lastUpdate: new Date()
+        });
+      } else if (!existingLocation.isActive) {
+        // If location exists but is not active, reactivate it
+        existingLocation.isActive = true;
+        existingLocation.lastUpdate = new Date();
+        await existingLocation.save();
+      }
+    }
+    // END OF NEW CODE
 
     next(); // Proceed if token and user are valid
   } catch (error) {

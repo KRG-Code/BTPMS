@@ -18,6 +18,7 @@ const locationRoutes = require('./routes/locationRoutes'); // Add this line
 const Schedule = require('./models/Schedule');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const noteRoutes = require('./routes/noteRoutes');
+const falseAlarmRoutes = require('./routes/falseAlarmRoutes'); // Import the new routes
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
@@ -128,10 +129,8 @@ app.use('/api/locations', locationRoutes); // Update path
 // Auth Routes
 const authRoutes = require('./routes/authRoutes');
 app.use('/api/auth', authRoutes);
-
-// Equipment Routes
-const equipmentRoutes = require('./routes/authEquipment');
-app.use('/api/equipments', equipmentRoutes);
+// Also mount the /public/tanods route without auth protection
+app.use('/api/public/tanods', require('./routes/publicRoutes'));
 
 app.use('/api/polygons', polygonRoutes);
 
@@ -149,6 +148,10 @@ app.use('/api/incident-reports', incidentReportRoutes);
 // CCTV Location Routes
 app.use("/api/cctv-locations", cctvLocationRoutes);
 
+// Equipment Routes
+const equipmentRoutes = require('./routes/authEquipment');
+app.use('/api/equipments', equipmentRoutes);
+
 // Add assistance request routes
 app.use('/api/assistance-requests', assistanceRequestRoutes);
 
@@ -160,6 +163,9 @@ app.use('/api/dashboard', dashboardRoutes);
 
 // Add note routes
 app.use('/api/notes', noteRoutes);
+
+// Add false alarm routes
+app.use('/api/false-alarms', falseAlarmRoutes);
 
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {

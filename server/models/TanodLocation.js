@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const tanodLocationSchema = new mongoose.Schema({
+const TanodLocationSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -8,23 +8,18 @@ const tanodLocationSchema = new mongoose.Schema({
   },
   latitude: {
     type: Number,
-    required: true
+    required: true,
+    default: 0
   },
   longitude: {
     type: Number,
-    required: true
-  },
-  lastUpdate: {
-    type: Date,
-    default: Date.now
+    required: true,
+    default: 0
   },
   currentScheduleId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Schedule'
-  },
-  isActive: {
-    type: Boolean,
-    default: true
+    ref: 'Schedule',
+    default: null
   },
   markerColor: {
     type: String,
@@ -33,10 +28,18 @@ const tanodLocationSchema = new mongoose.Schema({
   isOnPatrol: {
     type: Boolean,
     default: false
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  lastUpdate: {
+    type: Date,
+    default: Date.now
   }
-});
+}, { timestamps: true });
 
-// Add index for better query performance
-tanodLocationSchema.index({ userId: 1, isActive: 1 });
+// Create a compound index for fast lookups
+TanodLocationSchema.index({ userId: 1, isActive: 1 });
 
-module.exports = mongoose.model('TanodLocation', tanodLocationSchema);
+module.exports = mongoose.model('TanodLocation', TanodLocationSchema);
