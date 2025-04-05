@@ -120,6 +120,9 @@ app.use((req, res, next) => {
 // Serve uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Add this to your existing server.js file to serve static files
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Fix location routes mounting - make sure it's mounted at /api/locations
 app.use('/api/locations', locationRoutes); // Update path
 

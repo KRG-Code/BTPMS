@@ -10,6 +10,10 @@ import { ToastContainer } from "react-toastify";
 // Import NotFound component
 const NotFound = lazy(() => import("./components/common/NotFound"));
 
+// Add these imports for the new password reset components
+const ForgotPassword = lazy(() => import("./components/users/common/ForgotPassword"));
+const ResetPassword = lazy(() => import("./components/users/common/ResetPassword"));
+
 const SelectionPage = lazy(() => import("./pages/SelectionPage"));
 const SignupPage = lazy(() => import("./pages/Signup"));
 const LoginTanod = lazy(() => import("./pages/LoginTanod"));
@@ -52,6 +56,10 @@ function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/Tanodevaluation" element={<ResidentRating />} />
                 <Route path="/Reportincidents" element={<ReportIncident />} />
+                
+                {/* Add these new routes for password reset */}
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password/:token" element={<ResetPassword />} />
                 
                 <Route element={<Layout />}>
                   <Route path="/myaccount" element={<MyAccount />}/>

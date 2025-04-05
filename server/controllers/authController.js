@@ -15,6 +15,12 @@ const axios = require('axios');
 const fetch = require('node-fetch');
 const mongoose = require('mongoose');
 
+const { sendVerificationCode, sendPasswordResetEmail } = require('../utils/emailService');
+const VerificationCode = require('../models/VerificationCode');
+const PasswordResetToken = require('../models/PasswordResetToken');
+
+const userVerificationAttempts = new Map(); // Track verification attempts by user
+
 // Generate JWT token
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
@@ -1389,5 +1395,286 @@ exports.getPublicTanodList = async (req, res) => {
   } catch (error) {
     console.error('Error fetching public tanod list:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Generate a random 6-digit code
+const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// Initiate Tanod Login with MFA
+exports.initiateTanodLogin = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    // Find user by username
+    const user = await User.findOne({ username }).select('+password');
+    if (!user) {
+      return res.status(401).json({ message: "Invalid username or password" });
+    }
+
+    // Verify password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid username or password" });
+    }
+
+    // Check if the user type is either "tanod" or "admin"
+    if (user.userType !== "tanod" && user.userType !== "admin") {
+      return res.status(403).json({ message: "Access denied: User type not authorized" });
+    }
+
+    // Generate a verification code
+    const verificationCode = generateVerificationCode();
+
+    // Save verification code to database
+    // First, delete any existing codes for this user
+    await VerificationCode.deleteMany({ userId: user._id });
+    
+    // Create a new verification code
+    await VerificationCode.create({
+      userId: user._id,
+      code: verificationCode
+    });
+
+    // Send verification code via email
+    const emailSent = await sendVerificationCode(
+      user.email, 
+      verificationCode,
+      user.firstName
+    );
+
+    if (!emailSent && process.env.NODE_ENV !== 'Development') {
+      return res.status(500).json({ message: "Failed to send verification code. Please contact an administrator." });
+    }
+
+    // Return user id and type (without sensitive data)
+    return res.status(200).json({
+      message: "Verification code sent",
+      userId: user._id,
+      userType: user.userType
+    });
+  } catch (error) {
+    console.error("Login Error:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Verify Tanod MFA code
+exports.verifyTanodMfa = async (req, res) => {
+  try {
+    const { userId, verificationCode } = req.body;
+    
+    if (!userId || !verificationCode) {
+      return res.status(400).json({ message: "User ID and verification code are required" });
+    }
+
+    // Validate that userId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid user ID format" });
+    }
+
+    // Find the verification code in the database
+    const storedVerification = await VerificationCode.findOne({ userId });
+    
+    if (!storedVerification) {
+      return res.status(401).json({ message: "Verification code expired or not found" });
+    }
+
+    // Check if the code matches
+    if (storedVerification.code !== verificationCode) {
+      return res.status(401).json({ message: "Invalid verification code" });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Update online status and last active time
+    user.isOnline = true;
+    user.lastActive = new Date();
+    await user.save();
+
+    // Delete the verification code after successful verification
+    await VerificationCode.deleteOne({ _id: storedVerification._id });
+
+    // Generate JWT token and return user data
+    return res.status(200).json({
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      userType: user.userType,
+      token: generateToken(user._id),
+      profilePicture: user.profilePicture
+    });
+  } catch (error) {
+    console.error("MFA Verification Error:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Resend verification code
+exports.resendVerificationCode = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    // Validate that userId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid user ID format" });
+    }
+
+    // Check if the user has recently requested a code
+    const lastAttempt = userVerificationAttempts.get(userId);
+    const now = Date.now();
+    if (lastAttempt && (now - lastAttempt) < 60000) { // 60 seconds cooldown
+      const remainingSeconds = Math.ceil((60000 - (now - lastAttempt)) / 1000);
+      return res.status(429).json({ 
+        message: `Please wait ${remainingSeconds} seconds before requesting another code`,
+        remainingSeconds
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Generate a new verification code
+    const verificationCode = generateVerificationCode();
+
+    // Delete any existing codes for this user
+    await VerificationCode.deleteMany({ userId });
+    
+    // Create a new verification code
+    await VerificationCode.create({
+      userId,
+      code: verificationCode
+    });
+
+    // Record this attempt time
+    userVerificationAttempts.set(userId, now);
+
+    // Send verification code via email
+    const emailSent = await sendVerificationCode(
+      user.email, 
+      verificationCode,
+      user.firstName
+    );
+
+    if (!emailSent && process.env.NODE_ENV !== 'Development') {
+      return res.status(500).json({ message: "Failed to send verification code. Please contact an administrator." });
+    }
+
+    return res.status(200).json({
+      message: "Verification code resent successfully"
+    });
+  } catch (error) {
+    console.error("Resend Verification Error:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Request password reset
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email });
+    if (!user) {
+      // For security reasons, don't reveal that the email doesn't exist
+      return res.status(200).json({ 
+        message: "If your email is registered, you will receive a password reset link shortly" 
+      });
+    }
+
+    // Generate a reset token
+    const token = PasswordResetToken.generateToken();
+    
+    // Delete any existing tokens for this user
+    await PasswordResetToken.deleteMany({ userId: user._id });
+    
+    // Create a new token record
+    await PasswordResetToken.create({
+      userId: user._id,
+      token: token
+    });
+
+    // Create the reset link
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
+    
+    // Send the password reset email
+    const emailSent = await sendPasswordResetEmail(
+      user.email,
+      resetLink,
+      user.firstName
+    );
+
+    if (!emailSent && process.env.NODE_ENV !== 'Development') {
+      return res.status(500).json({ 
+        message: "Failed to send password reset email. Please contact an administrator." 
+      });
+    }
+
+    // Return success message
+    return res.status(200).json({
+      message: "If your email is registered, you will receive a password reset link shortly"
+    });
+  } catch (error) {
+    console.error("Forgot Password Error:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Reset password with token
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    
+    if (!token || !password) {
+      return res.status(400).json({ message: "Token and new password are required" });
+    }
+
+    // Find the token in the database
+    const resetToken = await PasswordResetToken.findOne({ token });
+    
+    if (!resetToken) {
+      return res.status(400).json({ 
+        message: "Invalid or expired password reset token" 
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(resetToken.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Update the user's password
+    user.password = password;
+    await user.save();
+
+    // Delete the used token
+    await PasswordResetToken.deleteOne({ _id: resetToken._id });
+
+    return res.status(200).json({
+      message: "Password has been reset successfully. Please login with your new password."
+    });
+  } catch (error) {
+    console.error("Reset Password Error:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };

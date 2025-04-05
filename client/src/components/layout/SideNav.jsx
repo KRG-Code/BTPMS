@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { RiGovernmentFill } from "react-icons/ri";
 import { buttonData, buttonData2, buttonData3 } from "../constants/navButtons";
 import { NavLink } from "react-router-dom";
 import { useCombinedContext } from "../../contexts/useContext";
@@ -114,8 +113,14 @@ export default function SideNav() {
     <>
       <aside className={sideNavClasses}>
         <div className="p-4 flex flex-col items-center">
-          <RiGovernmentFill className={iconClasses} />
-          <div className={logoTextClasses}>BTPMS</div>
+          <img 
+            src="/icon.png" 
+            alt="BTPMS Logo" 
+            className={`w-12 h-12 mb-2 ${isDarkMode ? 'filter brightness-110' : ''}`} 
+          />
+          <div className={logoTextClasses}>
+            {isOpen ? "Brgy. San Agustin" : "BSA"}
+          </div>
         </div>
         <nav className="mt-10 flex-grow flex flex-col">
           <ul className="w-full">

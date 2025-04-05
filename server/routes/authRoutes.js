@@ -45,7 +45,12 @@ const {
   getAttendanceStats,
   getEquipmentStats,
   getAssistanceStats,
-  getPerformanceComparison
+  getPerformanceComparison,
+  initiateTanodLogin,
+  verifyTanodMfa,
+  resendVerificationCode,
+  forgotPassword,
+  resetPassword
 } = require('../controllers/authController');
 
 const { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem } = require("../controllers/inventoryController");
@@ -75,10 +80,16 @@ router.post('/registertanod', protect, async (req, res, next) => {
 ], registerTanod);
 
 router.post('/login/resident', loginResident); // For residents
-router.post('/login/tanod', loginTanod);       // For Tanods
+router.post('/login/tanod/initiate', initiateTanodLogin);  // Step 1: Initiate login and send code
+router.post('/login/tanod/verify', verifyTanodMfa);        // Step 2: Verify code and complete login
+router.post('/login/tanod/resend', resendVerificationCode); // Optional: Resend code
 
 // Update the logout route to use the imported function
 router.post('/logout', protect, logout);
+
+// Add these new password reset routes
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 // User Profile & Ratings Routes
 router.put('/update', protect, updateUserProfile);          // Update user profile - for all users
