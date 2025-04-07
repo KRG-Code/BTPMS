@@ -207,6 +207,7 @@ const TanodPatrolSchedule = ({
     return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  // Improved isScheduleActive function that checks if a schedule is still active
   const isScheduleActive = (patrol) => {
     const now = new Date();
     const endTime = new Date(patrol.endTime);
@@ -219,11 +220,16 @@ const TanodPatrolSchedule = ({
     return now <= endTime || (patrolStatus && patrolStatus.status === 'Started');
   };
 
-  // Filter patrols to show only active or not yet started ones
+  // Modified filtering logic to keep active patrols visible
   const filteredPatrols = todayPatrols.filter(patrol => {
     const userId = localStorage.getItem("userId");
     const patrolStatus = patrol.patrolStatus.find(status => status.tanodId === userId);
     
+    // Keep patrol if:
+    // 1. It has a patrol area assigned AND
+    // 2. Either:
+    //    a. The patrol hasn't started, OR
+    //    b. The patrol has started and is still active according to isScheduleActive
     return patrol.patrolArea && (
       !patrolStatus || // Not started yet
       patrolStatus.status === 'Not Started' ||
@@ -392,7 +398,7 @@ const TanodPatrolSchedule = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-start justify-center overflow-y-auto p-4"
       style={{ touchAction: 'none' }}
       onTouchMove={(e) => e.stopPropagation()}
       onClick={(e) => {
@@ -407,11 +413,11 @@ const TanodPatrolSchedule = ({
         initial="hidden"
         animate="visible"
         exit="exit"
-        className={`w-full max-w-2xl rounded-xl shadow-xl overflow-hidden ${cardBg} border ${borderColor}`}
+        className={`w-full max-w-4xl rounded-xl shadow-xl overflow-hidden ${cardBg} border ${borderColor} my-4`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className={`px-6 py-4 ${headerBg} border-b ${borderColor} flex justify-between items-center`}>
+        {/* Header - fixed at the top */}
+        <div className={`px-6 py-4 ${headerBg} border-b ${borderColor} flex justify-between items-center sticky top-0 z-10`}>
           <div className="flex items-center">
             <FaCalendarAlt className={`mr-3 text-lg ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
             <h2 className={`text-lg font-bold ${textColor}`}>Today's Patrol Schedule</h2>
@@ -427,10 +433,13 @@ const TanodPatrolSchedule = ({
           </motion.button>
         </div>
         
-        {/* Body content */}
+        {/* Body content - scrollable */}
         <div 
-          className="p-6 max-h-[calc(85vh-128px)] overflow-y-auto" 
-          style={{ touchAction: 'pan-y' }}
+          className="p-6 max-h-[60vh] overflow-y-auto" 
+          style={{ 
+            touchAction: 'pan-y', 
+            WebkitOverflowScrolling: 'touch' 
+          }}
           onTouchMove={(e) => e.stopPropagation()}
         >
           {filteredPatrols.length === 0 ? (
@@ -440,70 +449,97 @@ const TanodPatrolSchedule = ({
               variants={containerVariants}
               initial="hidden"
               animate="visible"
+              className="flex flex-col w-full"
             >
-              {/* Desktop view (hidden on mobile) */}
-              <div className="hidden sm:block">
-                <div className={`bg-${isDarkMode ? 'gray-900' : 'gray-50'} rounded-lg overflow-hidden border ${borderColor}`}>
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className={isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}>
-                      <tr>
-                        <th scope="col" className={`px-4 py-3.5 text-left text-sm font-medium ${subTextColor}`}>Unit</th>
-                        <th scope="col" className={`px-4 py-3.5 text-left text-sm font-medium ${subTextColor}`}>Time</th>
-                        <th scope="col" className={`px-4 py-3.5 text-left text-sm font-medium ${subTextColor}`}>Patrol Area</th>
-                        <th scope="col" className={`px-4 py-3.5 text-left text-sm font-medium ${subTextColor}`}>Status</th>
-                        <th scope="col" className={`px-4 py-3.5 text-right text-sm font-medium ${subTextColor}`}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`bg-${cardBg} divide-y divide-gray-200 dark:divide-gray-700`}>
-                      {filteredPatrols.map((patrol) => {
-                        const userId = localStorage.getItem("userId");
-                        const patrolStatus = patrol.patrolStatus.find(status => status.tanodId === userId);
-                        const isStarted = patrolStatus && patrolStatus.status === 'Started';
-                        
-                        return (
-                          <motion.tr 
-                            key={patrol._id}
-                            variants={itemVariants}
-                            className={`${isStarted ? (isDarkMode ? 'bg-green-900/10' : 'bg-green-50') : ''}`}
-                          >
-                            <td className={`px-4 py-4 whitespace-nowrap text-sm font-medium ${textColor}`}>
-                              {patrol.unit}
-                            </td>
-                            <td className={`px-4 py-4 whitespace-nowrap text-sm ${textColor}`}>
-                              <div className="flex flex-col">
-                                <span>{formatTime(patrol.startTime)} - {formatTime(patrol.endTime)}</span>
-                                <span className={`text-xs ${subTextColor}`}>{formatDate(patrol.startTime)}</span>
-                              </div>
-                            </td>
-                            <td className={`px-4 py-4 whitespace-nowrap text-sm ${textColor}`}>
-                              {patrol.patrolArea ? patrol.patrolArea.legend : "No area assigned"}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-sm">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                isStarted 
-                                  ? isDarkMode ? 'bg-green-900/40 text-green-300 border border-green-700' : 'bg-green-100 text-green-700 border border-green-200'
-                                  : isDarkMode ? 'bg-blue-900/40 text-blue-300 border border-blue-700' : 'bg-blue-100 text-blue-700 border border-blue-200'
-                              }`}>
-                                {isStarted ? (
-                                  <><FaSpinner className="mr-1.5 animate-spin" /> In Progress</>
-                                ) : (
-                                  <><FaClock className="mr-1.5" /> Scheduled</>
-                                )}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-right text-sm">
-                              {getPatrolButton(patrol)}
-                            </td>
-                          </motion.tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              {/* Desktop view */}
+              <div className="desktop-view">
+                <div className={`rounded-xl overflow-hidden border ${borderColor} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className={isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}>
+                        <tr>
+                          <th scope="col" className={`px-4 py-3.5 text-left text-sm font-medium ${subTextColor}`}>Unit</th>
+                          <th scope="col" className={`px-4 py-3.5 text-left text-sm font-medium ${subTextColor}`}>Time</th>
+                          <th scope="col" className={`px-4 py-3.5 text-left text-sm font-medium ${subTextColor}`}>Patrol Area</th>
+                          <th scope="col" className={`px-4 py-3.5 text-left text-sm font-medium ${subTextColor}`}>Status</th>
+                          <th scope="col" className={`px-4 py-3.5 text-right text-sm font-medium ${subTextColor}`}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {filteredPatrols.map((patrol, index) => {
+                          const userId = localStorage.getItem("userId");
+                          const patrolStatus = patrol.patrolStatus.find(status => status.tanodId === userId);
+                          const isStarted = patrolStatus && patrolStatus.status === 'Started';
+                          const isSameDay = formatDate(patrol.startTime) === formatDate(patrol.endTime);
+                          
+                          return (
+                            <motion.tr 
+                              key={patrol._id}
+                              variants={itemVariants}
+                              className={`${isStarted ? (isDarkMode ? 'bg-green-900/10' : 'bg-green-50') : ''} ${index % 2 === 0 ? 'bg-opacity-50' : ''}`}
+                            >
+                              <td className={`px-4 py-4 whitespace-nowrap text-sm font-medium ${textColor}`}>
+                                <div className="flex items-center">
+                                  <div className={`w-3 h-3 rounded-full mr-2 ${
+                                    isStarted ? 'bg-green-500 animate-pulse' : 'bg-blue-500'
+                                  }`}></div>
+                                  {patrol.unit}
+                                </div>
+                              </td>
+                              <td className={`px-4 py-4 whitespace-nowrap text-sm ${textColor}`}>
+                                <div className="flex flex-col">
+                                  <div className="flex items-center">
+                                    <FaClock className={`mr-1.5 ${isStarted ? 'text-green-500' : 'text-blue-500'}`} size={14} />
+                                    <span className="font-medium">{formatTime(patrol.startTime)} - {formatTime(patrol.endTime)}</span>
+                                  </div>
+                                  {!isSameDay && (
+                                    <div className="flex items-start text-xs mt-1 ml-5">
+                                      <span className={`${subTextColor} mr-2`}>{formatDate(patrol.startTime)}</span>
+                                      {' - '}
+                                      <span className={`${subTextColor} ml-2`}>{formatDate(patrol.endTime)}</span>
+                                    </div>
+                                  )}
+                                  {isSameDay && (
+                                    <span className={`text-xs ${subTextColor} ml-5`}>{formatDate(patrol.startTime)}</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className={`px-4 py-4 whitespace-nowrap text-sm ${textColor}`}>
+                                <div className="flex items-center">
+                                  <div className={`p-1 rounded-full mr-2`} style={{ 
+                                    backgroundColor: patrol.patrolArea?.color || '#888',
+                                    opacity: isDarkMode ? 0.8 : 0.6
+                                  }}></div>
+                                  <span>{patrol.patrolArea ? patrol.patrolArea.legend : "No area assigned"}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                                  isStarted 
+                                    ? isDarkMode ? 'bg-green-900/40 text-green-300 border border-green-700' : 'bg-green-100 text-green-700 border border-green-200'
+                                    : isDarkMode ? 'bg-blue-900/40 text-blue-300 border border-blue-700' : 'bg-blue-100 text-blue-700 border border-blue-200'
+                                }`}>
+                                  {isStarted ? (
+                                    <><FaSpinner className="mr-1.5 animate-spin" /> In Progress</>
+                                  ) : (
+                                    <><FaClock className="mr-1.5" /> Scheduled</>
+                                  )}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-right text-sm">
+                                {getPatrolButton(patrol)}
+                              </td>
+                            </motion.tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
               
-              {/* Mobile view (hidden on desktop) */}
-              <div className="sm:hidden space-y-4">
+              {/* Mobile view - display card layout */}
+              <div className="mobile-view space-y-4">
                 {filteredPatrols.map(patrol => (
                   <PatrolCard key={patrol._id} patrol={patrol} />
                 ))}
@@ -512,8 +548,8 @@ const TanodPatrolSchedule = ({
           )}
         </div>
         
-        {/* Footer */}
-        <div className={`border-t ${borderColor} p-4 flex justify-end`}>
+        {/* Footer - fixed at the bottom */}
+        <div className={`border-t ${borderColor} p-4 flex justify-end sticky bottom-0 bg-inherit z-10`}>
           <motion.button
             variants={buttonVariants}
             whileHover="hover"

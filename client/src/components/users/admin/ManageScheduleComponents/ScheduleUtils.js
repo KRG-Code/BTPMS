@@ -57,18 +57,31 @@ export const fetchSchedules = async (setSchedules, setLoadingSchedules) => {
           );
           schedule.patrolArea = patrolAreaResponse.data;
         }
+        
+        // Update status based on current time
         const currentTime = new Date();
-        if (new Date(schedule.startTime) <= currentTime && new Date(schedule.endTime) >= currentTime) {
-          schedule.status = 'Ongoing';
-        } else if (new Date(schedule.endTime) < currentTime) {
-          schedule.status = 'Completed';
-        } else {
+        const startTime = new Date(schedule.startTime);
+        const endTime = new Date(schedule.endTime);
+        
+        if (startTime > currentTime) {
           schedule.status = 'Upcoming';
+        } else if (endTime < currentTime) {
+          schedule.status = 'Completed';
+        } else if (startTime <= currentTime && endTime >= currentTime) {
+          schedule.status = 'Ongoing';
         }
+        
         return schedule;
       })
     );
-    setSchedules(schedulesWithPatrolArea);
+
+    setSchedules(schedulesWithPatrolArea.map(schedule => {
+      // Add schedule ID if it doesn't exist (for older records)
+      if (!schedule.scheduleID) {
+        schedule.scheduleID = `SCH-${Math.random().toString(36).substr(2, 9)}`;
+      }
+      return schedule;
+    }));
   } catch (error) {
     console.error("Error fetching schedules:", error);
     if (error.response && error.response.status === 404) {
@@ -85,33 +98,64 @@ export const handleCreateOrUpdateSchedule = async (
   e,
   isEditing,
   currentScheduleId,
-  unit,
+  unit, // Now holds shift type value
   selectedTanods,
   startTime,
   endTime,
   setSchedules,
   schedules,
   resetForm,
-  fetchSchedules
+  fetchSchedules,
+  scheduleID, // New parameter
+  startDate, // New parameter
+  endDate // New parameter
 ) => {
   e.preventDefault();
 
-  // Validate that at least one Tanod is selected
-  if (selectedTanods.length === 0) {
-    toast.error("Please select at least one Tanod.");
-    return; // Prevent form submission if no Tanod is selected
+  // Validate that at least two Tanods are selected
+  if (selectedTanods.length < 2) {
+    toast.error("Please select at least two Tanods for the schedule.");
+    return;
+  }
+  
+  // Validate dates
+  if (!startDate || !endDate) {
+    toast.error("Please select both start and end dates.");
+    return;
   }
 
-  const token = localStorage.getItem("token");
-  const url = isEditing
-    ? `${process.env.REACT_APP_API_URL}/auth/schedule/${currentScheduleId}`
-    : `${process.env.REACT_APP_API_URL}/auth/schedule`;
-
   try {
+    // Create proper date objects with original times
+    if (!startTime || !endTime) {
+      toast.error("Please provide both start and end times.");
+      return;
+    }
+    
+    // Use the exact provided times instead of transforming them
+    const startDateTime = new Date(startTime);
+    const endDateTime = new Date(endTime);
+    
+    // Validate that end time is after start time
+    if (endDateTime <= startDateTime) {
+      toast.error("End time must be after start time.");
+      return;
+    }
+    
+    const token = localStorage.getItem("token");
+    const url = isEditing
+      ? `${process.env.REACT_APP_API_URL}/auth/schedule/${currentScheduleId}`
+      : `${process.env.REACT_APP_API_URL}/auth/schedule`;
+
     const response = await axios({
       method: isEditing ? "put" : "post",
       url,
-      data: { unit, tanods: selectedTanods, startTime, endTime },
+      data: { 
+        unit, 
+        tanods: selectedTanods, 
+        startTime: startDateTime.toISOString(), 
+        endTime: endDateTime.toISOString(),
+        scheduleID
+      },
       headers: { Authorization: `Bearer ${token}` },
     });
 

@@ -23,11 +23,28 @@ export default function Layout() {
                     <TopNav toggleSideNav={toggleSideNav} />
 
                     {/* Main content with routes */}
-                    <main className="main-content mt-3 z-0 flex-1 overflow-y-scroll scrollbar-hide">
+                    <main className="main-content mt-3 z-0 flex-1 overflow-y-auto">
                         <Outlet />
                     </main>
                 </div>
             </div>
+            {/* Add global scrollbar styles */}
+            <style jsx>{`
+                /* Custom scrollbar styles */
+                ::-webkit-scrollbar {
+                    width: 8px;
+                }
+                ::-webkit-scrollbar-track {
+                    background: ${isDarkMode ? '#0e1022' : '#f1f1f1'};
+                }
+                ::-webkit-scrollbar-thumb {
+                    background: ${isDarkMode ? '#1e2048' : '#c1c1c1'};
+                    border-radius: 4px;
+                }
+                ::-webkit-scrollbar-thumb:hover {
+                    background: ${isDarkMode ? '#4750eb' : '#a1a1a1'};
+                }
+            `}</style>
         </div>
     );
 }

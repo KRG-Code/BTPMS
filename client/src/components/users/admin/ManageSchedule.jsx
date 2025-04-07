@@ -38,7 +38,7 @@ const buttonScale = {
 export default function ScheduleMaker() {
   const { isDarkMode } = useTheme();
   const [tanods, setTanods] = useState([]);
-  const [unit, setUnit] = useState("Unit 1");
+  const [unit, setUnit] = useState("Day Shift"); // Changed default from "Unit 1" to "Day Shift"
   const [selectedTanods, setSelectedTanods] = useState([]);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -65,7 +65,7 @@ export default function ScheduleMaker() {
   }, []);
 
   const resetForm = () => {
-    setUnit("Unit 1");
+    setUnit("Day Shift"); // Changed default from "Unit 1" to "Day Shift"
     setSelectedTanods([]);
     setStartTime("");
     setEndTime("");
@@ -108,13 +108,14 @@ export default function ScheduleMaker() {
 
   return (
     <motion.div 
-      className={`container mx-auto px-4 py-6 ${isDarkMode ? 'bg-[#080917] text-[#e7e8f4]' : 'bg-[#e8e9f7] text-[#0b0c18]'}`}
+      className={`container mx-auto px-4 py-6 h-full flex flex-col ${isDarkMode ? 'bg-[#080917] text-[#e7e8f4]' : 'bg-[#e8e9f7] text-[#0b0c18]'}`}
       variants={fadeIn}
       initial="hidden"
       animate="visible"
+      style={{ maxHeight: "100vh", overflowY: "hidden" }}
     >
       <motion.div 
-        className="flex flex-col md:flex-row items-center justify-between mb-6"
+        className="flex flex-col md:flex-row items-center justify-between mb-6 flex-shrink-0"
         variants={slideUp}
         custom={0}
       >
@@ -141,40 +142,41 @@ export default function ScheduleMaker() {
             <FaPlus className="mr-2" />
             Create Schedule
           </motion.button>
-          
-          
         </div>
       </motion.div>
 
       <AnimatePresence>
         {showForm && (
-          <ScheduleForm
-            isEditing={isEditing}
-            currentScheduleId={currentScheduleId}
-            unit={unit}
-            setUnit={setUnit}
-            selectedTanods={selectedTanods}
-            setSelectedTanods={setSelectedTanods}
-            startTime={startTime}
-            setStartTime={setStartTime}
-            endTime={endTime}
-            setEndTime={setEndTime}
-            originalStartTime={originalStartTime}
-            setOriginalStartTime={setOriginalStartTime}
-            resetForm={resetForm}
-            fetchSchedules={() => fetchSchedules(setSchedules, setLoadingSchedules)}
-            schedules={schedules}
-            setSchedules={setSchedules}
-            setShowForm={setShowForm}
-            tanods={tanods}
-            isDarkMode={isDarkMode}
-          />
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4 backdrop-blur-sm overflow-hidden">
+            <ScheduleForm
+              isEditing={isEditing}
+              currentScheduleId={currentScheduleId}
+              unit={unit}
+              setUnit={setUnit}
+              selectedTanods={selectedTanods}
+              setSelectedTanods={setSelectedTanods}
+              startTime={startTime}
+              setStartTime={setStartTime}
+              endTime={endTime}
+              setEndTime={setEndTime}
+              originalStartTime={originalStartTime}
+              setOriginalStartTime={setOriginalStartTime}
+              resetForm={resetForm}
+              fetchSchedules={() => fetchSchedules(setSchedules, setLoadingSchedules)}
+              schedules={schedules}
+              setSchedules={setSchedules}
+              setShowForm={setShowForm}
+              tanods={tanods}
+              isDarkMode={isDarkMode}
+            />
+          </div>
         )}
       </AnimatePresence>
 
       <motion.div
         variants={slideUp}
         custom={1}
+        className="flex-grow overflow-hidden"
       >
         <ScheduleList
           schedules={schedules}

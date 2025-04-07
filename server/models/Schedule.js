@@ -5,7 +5,15 @@ const scheduleSchema = new mongoose.Schema({
   unit: {
     type: String,
     required: true,
-    enum: ["Unit 1", "Unit 2", "Unit 3"], // Only allow these 3 units
+    enum: ["Unit 1", "Unit 2", "Unit 3", "Day Shift", "Night Shift"], // Updated to include shift types
+  },
+  scheduleID: {
+    type: String,
+    default: function() {
+      const timestamp = new Date().getTime().toString().slice(-6);
+      const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+      return `SCH-${timestamp}-${random}`;
+    }
   },
   tanods: [
     {
@@ -67,6 +75,10 @@ const scheduleSchema = new mongoose.Schema({
       timestamp: {
         type: Date,
         default: Date.now,
+      },
+      scheduleId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Schedule',
       },
     },
   ],

@@ -50,7 +50,8 @@ const {
   verifyTanodMfa,
   resendVerificationCode,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  getTodaySchedulesForTanod
 } = require('../controllers/authController');
 
 const { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem } = require("../controllers/inventoryController");
@@ -165,6 +166,7 @@ router.put('/schedule/:id/patrol-area', protect, updatePatrolArea); // Update pa
 router.delete('/schedule/:scheduleId', protect, deleteSchedule);
 router.get('/schedule/:id/members', protect, getScheduleMembers);
 router.get('/tanod-schedules/:userId', protect, getSchedulesForTanod); // Ensure this route is defined
+router.get('/tanod-schedules/:userId/today', protect, getTodaySchedulesForTanod);
 router.put('/schedules/update-status', protect, updateScheduleStatus); // Add this route
 
 // Patrol routes

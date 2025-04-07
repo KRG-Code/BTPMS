@@ -110,20 +110,53 @@ const ScheduleList = ({
     );
   };
 
+  // Add or update this function to properly format both start and end dates
+  const formatScheduleDateRange = (schedule) => {
+    const startDate = new Date(schedule.startTime);
+    const endDate = new Date(schedule.endTime);
+    
+    // Format options for date display
+    const dateOptions = { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    };
+    
+    const timeOptions = { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true
+    };
+    
+    // Check if start and end dates are the same day
+    const sameDay = startDate.toDateString() === endDate.toDateString();
+    
+    if (sameDay) {
+      // Same day - show date once with start and end times
+      return `${startDate.toLocaleDateString(undefined, dateOptions)}, ${startDate.toLocaleTimeString(undefined, timeOptions)} - ${endDate.toLocaleTimeString(undefined, timeOptions)}`;
+    } else {
+      // Different days - show full date and time for both start and end
+      return `${startDate.toLocaleDateString(undefined, dateOptions)}, ${startDate.toLocaleTimeString(undefined, timeOptions)} - ${endDate.toLocaleDateString(undefined, dateOptions)}, ${endDate.toLocaleTimeString(undefined, timeOptions)}`;
+    }
+  };
+
+  // Define the minimum number of schedules before enabling scrolling
+  const MIN_SCHEDULES_FOR_SCROLL = 3;
+
   return (
     <motion.div 
-      className="container mx-auto relative p-4"
+      className="container mx-auto relative h-full flex flex-col"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
     >
       <motion.div 
-        className={`p-6 rounded-xl shadow-lg ${
+        className={`p-6 rounded-xl shadow-lg flex flex-col h-full ${
           isDarkMode ? 'bg-[#0e1022]' : 'bg-white'
         }`}
         variants={itemVariants}
       >
-        <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 mb-6 flex-shrink-0">
           <motion.h2 
             className="text-xl font-bold"
             variants={itemVariants}
@@ -138,7 +171,7 @@ const ScheduleList = ({
               <FaSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
               <input
                 type="text"
-                placeholder="Search by unit"
+                placeholder="Search by shift type or ID"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className={`w-full py-2 pl-10 pr-4 rounded-lg border ${
@@ -199,25 +232,31 @@ const ScheduleList = ({
           </div>
         </div>
 
-        <div className={`overflow-hidden rounded-lg border ${
+        <div className={`overflow-hidden rounded-lg border flex-grow ${
           isDarkMode ? 'border-[#1e2048]' : 'border-gray-200'
         }`}>
-          <div className={`overflow-x-auto`} style={{ maxHeight: "500px" }}>
+          <div 
+            className={`overflow-x-auto ${filteredSchedules.length > MIN_SCHEDULES_FOR_SCROLL ? 'overflow-y-auto' : 'overflow-y-hidden'}`} 
+            style={{ 
+              maxHeight: filteredSchedules.length > MIN_SCHEDULES_FOR_SCROLL ? "calc(100vh - 200px)" : "none",
+              height: "100%"
+            }}
+          >
             <table className="min-w-full divide-y divide-gray-200">
               <thead className={`${
                 isDarkMode 
                 ? 'bg-[#191f8a]' 
                 : 'bg-[#191d67]'
-              }`}>
+              } text-white sticky top-0 z-10`}>
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                    Unit
+                    Schedule ID
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                    Start Time
+                    Shift Type
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                    End Time
+                    Period
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Patrol Area
@@ -269,16 +308,16 @@ const ScheduleList = ({
                       className="hover:shadow-sm transition-all"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-semibold">{schedule.unit}</div>
+                        <div className="font-semibold">{schedule.scheduleID || 'Not assigned'}</div>
                         <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           {schedule.tanods?.length || 0} members
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        {new Date(schedule.startTime).toLocaleString()}
+                        {schedule.unit}
                       </td>
-                      <td className="px-6 py-4">
-                        {new Date(schedule.endTime).toLocaleString()}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {formatScheduleDateRange(schedule)}
                       </td>
                       <td className="px-6 py-4">
                         {schedule.patrolArea ? (
@@ -342,19 +381,7 @@ const ScheduleList = ({
                           </motion.button>
                         )}
                         
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className={`px-3 py-1 rounded-lg flex items-center justify-center w-full md:w-auto ${
-                            isDarkMode 
-                              ? 'bg-red-900 hover:bg-red-800 text-red-100' 
-                              : 'bg-red-100 hover:bg-red-200 text-red-800'
-                          }`}
-                          onClick={() => handleDeleteSchedule(schedule._id)}
-                        >
-                          <FaTrash className="mr-1" />
-                          Delete
-                        </motion.button>
+                        {/* Removed Delete Button */}
                       </td>
                     </motion.tr>
                   ))

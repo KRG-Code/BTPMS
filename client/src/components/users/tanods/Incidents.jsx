@@ -161,11 +161,20 @@ const Incidents = ({
     if (!token || !profile) return;
 
     try {
-      const response = await axios.get(`${process.env.REACT_APP_API_URL}/auth/tanod-schedules/${profile._id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // First try to get today's schedules specifically using the improved endpoint
+      const todayResponse = await axios.get(
+        `${process.env.REACT_APP_API_URL}/auth/tanod-schedules/${profile._id}/today`, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Then get all schedules for the user
+      const allResponse = await axios.get(
+        `${process.env.REACT_APP_API_URL}/auth/tanod-schedules/${profile._id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
       const schedulesWithPatrolArea = await Promise.all(
-        response.data.map(async (schedule) => {
+        allResponse.data.map(async (schedule) => {
           if (schedule.patrolArea && typeof schedule.patrolArea === 'object' && schedule.patrolArea._id) {
             const patrolAreaResponse = await axios.get(
               `${process.env.REACT_APP_API_URL}/polygons/${schedule.patrolArea._id}`,
@@ -186,16 +195,42 @@ const Incidents = ({
           return schedule;
         })
       );
+      
+      // Set all upcoming/recent patrols
       setUpcomingPatrols(schedulesWithPatrolArea || []);
-      setTodayPatrols(schedulesWithPatrolArea.filter(schedule => {
-        const today = new Date();
-        const startTime = new Date(schedule.startTime);
-        return startTime.toDateString() === today.toDateString();
-      }));
+      
+      // For today's patrols, use the dedicated endpoint data that includes yesterday's schedules still active today
+      const todaySchedulesWithPatrolArea = await Promise.all(
+        todayResponse.data.map(async (schedule) => {
+          if (schedule.patrolArea && typeof schedule.patrolArea === 'object' && schedule.patrolArea._id) {
+            const patrolAreaResponse = await axios.get(
+              `${process.env.REACT_APP_API_URL}/polygons/${schedule.patrolArea._id}`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              }
+            );
+            schedule.patrolArea = patrolAreaResponse.data;
+          } else if (schedule.patrolArea) {
+            const patrolAreaResponse = await axios.get(
+              `${process.env.REACT_APP_API_URL}/polygons/${schedule.patrolArea}`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              }
+            );
+            schedule.patrolArea = patrolAreaResponse.data;
+          }
+          return schedule;
+        })
+      );
+      
+      setTodayPatrols(todaySchedulesWithPatrolArea || []);
+      
+      // Check if user has any active patrol
       const startedPatrol = schedulesWithPatrolArea.some(schedule => {
         const patrolStatus = schedule.patrolStatus.find(status => status.tanodId === profile._id);
         return patrolStatus && patrolStatus.status === 'Started';
       });
+      
       setHasStartedPatrol(startedPatrol);
 
       if (startedPatrol) {

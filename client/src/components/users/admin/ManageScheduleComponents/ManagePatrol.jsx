@@ -328,101 +328,101 @@ const PatrolManagement = () => {
   }, []);
 
   return (
-    <div className="flex flex-col p-6 ">
+    <div className="flex flex-col p-6 h-full">
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
 
       <div className="w-full h-[500px] p-6 flex items-center justify-center rounded-lg TopNav">
-        <ScheduleMaker className="TopNav" />
+        <ScheduleMaker className="TopNav h-full w-full" />
       </div>
 
-      <div className="flex w-full mt-4 z-0">
-      <div className="relative w-2/3 h-[700px] mr-4">
-        <MapContainer center={[14.7356, 121.0498]} zoom={13} style={{ height: '100%' }}>
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <MapEvents />
-        </MapContainer>
-      </div>
+      <div className="flex w-full mt-4 z-0 h-[700px]">
+        <div className="relative w-2/3 h-full mr-4">
+          <MapContainer center={[14.7356, 121.0498]} zoom={13} style={{ height: '100%' }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <MapEvents />
+          </MapContainer>
+        </div>
 
-      <div className="w-1/3 h-[700px] flex flex-col items-center justify-between bg-gray-100 p-4 space-y-4 rounded-lg TopNav">
-  {!modalVisible ? (
-    <div className="flex flex-col items-center w-full space-y-4">
-      <button
-        onClick={() => setModalVisible(true)}
-        className="w-full py-3 bg-blue-500 text-white text-lg rounded-lg hover:bg-blue-600 transition duration-200 ease-in-out"
-      >
-        Patrol Area Settings
-      </button>
-      <div className="w-full flex-1">
-        <PatrolScheduleManager
-          polygons={polygons}
-          refreshMapData={refreshMapData}
-          className="w-full h-full" // Ensure it takes up the full width and height available
-        />
-      </div>
-    </div>
-        ) : (
-          <div className="w-full h-full bg-white shadow-lg p-4 rounded-xl overflow-y-auto relative TopNav">
-            <button
-              onClick={handleModalClose}
-              className="absolute top-2 right-2 px-2 py-1 bg-red-500 text-white rounded-lg"
-            >
-              X
-            </button>
-            <h3 className="text-lg font-semibold mb-4 text-center">Patrol Area Settings</h3>
-            <div className="mb-4">
-              <h3 className="text-l font-semibold mb-4">Create Patrol Area</h3>
-              <label className="block font-bold">Legend:</label>
-              <input
-                type="text"
-                value={legendInput}
-                onChange={(e) => setLegendInput(e.target.value)}
-                placeholder="Enter legend text"
-                className="w-full border rounded p-2 text-black"
-                disabled={editingPolygonId !== null}
+        <div className="w-1/3 h-full flex flex-col items-center justify-between bg-gray-100 p-4 space-y-4 rounded-lg TopNav">
+          {!modalVisible ? (
+            <div className="flex flex-col items-center w-full h-full space-y-4">
+              <button
+                onClick={() => setModalVisible(true)}
+                className="w-full py-3 bg-blue-500 text-white text-lg rounded-lg hover:bg-blue-600 transition duration-200 ease-in-out"
+              >
+                Patrol Area Settings
+              </button>
+              <div className="w-full flex-1 h-full overflow-hidden">
+                <PatrolScheduleManager
+                  polygons={polygons}
+                  refreshMapData={refreshMapData}
+                  className="w-full h-full"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="w-full h-full bg-white shadow-lg p-4 rounded-xl overflow-y-auto relative TopNav">
+              <button
+                onClick={handleModalClose}
+                className="absolute top-2 right-2 px-2 py-1 bg-red-500 text-white rounded-lg"
+              >
+                X
+              </button>
+              <h3 className="text-lg font-semibold mb-4 text-center">Patrol Area Settings</h3>
+              <div className="mb-4">
+                <h3 className="text-l font-semibold mb-4">Create Patrol Area</h3>
+                <label className="block font-bold">Legend:</label>
+                <input
+                  type="text"
+                  value={legendInput}
+                  onChange={(e) => setLegendInput(e.target.value)}
+                  placeholder="Enter legend text"
+                  className="w-full border rounded p-2 text-black"
+                  disabled={editingPolygonId !== null}
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block font-bold">Color:</label>
+                <input
+                  type="color"
+                  value={colorInput}
+                  onChange={(e) => setColorInput(e.target.value)}
+                  className="w-full h-10 cursor-pointer"
+                  disabled={editingPolygonId !== null}
+                />
+              </div>
+              <div className="mt-4 space-y-2 mb-2">
+              <h3 className="text-l font-semibold mb-4">Map Tools</h3>
+                <button
+                  onClick={toggleGeomanTools}
+                  className={`w-full p-2 rounded text-white ${toolsEnabled ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
+                >
+                  {toolsEnabled ? 'Disable Tools' : 'Enable Tools'}
+                </button>
+                <button
+                  onClick={refreshMapData}
+                  className="w-full p-2 rounded bg-blue-500 text-white hover:bg-blue-600"
+                >
+                  Refresh Map
+                </button>
+              </div>
+              <PatrolAreaManager
+                polygons={polygons}
+                setPolygons={setPolygons}
+                editingPolygonId={editingPolygonId}
+                setEditingPolygonId={setEditingPolygonId}
+                legendInput={legendInput}
+                setLegendInput={setLegendInput}
+                colorInput={colorInput}
+                setColorInput={setColorInput}
+                deletePolygon={deletePolygon}
+                updatePolygon={updatePolygon}
+                refreshMapData={refreshMapData}
               />
             </div>
-            <div className="mb-4">
-              <label className="block font-bold">Color:</label>
-              <input
-                type="color"
-                value={colorInput}
-                onChange={(e) => setColorInput(e.target.value)}
-                className="w-full h-10 cursor-pointer"
-                disabled={editingPolygonId !== null}
-              />
-            </div>
-            <div className="mt-4 space-y-2 mb-2">
-            <h3 className="text-l font-semibold mb-4">Map Tools</h3>
-              <button
-                onClick={toggleGeomanTools}
-                className={`w-full p-2 rounded text-white ${toolsEnabled ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
-              >
-                {toolsEnabled ? 'Disable Tools' : 'Enable Tools'}
-              </button>
-              <button
-                onClick={refreshMapData}
-                className="w-full p-2 rounded bg-blue-500 text-white hover:bg-blue-600"
-              >
-                Refresh Map
-              </button>
-            </div>
-            <PatrolAreaManager
-              polygons={polygons}
-              setPolygons={setPolygons}
-              editingPolygonId={editingPolygonId}
-              setEditingPolygonId={setEditingPolygonId}
-              legendInput={legendInput}
-              setLegendInput={setLegendInput}
-              colorInput={colorInput}
-              setColorInput={setColorInput}
-              deletePolygon={deletePolygon}
-              updatePolygon={updatePolygon}
-              refreshMapData={refreshMapData}
-            />
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
     </div>
   );
 };

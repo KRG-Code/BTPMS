@@ -9,6 +9,17 @@ const fadeIn = {
   visible: { opacity: 1, transition: { duration: 0.4 } }
 };
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { 
+    opacity: 1,
+    transition: { 
+      staggerChildren: 0.1,
+      when: "beforeChildren"
+    }
+  }
+};
+
 const slideUp = {
   hidden: { y: 20, opacity: 0 },
   visible: i => ({ 
@@ -48,13 +59,17 @@ const PatrolScheduleManager = ({ polygons, isDarkMode }) => {
 
       const schedulesWithStatus = scheduleResponse.data.map((schedule) => {
         const currentTime = new Date();
-        if (new Date(schedule.startTime) <= currentTime && new Date(schedule.endTime) >= currentTime) {
-          schedule.status = 'Ongoing';
-        } else if (new Date(schedule.endTime) < currentTime) {
+        const startTime = new Date(schedule.startTime);
+        const endTime = new Date(schedule.endTime);
+        
+        if (startTime > currentTime) {
+          schedule.status = 'Upcoming';
+        } else if (endTime < currentTime) {
           schedule.status = 'Completed';
         } else {
-          schedule.status = 'Upcoming';
+          schedule.status = 'Ongoing';
         }
+        
         return schedule;
       });
       setSchedules(schedulesWithStatus);  // Store fetched schedules with status
@@ -175,14 +190,18 @@ const PatrolScheduleManager = ({ polygons, isDarkMode }) => {
 
   return (
     <motion.div 
-      className={`rounded-xl shadow-lg overflow-hidden ${isDarkMode ? 'bg-[#0e1022]' : 'bg-white'}`}
+      variants={containerVariants}
       initial="hidden"
       animate="visible"
-      variants={fadeIn}
+      className={`w-full h-full rounded-xl shadow-lg overflow-hidden border ${
+        isDarkMode ? 'border-[#1e2048]' : 'border-gray-200'
+      }`}
+      style={{ display: 'flex', flexDirection: 'column', maxHeight: '100%' }}
     >
-      <div className={`${isDarkMode 
-        ? 'bg-gradient-to-r from-[#191f8a] to-[#4750eb]' 
-        : 'bg-gradient-to-r from-[#191d67] to-[#141db8]'} px-6 py-4 text-white flex justify-between items-center`}>
+      <div className={`${
+        isDarkMode 
+          ? 'bg-gradient-to-r from-[#191f8a] to-[#4750eb]' 
+          : 'bg-gradient-to-r from-[#191d67] to-[#141db8]'} px-6 py-4 text-white flex justify-between items-center flex-shrink-0`}>
         <h3 className="text-xl font-semibold flex items-center">
           <FaMapMarkedAlt className="mr-2" />
           Patrol Area Assignment
@@ -199,7 +218,10 @@ const PatrolScheduleManager = ({ polygons, isDarkMode }) => {
         </motion.button>
       </div>
 
-      <div className="p-6 space-y-5">
+      <div 
+        className="p-6 space-y-5 overflow-y-auto flex-grow"
+        style={{ height: 'calc(100% - 64px)' }}
+      >
         {/* Schedule Dropdown */}
         <motion.div 
           variants={slideUp} 
@@ -225,15 +247,13 @@ const PatrolScheduleManager = ({ polygons, isDarkMode }) => {
               schedules
                 .filter((schedule) => !schedule.patrolArea) // Exclude schedules with assigned patrol areas
                 .map((schedule) => {
-                  const { date: startDate, time: startTime } = formatDateTime(schedule.startTime);
-                  const { date: endDate, time: endTime } = formatDateTime(schedule.endTime);
                   return (
                     <option 
                       key={schedule._id} 
                       value={schedule._id}
                       className={isDarkMode ? 'bg-[#080917] text-[#e7e8f4]' : ''}
                     >
-                      {schedule.unit}: {startDate}, {startTime} - {endTime}
+                      {schedule.scheduleID} - {schedule.unit}
                     </option>
                   );
                 })

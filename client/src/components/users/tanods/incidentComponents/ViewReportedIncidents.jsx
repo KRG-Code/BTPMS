@@ -545,7 +545,7 @@ const ViewReportedIncidents = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-[1050] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-[1050] flex items-start justify-center overflow-y-auto"
       style={{ touchAction: 'none' }}
       onTouchMove={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
@@ -555,12 +555,12 @@ const ViewReportedIncidents = ({
         initial="hidden"
         animate="visible"
         exit="exit"
-        className={`w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden ${cardBg} border ${borderColor}`}
+        className={`w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden ${cardBg} border ${borderColor} my-4 mx-4`}
         onClick={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className={`px-6 py-4 border-b ${borderColor} flex justify-between items-center`}>
+        {/* Header - fixed at the top */}
+        <div className={`px-6 py-4 border-b ${borderColor} flex justify-between items-center sticky top-0 z-10 bg-inherit`}>
           <div className="flex items-center">
             <FaExclamationCircle className={`mr-3 text-2xl ${
               isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
@@ -589,14 +589,14 @@ const ViewReportedIncidents = ({
           </div>
         </div>
         
-        {/* Filter section (expandable) */}
+        {/* Filter section - unchanged */}
         <AnimatePresence>
           {showFilters && (
             <motion.div 
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden"
+              className="overflow-hidden sticky top-[65px] z-[5] bg-inherit"
             >
               <div className={`px-6 py-3 border-b ${borderColor}`}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -647,8 +647,8 @@ const ViewReportedIncidents = ({
           )}
         </AnimatePresence>
 
-        {/* Mobile filter toggle (visible only on small screens) */}
-        <div className="sm:hidden px-6 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+        {/* Mobile filter toggle - unchanged */}
+        <div className="sm:hidden px-6 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-[65px] z-[5] bg-inherit">
           <motion.button
             variants={buttonVariants}
             whileHover="hover"
@@ -676,10 +676,13 @@ const ViewReportedIncidents = ({
           </motion.button>
         </div>
 
-        {/* Content area */}
+        {/* Content area - scrollable with ENHANCED desktop view */}
         <div 
-          className="p-6 max-h-[70vh] overflow-y-auto"
-          style={{ touchAction: 'pan-y' }}
+          className="p-6 max-h-[55vh] overflow-y-auto"
+          style={{ 
+            touchAction: 'pan-y', 
+            WebkitOverflowScrolling: 'touch' 
+          }}
           onTouchMove={(e) => e.stopPropagation()}
         >
           {loading ? (
@@ -695,61 +698,75 @@ const ViewReportedIncidents = ({
             </motion.div>
           ) : (
             <>
-              {/* Desktop view */}
-              <div className="hidden md:block">
-                <table className={`w-full border-collapse`}>
-                  <thead className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} border-b ${borderColor}`}>
-                    <tr>
-                      <th className={`py-3 px-4 text-left text-sm font-medium ${subTextColor}`}>Incident</th>
-                      <th className={`py-3 px-4 text-left text-sm font-medium ${subTextColor}`}>Date</th>
-                      <th className={`py-3 px-4 text-left text-sm font-medium ${subTextColor}`}>Status</th>
-                      <th className={`py-3 px-4 text-left text-sm font-medium ${subTextColor}`}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {/* Enhanced Desktop view */}
+              <div className="desktop-view">
+                <div className={`overflow-hidden rounded-xl border ${borderColor}`}>
+                  <div className="grid grid-cols-1 gap-4">
                     {filteredIncidents.map((incident, index) => {
+                      const isEmergency = incident.incidentClassification === 'Emergency Incident';
                       const responseState = getResponseButtonState(incident);
                       
                       return (
-                        <motion.tr 
+                        <motion.div 
                           key={incident._id}
                           variants={tableRowVariants}
                           initial="hidden"
                           animate="visible"
                           exit="hidden"
                           custom={index}
-                          className={`border-b ${borderColor} hover:${isDarkMode ? 'bg-gray-700/40' : 'bg-gray-50'}`}
+                          className={`${cardBg} border ${borderColor} rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200`}
                         >
-                          <td className={`py-3 px-4 ${textColor}`}>
-                            <div className="flex items-center">
-                              {incident.incidentClassification === 'Emergency Incident' ? (
-                                <FaExclamationTriangle className={`mr-2 ${isDarkMode ? 'text-red-400' : 'text-red-500'}`} />
-                              ) : (
-                                <FaInfoCircle className={`mr-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-500'}`} />
-                              )}
-                              <span>{incident.type}</span>
+                          <div className={`p-4 flex flex-col md:flex-row md:items-center md:justify-between
+                            ${isEmergency 
+                              ? (isDarkMode ? 'bg-gradient-to-r from-red-900/30 to-red-900/10' : 'bg-gradient-to-r from-red-50 to-red-100/40') 
+                              : (isDarkMode ? 'bg-gradient-to-r from-blue-900/30 to-blue-900/10' : 'bg-gradient-to-r from-blue-50 to-blue-100/40')
+                            }`}
+                          >
+                            <div className="flex items-start space-x-4 mb-3 md:mb-0">
+                              <div className={`p-3 rounded-lg ${
+                                isEmergency
+                                  ? (isDarkMode ? 'bg-red-900/40 text-red-300' : 'bg-red-100 text-red-700')
+                                  : (isDarkMode ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-700')
+                              } flex-shrink-0`}>
+                                {isEmergency ? 
+                                  <FaExclamationTriangle size={24} className="animate-pulse" /> : 
+                                  <FaInfoCircle size={24} />
+                                }
+                              </div>
+                              <div>
+                                <div className="flex items-center mb-1">
+                                  <h3 className={`font-semibold ${textColor} mr-3`}>{incident.type}</h3>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    incident.status === 'Pending' 
+                                      ? isDarkMode ? 'bg-yellow-900/40 text-yellow-300' : 'bg-yellow-100 text-yellow-800'
+                                      : incident.status === 'In Progress' 
+                                        ? isDarkMode ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-800'
+                                        : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {incident.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center text-sm">
+                                  <FaCalendarAlt className={`mr-2 ${subTextColor}`} />
+                                  <span className={subTextColor}>{formatDate(incident.date)}</span>
+                                  {incident.time && (
+                                    <>
+                                      <span className={`mx-2 ${subTextColor}`}>•</span>
+                                      <FaClock className={`mr-2 ${subTextColor}`} />
+                                      <span className={subTextColor}>{incident.time}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </td>
-                          <td className={`py-3 px-4 ${textColor}`}>{formatDate(incident.date)}</td>
-                          <td className={`py-3 px-4`}>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              incident.status === 'Pending' 
-                                ? isDarkMode ? 'bg-yellow-900/40 text-yellow-300' : 'bg-yellow-100 text-yellow-800'
-                                : incident.status === 'In Progress' 
-                                  ? isDarkMode ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-800'
-                                  : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {incident.status}
-                            </span>
-                          </td>
-                          <td className={`py-3 px-4`}>
-                            <div className="flex items-center space-x-2">
+                            
+                            <div className="flex flex-wrap items-center gap-2">
                               <motion.button
                                 variants={buttonVariants}
                                 whileHover="hover"
                                 whileTap="tap"
                                 onClick={() => handleViewDetails(incident)}
-                                className={`${buttonPrimary} text-white py-1 px-3 rounded-lg text-sm flex items-center`}
+                                className={`${buttonPrimary} text-white py-1.5 px-3 rounded-lg text-sm flex items-center`}
                               >
                                 <FaEye className="mr-1.5" /> Details
                               </motion.button>
@@ -763,7 +780,7 @@ const ViewReportedIncidents = ({
                                   visibleLocations[incident._id] 
                                     ? isDarkMode ? 'bg-red-600 hover:bg-red-700' : 'bg-red-500 hover:bg-red-600'
                                     : buttonSuccess
-                                } text-white py-1 px-3 rounded-lg text-sm flex items-center`}
+                                } text-white py-1.5 px-3 rounded-lg text-sm flex items-center`}
                               >
                                 <FaMapMarked className="mr-1.5" /> 
                                 {visibleLocations[incident._id] ? 'Hide' : 'Show'}
@@ -774,18 +791,60 @@ const ViewReportedIncidents = ({
                                 whileHover={!responseState.disabled && "hover"}
                                 whileTap={!responseState.disabled && "tap"}
                                 onClick={() => !responseState.disabled && handleRespond(incident)}
-                                className={`py-1 px-3 rounded-lg text-sm text-white flex items-center ${responseState.className}`}
+                                className={`py-1.5 px-3 rounded-lg text-sm text-white flex items-center ${responseState.className}`}
                                 disabled={responseState.disabled}
                               >
                                 <FaStreetView className="mr-1.5" /> {responseState.text}
                               </motion.button>
                             </div>
-                          </td>
-                        </motion.tr>
+                          </div>
+                          
+                          <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {/* Location information */}
+                            <div>
+                              <h4 className={`text-sm font-medium ${subTextColor} mb-1 flex items-center`}>
+                                <FaMapMarkerAlt className="mr-1.5" /> Location
+                              </h4>
+                              <p className={`${textColor} text-sm`}>
+                                {incident.address || incident.location || "Location not specified"}
+                              </p>
+                              {incident.locationNote && (
+                                <p className={`${subTextColor} text-xs mt-1 italic`}>
+                                  Note: {incident.locationNote}
+                                </p>
+                              )}
+                            </div>
+                            
+                            {/* Reporter information */}
+                            <div>
+                              <h4 className={`text-sm font-medium ${subTextColor} mb-1 flex items-center`}>
+                                <FaUser className="mr-1.5" /> Reported By
+                              </h4>
+                              <p className={`${textColor} text-sm`}>
+                                {incident.fullName || 'Anonymous'}
+                              </p>
+                              {incident.contactNumber && (
+                                <p className={`${subTextColor} text-xs mt-1 flex items-center`}>
+                                  <FaPhoneAlt className="mr-1.5" /> {incident.contactNumber}
+                                </p>
+                              )}
+                            </div>
+                            
+                            {/* Description */}
+                            <div>
+                              <h4 className={`text-sm font-medium ${subTextColor} mb-1 flex items-center`}>
+                                <FaInfoCircle className="mr-1.5" /> Description
+                              </h4>
+                              <p className={`${textColor} text-sm line-clamp-2`}>
+                                {incident.description || "No description provided"}
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
               </div>
               
               {/* Mobile view */}
@@ -793,7 +852,7 @@ const ViewReportedIncidents = ({
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
-                className="md:hidden"
+                className="mobile-view"
               >
                 {filteredIncidents.map((incident, index) => (
                   <IncidentCard 
@@ -808,7 +867,7 @@ const ViewReportedIncidents = ({
         </div>
       </motion.div>
 
-      {/* Incident Details Modal */}
+      {/* Incident Details Modal - unchanged */}
       <AnimatePresence>
         {selectedIncidentState && (
           <motion.div 
@@ -977,4 +1036,3 @@ const ViewReportedIncidents = ({
 };
 
 export default ViewReportedIncidents;
-

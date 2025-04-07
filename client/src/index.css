@@ -96,6 +96,33 @@ h1, h2, h3, h4, h5, h6 {
   display: none !important; /* For Chrome, Safari, and Opera */
 }
 
+/* Add thin scrollbar styles */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.7);
+}
+
+/* Dark mode scrollbar */
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(75, 85, 99, 0.5);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.7);
+}
+
 /* Form inputs with theme awareness */
 .form-input, .form-select, .form-textarea {
   background-color: var(--card-bg);
@@ -692,6 +719,128 @@ body.dark-mode {
     top: -6px !important;
     right: 20px !important;
     z-index: 2 !important;
+  }
+}
+
+/* Add these styles to ensure smooth scrolling behavior across all modals */
+
+/* Enable smooth scrolling globally */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Fix for iOS momentum scrolling */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent body scrolling when modals are open */
+body.modal-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+/* Ensure modal content is always scrollable on small screens */
+@media (max-height: 700px) {
+  .modal-content {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+}
+
+/* Fix iOS issue with fixed position when keyboard appears */
+@supports (-webkit-touch-callout: none) {
+  .ios-fixed {
+    position: absolute;
+  }
+}
+
+/* Add these responsive fixes for tables */
+
+/* Ensure tables display properly on smaller screens */
+@media (max-width: 1366px) {
+  table {
+    display: table;
+    width: 100%;
+  }
+  
+  th, td {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    font-size: 0.85rem !important;
+  }
+  
+  /* Make sure action buttons are visible */
+  .action-button {
+    white-space: nowrap;
+    padding: 0.375rem 0.5rem !important;
+  }
+  
+  /* Optimize space for status badges */
+  .status-badge {
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  /* Ensure modal content has proper max height */
+  .modal-content {
+    max-height: 75vh;
+  }
+}
+
+/* Hide horizontal scrollbar unless needed */
+.overflow-x-auto::-webkit-scrollbar {
+  height: 8px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 4px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-track {
+  background-color: rgba(229, 231, 235, 0.2);
+}
+
+/* Responsive media queries */
+@media (max-width: 768px) {
+  /* For mobile displays */
+  .desktop-view {
+    display: none !important;
+  }
+  
+  .mobile-view {
+    display: block !important;
+  }
+  
+  .table-responsive {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (min-width: 769px) {
+  /* For desktop displays */
+  .desktop-view {
+    display: block !important;
+  }
+  
+  .mobile-view {
+    display: none !important;
+  }
+}
+
+/* Improve table responsiveness */
+@media (max-width: 768px) {
+  .table-responsive {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
 

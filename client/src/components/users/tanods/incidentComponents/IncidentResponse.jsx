@@ -819,7 +819,7 @@ const RespondToIncident = ({
       initial={{ opacity: 0 }} 
       animate={{ opacity: 1 }} 
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-[1050] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-[1050] flex items-start justify-center overflow-y-auto"
       style={{ touchAction: 'none' }}
       onTouchMove={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
@@ -829,11 +829,11 @@ const RespondToIncident = ({
         initial="hidden"
         animate="visible"
         exit="exit"
-        className={`w-full max-w-2xl overflow-hidden rounded-xl shadow-2xl ${cardBg}`}
+        className={`w-full max-w-2xl overflow-hidden rounded-xl shadow-2xl ${cardBg} my-4 mx-4`}
         onClick={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* Header - fixed at the top */}
         <div className={`px-6 py-4 border-b ${borderColor} flex justify-between items-center bg-gradient-to-r ${
           selectedIncident.incidentClassification === 'Emergency Incident' 
             ? (isDarkMode ? 'from-red-900/30 to-red-800/10' : 'from-red-100 to-red-50') 
@@ -877,10 +877,10 @@ const RespondToIncident = ({
           </div>
         </div>
 
-        {/* Body */}
+        {/* Body - scrollable content */}
         <div 
-          className="p-6"
-          style={{ touchAction: 'pan-y' }}
+          className="max-h-[calc(100vh-200px)] overflow-y-auto p-6"
+          style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
           onTouchMove={(e) => e.stopPropagation()}
         >
           <motion.div

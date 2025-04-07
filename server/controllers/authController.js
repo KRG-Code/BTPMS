@@ -644,13 +644,37 @@ exports.deleteRating = async (req, res) => {
 
 // Create a new schedule
 exports.createSchedule = async (req, res) => {
-  const { unit, tanods, startTime, endTime, patrolArea } = req.body;
+  const { unit, tanods, startTime, endTime, patrolArea, scheduleID } = req.body;
 
   try {
     if (!unit || !tanods || !startTime || !endTime) {
       return res.status(400).json({ message: "All fields are required" });
     }
-    const status = new Date(startTime) > new Date() ? 'Upcoming' : 'Ongoing';
+    
+    // Add validation for minimum number of tanods
+    if (!Array.isArray(tanods) || tanods.length < 2) {
+      return res.status(400).json({ message: "At least 2 tanods are required for a schedule" });
+    }
+    
+    // Use the exact date and time provided from the client
+    const startDateTime = new Date(startTime);
+    const endDateTime = new Date(endTime);
+    
+    if (endDateTime <= startDateTime) {
+      return res.status(400).json({ message: "End time must be after start time" });
+    }
+    
+    // Determine status based on current time and schedule dates
+    const now = new Date();
+    let status;
+    
+    if (startDateTime > now) {
+      status = 'Upcoming';
+    } else if (endDateTime < now) {
+      status = 'Completed';
+    } else {
+      status = 'Ongoing';
+    }
 
     const schedule = new Schedule({
       unit,
@@ -660,12 +684,24 @@ exports.createSchedule = async (req, res) => {
       patrolArea,
       status,
     });
+
+    // Set scheduleID if provided, otherwise it will use the default generator
+    if (scheduleID) {
+      schedule.scheduleID = scheduleID;
+    }
+
+    // Initialize patrolStatus for each tanod
+    schedule.patrolStatus = tanods.map(tanodId => ({
+      tanodId,
+      status: 'Not Started',
+    }));
+
     await schedule.save();
 
     // Create a notification for each Tanod in the schedule
     const notifications = tanods.map(tanodId => ({
       userId: tanodId,
-      message: `You have new patrol schedule!, your group is ${unit}.`,
+      message: `You have new patrol schedule! Your shift is ${unit}.`,
     }));
     await Notification.insertMany(notifications);
 
@@ -712,7 +748,7 @@ exports.getScheduleById = async (req, res) => {
 
 // Update a schedule
 exports.updateSchedule = async (req, res) => {
-  const { unit, tanods, startTime, endTime, patrolArea } = req.body;
+  const { unit, tanods, startTime, endTime, patrolArea, scheduleID } = req.body;
 
   try {
     const schedule = await Schedule.findById(req.params.scheduleId);
@@ -720,25 +756,81 @@ exports.updateSchedule = async (req, res) => {
       return res.status(404).json({ message: "Schedule not found" });
     }
 
+    // Add validation for minimum number of tanods when updating
+    if (tanods && (tanods.length < 2)) {
+      return res.status(400).json({ message: "At least 2 tanods are required for a schedule" });
+    }
+
+    // If both times are provided, validate start time is before end time
+    if (startTime && endTime) {
+      const startDateTime = new Date(startTime);
+      const endDateTime = new Date(endTime);
+      
+      if (endDateTime <= startDateTime) {
+        return res.status(400).json({ message: "End time must be after start time" });
+      }
+    }
+
     // Update schedule fields
     schedule.unit = unit || schedule.unit;
-    schedule.tanods = tanods || schedule.tanods;
-    schedule.startTime = startTime || schedule.startTime;
-    schedule.endTime = endTime || schedule.endTime;
-    schedule.patrolArea = patrolArea || schedule.patrolArea;
-    schedule.status = new Date(startTime) > new Date() ? 'Upcoming' : 'Ongoing';
+    
+    // Handle tanods update - only update if there's a change to avoid unnecessary work
+    if (tanods && JSON.stringify(tanods) !== JSON.stringify(schedule.tanods)) {
+      // Find new tanods that were not in the previous version
+      const existingTanods = schedule.tanods.map(t => t.toString());
+      const newTanods = tanods.filter(t => !existingTanods.includes(t));
+      
+      // Update the tanods array
+      schedule.tanods = tanods;
+      
+      // Update patrolStatus array to add new tanods
+      newTanods.forEach(tanodId => {
+        if (!schedule.patrolStatus.some(ps => ps.tanodId.toString() === tanodId)) {
+          schedule.patrolStatus.push({ 
+            tanodId,  
+            status: 'Not Started' 
+          });
+        }
+      });
+      
+      // Remove patrol status entries for tanods that are no longer in the schedule
+      schedule.patrolStatus = schedule.patrolStatus.filter(ps => 
+        tanods.includes(ps.tanodId.toString()));
+    }
+
+    // Update other fields
+    if (startTime) schedule.startTime = startTime;
+    if (endTime) schedule.endTime = endTime;      
+    if (patrolArea) schedule.patrolArea = patrolArea;
+
+    // Determine status based on current time and updated schedule dates
+    const now = new Date();
+    const updatedStartTime = new Date(startTime || schedule.startTime);
+    const updatedEndTime = new Date(endTime || schedule.endTime);
+    
+    if (updatedStartTime > now) {
+      schedule.status = 'Upcoming';
+    } else if (updatedEndTime < now) {
+      schedule.status = 'Completed';
+    } else {
+      schedule.status = 'Ongoing';
+    }
+
+    // Update scheduleID if provided
+    if (scheduleID) {
+      schedule.scheduleID = scheduleID;
+    }
 
     await schedule.save();
 
+    // Create notifications for tanods about the update
     const notifications = tanods.map(tanodId => ({
       userId: tanodId,
       message: `Your patrol schedule has been updated!`,
     }));
     await Notification.insertMany(notifications);
 
-    res
-      .status(200)
-      .json({ message: "Schedule updated successfully", schedule });
+    res.status(200).json({ message: "Schedule updated successfully", schedule });
   } catch (error) {
     console.error("Error updating schedule:", error.message);
     res.status(500).json({ message: "Server error", error: error.message });
@@ -762,7 +854,6 @@ exports.deleteSchedule = async (req, res) => {
 // Fetch members of a specific schedule
 exports.getScheduleMembers = async (req, res) => {
   const { id } = req.params;
-
   try {
     // Populate additional fields like profilePicture and contactNumber
     const schedule = await Schedule.findById(id).populate(
@@ -772,7 +863,6 @@ exports.getScheduleMembers = async (req, res) => {
     if (!schedule) {
       return res.status(404).json({ message: "Schedule not found" });
     }
-
     res.status(200).json({ tanods: schedule.tanods });
   } catch (error) {
     console.error("Error fetching schedule members:", error);
@@ -783,16 +873,12 @@ exports.getScheduleMembers = async (req, res) => {
 // Fetch schedules for a specific Tanod
 exports.getSchedulesForTanod = async (req, res) => {
   const { userId } = req.params;
-
   try {
     const schedules = await Schedule.find({ tanods: userId })
       .populate("tanods", "firstName lastName profilePicture contactNumber")
       .populate("patrolArea", "legend coordinates color"); // Populate patrolArea with necessary fields
-
     if (!schedules.length) {
-      return res
-        .status(404)
-        .json({ message: "No schedules found for this Tanod." });
+      return res.status(404).json({ message: "No schedules found for this Tanod." });
     }
     res.status(200).json(schedules);
   } catch (error) {
@@ -855,7 +941,6 @@ exports.endPatrol = async (req, res) => {
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });
     }
-
     // Find the patrol status for this user
     const patrolStatus = schedule.patrolStatus.find(
       status => status.tanodId.toString() === userId.toString()
@@ -878,8 +963,6 @@ exports.endPatrol = async (req, res) => {
       schedule.status = 'Completed';
     }
 
-    await schedule.save();
-
     // Emit the update through WebSocket
     const io = require('../websocket').getIO();
     io.to('schedules').emit('scheduleUpdate', {
@@ -887,11 +970,12 @@ exports.endPatrol = async (req, res) => {
       schedule
     });
 
+    await schedule.save();
+
     res.status(200).json({ 
       message: 'Patrol ended successfully',
       schedule
     });
-
   } catch (error) {
     console.error('Error ending patrol:', error);
     res.status(500).json({ 
@@ -927,8 +1011,8 @@ exports.savePatrolLogs = async (req, res) => {
       return res.status(404).json({ message: 'Schedule not found' });
     }
     logs.forEach(log => {
-      schedule.patrolLogs.push({
-        userId: req.user.id,
+      schedule.patrolLogs.push({ 
+        userId: req.user.id, 
         log: log.report,
         timestamp: new Date(log.timestamp),
         scheduleId: scheduleId, // Ensure the schedule ID is saved with the log
@@ -950,7 +1034,6 @@ exports.getPatrolLogs = async (req, res) => {
       return res.status(400).json({ message: 'Invalid schedule ID' });
     }
     const schedule = await Schedule.findById(scheduleId);
-
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });
     }
@@ -993,10 +1076,10 @@ exports.getPatrolStats = async (req, res) => {
     const userObjectId = new mongoose.Types.ObjectId(userId);
     
     // Get all schedules where this user is a tanod
-    const schedules = await Schedule.find({
+    const schedules = await Schedule.find({ 
       tanods: userObjectId
     });
-    
+
     // Calculate stats
     const totalPatrols = schedules.length;
     const completedPatrols = schedules.filter(s => s.status === 'Completed').length;
@@ -1013,7 +1096,7 @@ exports.getPatrolStats = async (req, res) => {
       const monthName = date.toLocaleString('default', { month: 'short' });
       const count = schedules.filter(s => {
         const scheduleDate = new Date(s.startTime);
-        return scheduleDate.getMonth() === date.getMonth() &&
+        return scheduleDate.getMonth() === date.getMonth() && 
                scheduleDate.getFullYear() === date.getFullYear();
       }).length;
       return { name: monthName, count };
@@ -1060,14 +1143,15 @@ exports.getIncidentStats = async (req, res) => {
     const incidents = await IncidentReport.find({
       responder: userObjectId
     });
-    
+
+    // Calculate stats
     const totalResponses = incidents.length;
     const resolvedIncidents = incidents.filter(i => i.status === 'Resolved').length;
     
     // Calculate response rate - properly calculate based on resolved/total
     const responseRate = totalResponses > 0 ? 
         ((resolvedIncidents / totalResponses) * 100).toFixed(1) : 0;
-
+    
     // Calculate average response time - use createdAt instead of date field for accuracy
     const responseTimes = incidents.map(i => {
       if (i.respondedAt && i.createdAt) {
@@ -1075,7 +1159,6 @@ exports.getIncidentStats = async (req, res) => {
       }
       return null;
     }).filter(Boolean);
-
     const averageResponseTime = responseTimes.length > 0 ?
         Math.round(responseTimes.reduce((a, b) => a + b) / responseTimes.length) : 0;
     
@@ -1139,7 +1222,7 @@ exports.getAttendanceStats = async (req, res) => {
     });
 
     const totalScheduled = schedules.length;
-    
+
     // Find schedules where the user actually participated (has patrolStatus entry)
     const attendedSchedules = schedules.filter(schedule => 
       schedule.patrolStatus.some(status => 
@@ -1147,7 +1230,7 @@ exports.getAttendanceStats = async (req, res) => {
         (status.status === 'Started' || status.status === 'Completed')
       )
     );
-    
+
     const attended = attendedSchedules.length;
     const attendanceRate = totalScheduled > 0 ? 
         ((attended / totalScheduled) * 100).toFixed(1) : 0;
@@ -1173,7 +1256,7 @@ exports.getAttendanceStats = async (req, res) => {
         totalDelayMinutes += delayInMinutes;
       }
     });
-    
+
     const onTimeRate = attended > 0 ? 
         ((onTimeCount / attended) * 100).toFixed(1) : 0;
     const averageDelay = attended > 0 ? 
@@ -1200,17 +1283,17 @@ exports.getEquipmentStats = async (req, res) => {
     const userObjectId = new mongoose.Types.ObjectId(userId);
     
     // Get all equipment borrowed by this user
-    const equipment = await Equipment.find({
+    const equipment = await Equipment.find({ 
       user: userObjectId
     }).sort({ borrowDate: -1 });
-    
+
     const totalBorrowed = equipment.length;
     
     // Fix: Check if returnDate exists AND is after January 1, 1971 to consider it returned
     const currentlyBorrowed = equipment.filter(item => {
       return !item.returnDate || (new Date(item.returnDate).getFullYear() <= 1970);
     }).length;
-    
+
     // Calculate return rate - only count properly returned items
     let returnedOnTime = 0;
     equipment.forEach(item => {
@@ -1225,7 +1308,7 @@ exports.getEquipmentStats = async (req, res) => {
         }
       }
     });
-    
+
     const returnRate = totalBorrowed > 0 ? 
         ((returnedOnTime / totalBorrowed) * 100).toFixed(1) : 0;
     
@@ -1257,10 +1340,10 @@ exports.getAssistanceStats = async (req, res) => {
     const userObjectId = new mongoose.Types.ObjectId(userId);
     
     // Get all assistance requests made by this user
-    const requests = await AssistanceRequest.find({
+    const requests = await AssistanceRequest.find({ 
       requesterId: userObjectId
     });
-    
+
     const totalRequests = requests.length;
     const approved = requests.filter(req => 
       req.status === 'Processing' || req.status === 'Deployed' || req.status === 'Completed'
@@ -1284,7 +1367,7 @@ exports.getAssistanceStats = async (req, res) => {
         responsesWithTime++;
       }
     });
-    
+
     const avgResponseTime = responsesWithTime > 0 ? 
         Math.round(totalResponseTime / responsesWithTime) : 0;
 
@@ -1323,12 +1406,12 @@ exports.getPerformanceComparison = async (req, res) => {
     
     // Sort by patrol count
     patrolData.sort((a, b) => b.patrolCount - a.patrolCount);
-    
+
     // Find user's rank in patrols
     const patrolsRank = patrolData.findIndex(data => data.tanodId.toString() === userId) + 1;
     const patrolsPercentile = patrolsRank > 0 ? 
         Math.round((totalTanods - patrolsRank) / totalTanods * 100) : 0;
-    
+
     // Get incident data for all tanods
     const incidentData = await Promise.all(tanods.map(async tanod => {
       const incidents = await IncidentReport.find({ responder: tanod._id });
@@ -1340,12 +1423,12 @@ exports.getPerformanceComparison = async (req, res) => {
     
     // Sort by incident count
     incidentData.sort((a, b) => b.incidentCount - a.incidentCount);
-    
+
     // Find user's rank in incidents
     const incidentsRank = incidentData.findIndex(data => data.tanodId.toString() === userId) + 1;
     const incidentsPercentile = incidentsRank > 0 ? 
         Math.round((totalTanods - incidentsRank) / totalTanods * 100) : 0;
-    
+
     // Get rating data for all tanods
     const ratingData = await Promise.all(tanods.map(async tanod => {
       const ratings = await TanodRating.findOne({ tanodId: tanod._id });
@@ -1363,7 +1446,7 @@ exports.getPerformanceComparison = async (req, res) => {
     
     // Sort by rating
     ratingData.sort((a, b) => b.avgRating - a.avgRating);
-    
+
     // Find user's rank in ratings
     const ratingRank = ratingData.findIndex(data => data.tanodId.toString() === userId) + 1;
     const ratingPercentile = ratingRank > 0 ? 
@@ -1390,7 +1473,6 @@ exports.getPublicTanodList = async (req, res) => {
     const tanods = await User.find({ userType: 'tanod' })
       .select('_id firstName lastName profilePicture')
       .sort({ firstName: 1 });
-      
     res.status(200).json(tanods);
   } catch (error) {
     console.error('Error fetching public tanod list:', error);
@@ -1428,7 +1510,6 @@ exports.initiateTanodLogin = async (req, res) => {
     // Generate a verification code
     const verificationCode = generateVerificationCode();
 
-    // Save verification code to database
     // First, delete any existing codes for this user
     await VerificationCode.deleteMany({ userId: user._id });
     
@@ -1606,7 +1687,7 @@ exports.forgotPassword = async (req, res) => {
     
     // Delete any existing tokens for this user
     await PasswordResetToken.deleteMany({ userId: user._id });
-    
+
     // Create a new token record
     await PasswordResetToken.create({
       userId: user._id,
@@ -1615,7 +1696,7 @@ exports.forgotPassword = async (req, res) => {
 
     // Create the reset link
     const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
-    
+
     // Send the password reset email
     const emailSent = await sendPasswordResetEmail(
       user.email,
@@ -1675,6 +1756,57 @@ exports.resetPassword = async (req, res) => {
     });
   } catch (error) {
     console.error("Reset Password Error:", error.message);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Get today's schedules for a specific Tanod - with improved date handling
+exports.getTodaySchedulesForTanod = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    // Set up date range to include:
+    // 1. Today's schedules 
+    // 2. Yesterday's schedules that might still be active (end time > today start)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // Find schedules that:
+    // 1. Start today OR
+    // 2. Started yesterday but end today or later OR
+    // 3. Have status 'Ongoing' (to catch any active patrols)
+    const schedules = await Schedule.find({
+      tanods: userId,
+      $or: [
+        // Today's schedules
+        { startTime: { $gte: today, $lt: tomorrow } },
+        // Yesterday's schedules that end today or later
+        { 
+          startTime: { $gte: yesterday, $lt: today },
+          endTime: { $gte: today }
+        },
+        // Any ongoing schedules regardless of dates
+        { 
+          status: 'Ongoing',
+          tanods: userId,
+          "patrolStatus.tanodId": userId,
+          "patrolStatus.status": "Started"
+        }
+      ]
+    })
+    .populate("tanods", "firstName lastName profilePicture contactNumber")
+    .populate("patrolArea", "legend coordinates color");
+
+    // Return whatever we find (even if empty)
+    res.status(200).json(schedules);
+  } catch (error) {
+    console.error("Error fetching today's schedules for Tanod:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };

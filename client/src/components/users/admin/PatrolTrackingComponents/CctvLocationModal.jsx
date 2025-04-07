@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap, Polygon } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaPlus, FaTrash, FaEdit, FaTimes, FaSearch, FaVideo, FaMapMarkerAlt } from 'react-icons/fa';
+import { FaPlus, FaTrash, FaEdit, FaTimes, FaSearch, FaVideo, FaMapMarkerAlt, FaLayerGroup } from 'react-icons/fa';
 import { useTheme } from '../../../../contexts/ThemeContext';
 
 // Animation variants
@@ -145,6 +145,8 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
+  const [patrolAreas, setPatrolAreas] = useState([]);
+  const [showPatrolAreas, setShowPatrolAreas] = useState(false);
 
   // Function to fetch CCTV locations from backend
   const fetchCctvLocations = async () => {
@@ -163,9 +165,27 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
     }
   };
 
+  // Function to fetch patrol areas
+  const fetchPatrolAreas = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/polygons`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setPatrolAreas(response.data);
+    } catch (error) {
+      console.error('Error fetching patrol areas:', error);
+      toast.error('Failed to load patrol areas');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       fetchCctvLocations();
+      fetchPatrolAreas();
     }
   }, [isOpen]);
 
@@ -313,6 +333,64 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
   const getFormTitle = () => isEditing ? 'Edit CCTV' : 'Add New CCTV';
   const getSaveButtonText = () => isEditing ? 'Update Location' : 'Save Location';
 
+  // Add a proper close function to reset state and clean up
+  const handleClose = () => {
+    // Reset all state variables to their initial values
+    setIsAddingCctv(false);
+    setIsEditing(false);
+    setEditingCctv(null);
+    setNewCctv({ name: '', description: '', latitude: '', longitude: '' });
+    setCanMoveMarker(false);
+    setSearchTerm('');
+    setShowConfirmDialog(false);
+    setConfirmAction(null);
+    setShowPatrolAreas(false);
+    
+    // Dismiss any open toasts
+    toast.dismiss();
+    
+    // Call the parent onClose function
+    onClose();
+  };
+
+  const togglePatrolAreas = () => {
+    setShowPatrolAreas(prev => !prev);
+  };
+
+  // Create a component to render patrol areas on the map
+  const PatrolAreasLayer = () => {
+    if (!showPatrolAreas || patrolAreas.length === 0) return null;
+
+    return (
+      <>
+        {patrolAreas.map((area) => {
+          if (!area.coordinates || area.coordinates.length === 0) return null;
+          
+          return (
+            <Polygon
+              key={area._id}
+              positions={area.coordinates.map(({ lat, lng }) => [lat, lng])}
+              pathOptions={{
+                color: area.color || '#3388ff',
+                fillOpacity: 0.2,
+                weight: 2
+              }}
+            >
+              {area.legend && (
+                <Tooltip permanent direction="center">
+                  {area.legend}
+                </Tooltip>
+              )}
+            </Polygon>
+          );
+        })}
+      </>
+    );
+  };
+
+  // Import Tooltip from react-leaflet
+  const { Tooltip } = require('react-leaflet');
+
   if (!isOpen) return null;
 
   return (
@@ -322,6 +400,7 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-[3000] flex items-center justify-center p-4"
+        onClick={handleClose} // Add onClick handler to close modal when clicking outside
       >
         <motion.div
           variants={modalVariants}
@@ -331,6 +410,7 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
           className={`w-11/12 max-w-7xl rounded-xl shadow-xl overflow-hidden h-[90vh] flex flex-col md:flex-row ${
             isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'
           }`}
+          onClick={(e) => e.stopPropagation()} // Stop propagation to prevent closing when clicking on modal content
         >
           {/* Header - Mobile Only */}
           <div className={`md:hidden flex justify-between items-center p-4 border-b ${
@@ -346,7 +426,7 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
               variants={buttonVariants}
               whileHover="hover"
               whileTap="tap"
-              onClick={onClose}
+              onClick={handleClose} // Use handleClose instead of onClose
               className={`p-2 rounded-full ${
                 isDarkMode 
                 ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
@@ -359,6 +439,28 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
 
           {/* Left side - Map */}
           <div className="w-full md:w-2/3 h-1/2 md:h-full relative">
+            {/* Add Patrol Area Toggle Button */}
+            <div className="absolute top-4 right-4 z-20">
+              <motion.button
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={togglePatrolAreas}
+                className={`p-3 rounded-lg shadow-md ${
+                  showPatrolAreas 
+                    ? isDarkMode 
+                      ? 'bg-indigo-600 text-white' 
+                      : 'bg-indigo-500 text-white'
+                    : isDarkMode 
+                      ? 'bg-gray-700 text-gray-300' 
+                      : 'bg-white text-gray-700'
+                }`}
+                title={showPatrolAreas ? "Hide Patrol Areas" : "Show Patrol Areas"}
+              >
+                <FaLayerGroup />
+              </motion.button>
+            </div>
+
             <MapContainer
               center={[14.7356, 121.0498]}
               zoom={13}
@@ -367,6 +469,9 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
             >
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
               <MapClickHandler />
+              
+              {/* Add Patrol Areas Layer */}
+              <PatrolAreasLayer />
               
               {/* Display existing CCTV markers */}
               {cctvLocations.map((cctv) => (
@@ -408,7 +513,7 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
                 variants={buttonVariants}
                 whileHover="hover"
                 whileTap="tap"
-                onClick={onClose}
+                onClick={handleClose} // Use handleClose instead of onClose
                 className={`p-2 rounded-full ${
                   isDarkMode 
                   ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
@@ -420,7 +525,7 @@ const CctvLocationModal = ({ isOpen, onClose }) => {
             </div>
 
             {/* Search and Add Controls */}
-            <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} h-full overflow-y-auto`}>
               <div className="flex items-center gap-2 mb-4">
                 <div className="relative flex-grow">
                   <FaSearch className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${
