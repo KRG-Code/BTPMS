@@ -214,6 +214,12 @@ exports.updateUserProfile = async (req, res) => {
       return res.status(400).json({ message: "Last name is required" });
     }
 
+    // Special handling for team leader status toggle
+    if (req.body.hasOwnProperty('isTeamLeader') && user.userType === 'tanod') {
+      console.log(`Updating team leader status for ${user.firstName} ${user.lastName} to: ${req.body.isTeamLeader}`);
+      user.isTeamLeader = req.body.isTeamLeader;
+    }
+
     // Update other fields
     const allowedFields = [
       'firstName',
@@ -855,10 +861,10 @@ exports.deleteSchedule = async (req, res) => {
 exports.getScheduleMembers = async (req, res) => {
   const { id } = req.params;
   try {
-    // Populate additional fields like profilePicture and contactNumber
+    // Populate additional fields like profilePicture, contactNumber, and isTeamLeader
     const schedule = await Schedule.findById(id).populate(
       "tanods",
-      "firstName lastName profilePicture contactNumber"
+      "firstName lastName profilePicture contactNumber isTeamLeader"
     );
     if (!schedule) {
       return res.status(404).json({ message: "Schedule not found" });
@@ -1152,13 +1158,15 @@ exports.getIncidentStats = async (req, res) => {
     const responseRate = totalResponses > 0 ? 
         ((resolvedIncidents / totalResponses) * 100).toFixed(1) : 0;
     
-    // Calculate average response time - use createdAt instead of date field for accuracy
-    const responseTimes = incidents.map(i => {
-      if (i.respondedAt && i.createdAt) {
-        return Math.max(0, (new Date(i.respondedAt) - new Date(i.createdAt)) / (1000 * 60)); // in minutes
-      }
-      return null;
-    }).filter(Boolean);
+    // Calculate average response time with outlier handling
+    const responseTimes = incidents
+      .filter(i => i.status === 'Resolved' && i.respondedAt && i.createdAt) // Only consider resolved incidents
+      .map(i => {
+        const responseTimeMinutes = Math.max(0, (new Date(i.respondedAt) - new Date(i.createdAt)) / (1000 * 60));
+        // Cap extremely large values (e.g., cap at 24 hours = 1440 minutes)
+        return Math.min(responseTimeMinutes, 1440);
+      });
+    
     const averageResponseTime = responseTimes.length > 0 ?
         Math.round(responseTimes.reduce((a, b) => a + b) / responseTimes.length) : 0;
     

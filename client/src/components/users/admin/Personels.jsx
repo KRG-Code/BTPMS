@@ -3,12 +3,14 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaUserPlus, FaSearch, FaFilter, FaSyncAlt, FaUserCircle } from 'react-icons/fa';
+import { FaUserPlus, FaSearch, FaFilter, FaSyncAlt, FaUserCircle, FaChartBar } from 'react-icons/fa';
 import { useTheme } from '../../../contexts/ThemeContext'; // Import useTheme hook
 
 import TanodTable from './PersonelsComponents/TanodTable';
 import AddTanodModal from './PersonelsComponents/AddTanodModal';
 import EditTanodModal from './PersonelsComponents/EditTanodModal';
+import AllTanodsReportModal from './PersonelsComponents/AllTanodsReportModal';
+import PasswordVerificationModal from './PersonelsComponents/PasswordVerificationModal';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -38,6 +40,8 @@ export default function TanodPersonels() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   useEffect(() => {
     const fetchTanods = async () => {
@@ -310,6 +314,123 @@ export default function TanodPersonels() {
     setRefreshTrigger(prev => prev + 1);
   };
 
+  const handleToggleTeamLeader = async (tanodId, isTeamLeader) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please log in.");
+      return;
+    }
+
+    // Get the tanod's name for better context in the confirmation message
+    const tanod = tanods.find(t => t._id === tanodId);
+    const tanodName = tanod ? `${tanod.firstName} ${tanod.lastName}` : "this tanod";
+    
+    // Show confirmation toast
+    toast.info(
+      <div>
+        <p className="font-medium mb-2">
+          {isTeamLeader 
+            ? `Are you sure you want to demote ${tanodName} from team leader status?` 
+            : `Are you sure you want to promote ${tanodName} to team leader?`}
+        </p>
+        <div className="flex justify-end space-x-2 mt-2">
+          <button
+            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+            onClick={async () => {
+              toast.dismiss(); // Close this confirmation prompt
+              
+              // Show a loading toast
+              const loadingToastId = toast.loading(
+                isTeamLeader ? "Demoting tanod..." : "Promoting tanod to team leader..."
+              );
+              
+              try {
+                setLoading(true);
+                const response = await fetch(
+                  `${process.env.REACT_APP_API_URL}/auth/users/${tanodId}`,
+                  {
+                    method: "PUT",
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ isTeamLeader: !isTeamLeader }),
+                  }
+                );
+
+                // Close the loading toast
+                toast.dismiss(loadingToastId);
+
+                if (!response.ok) {
+                  const errorData = await response.json();
+                  throw new Error(errorData.message || `Failed to ${isTeamLeader ? 'demote' : 'promote'} tanod`);
+                }
+
+                const updatedTanod = await response.json();
+                
+                // Verify that the isTeamLeader field was actually updated
+                if (updatedTanod.isTeamLeader === isTeamLeader) {
+                  throw new Error(`Failed to ${isTeamLeader ? 'demote' : 'promote'} tanod. Status did not change.`);
+                }
+
+                // Update the tanods state with the updated tanod
+                setTanods(
+                  tanods.map((tanod) =>
+                    tanod._id === updatedTanod._id ? updatedTanod : tanod
+                  )
+                );
+                
+                setFilteredTanods(
+                  filteredTanods.map((tanod) =>
+                    tanod._id === updatedTanod._id ? updatedTanod : tanod
+                  )
+                );
+
+                // Success message with styled toast
+                toast.success(
+                  <div>
+                    <p className="font-medium">
+                      {updatedTanod.firstName} {updatedTanod.lastName} {isTeamLeader ? 'demoted to regular tanod' : 'promoted to team leader'} successfully!
+                    </p>
+                  </div>,
+                  {
+                    icon: isTeamLeader ? '⬇️' : '⬆️',
+                    className: "bg-white text-gray-800 shadow-xl rounded-lg border-l-4 border-blue-500",
+                    autoClose: 3000
+                  }
+                );
+              } catch (error) {
+                console.error("Error updating Tanod team leader status:", error);
+                toast.error(error.message || "An error occurred while updating Tanod team leader status.");
+              } finally {
+                setLoading(false);
+              }
+            }}
+          >
+            Yes, {isTeamLeader ? 'Demote' : 'Promote'}
+          </button>
+          <button
+            className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+            onClick={() => toast.dismiss()}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>,
+      {
+        closeButton: false,
+        autoClose: false,
+        position: "top-center",
+        className: "bg-white text-gray-800 shadow-xl rounded-lg border-l-4 border-yellow-500"
+      }
+    );
+  };
+
+  const handleVerificationSuccess = () => {
+    setShowPasswordModal(false);
+    setShowReportModal(true);
+  };
+
   return (
     <motion.div
       initial="hidden"
@@ -326,11 +447,21 @@ export default function TanodPersonels() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            onClick={() => setShowPasswordModal(true)}
+            className={`${isDarkMode ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-purple-500 hover:bg-purple-600 text-white'} px-4 py-2 rounded-md flex items-center mr-2`}
+          >
+            <FaChartBar className="mr-2" /> Generate Report
+          </motion.button>
+          
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => setShowModal(true)}
             className={`${isDarkMode ? 'bg-[#4750eb] hover:bg-[#191f8a] text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-4 py-2 rounded-md flex items-center`}
           >
             <FaUserPlus className="mr-2" /> Add New Tanod
           </motion.button>
+          
           <motion.button
             className={`${isDarkMode ? 'bg-[#080917] text-[#989ce6]' : 'bg-gray-100 text-gray-600'} hover:${isDarkMode ? 'bg-[#0e1022]' : 'bg-gray-200'} p-2 rounded-md`}
             whileHover={{ scale: 1.05 }}
@@ -388,7 +519,7 @@ export default function TanodPersonels() {
           loading={loading}
           handleDeleteTanod={handleDeleteTanod}
           handleEditClick={handleEditClick}
-          isDarkMode={isDarkMode} // Pass isDarkMode to TanodTable
+          handleToggleTeamLeader={handleToggleTeamLeader}
         />
         
         {filteredTanods.length === 0 && !loading && (
@@ -428,6 +559,22 @@ export default function TanodPersonels() {
           />
         )}
       </AnimatePresence>
+
+      {/* Password Verification Modal */}
+      <PasswordVerificationModal 
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+        onVerified={handleVerificationSuccess}
+        isDarkMode={isDarkMode}
+        action="generate a collective performance report"
+      />
+      
+      {/* Report Modal */}
+      <AllTanodsReportModal 
+        isOpen={showReportModal} 
+        onClose={() => setShowReportModal(false)} 
+        isDarkMode={isDarkMode}
+      />
     </motion.div>
   );
 }

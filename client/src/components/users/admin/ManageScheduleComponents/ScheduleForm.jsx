@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaUserCircle, FaTimes, FaCalendarPlus, FaCalendarAlt, FaUsers, FaUserPlus, FaUserMinus, FaClock, FaSun, FaMoon } from 'react-icons/fa';
+import { FaUserCircle, FaTimes, FaCalendarPlus, FaCalendarAlt, FaUsers, FaUserPlus, FaUserMinus, FaClock, FaSun, FaMoon, FaCrown } from 'react-icons/fa';
 import TanodModal from "./TanodModal";
 
 const overlayVariants = {
@@ -177,12 +177,71 @@ const ScheduleForm = ({
     setScheduleID(newID);
   };
 
+  // Use the exact provided times instead of transforming them
+  useEffect(() => {
+    if (!shiftType || !startDate) return;
+    
+    const date = new Date(startDate);
+    let newStartTime, newEndTime;
+    
+    if (shiftType === "Day Shift") {
+      // Set Day Shift times (8am to 8pm)
+      newStartTime = new Date(date);
+      newStartTime.setHours(8, 0, 0);
+      
+      newEndTime = new Date(date);
+      newEndTime.setHours(20, 0, 0);
+      
+      // Ensure end date is same as start date for day shift
+      setEndDate(startDate);
+    } else {
+      // Set Night Shift times (8pm to 8am next day)
+      newStartTime = new Date(date);
+      newStartTime.setHours(20, 0, 0);
+      
+      // Calculate the next day for end date
+      const nextDay = new Date(date);
+      nextDay.setDate(nextDay.getDate() + 1);
+      
+      // Set end time on next day
+      newEndTime = new Date(nextDay);
+      newEndTime.setHours(8, 0, 0);
+      
+      // Update the end date to be the next day for night shift
+      setEndDate(nextDay.toISOString().split('T')[0]);
+    }
+    
+    setStartTime(newStartTime.toISOString());
+    setEndTime(newEndTime.toISOString());
+  }, [shiftType, startDate]);
+
+  // Get the team leader if one is selected
+  const getSelectedTeamLeader = () => {
+    // Check in selected tanods
+    for (const tanodId of selectedTanods) {
+      const tanod = tanods.find(t => t._id === tanodId);
+      if (tanod && tanod.isTeamLeader) {
+        return tanod;
+      }
+    }
+    return null;
+  };
+
+  const hasTeamLeader = !!getSelectedTeamLeader();
+  const selectedTeamLeader = getSelectedTeamLeader();
+
   const handleCreateOrUpdateSchedule = async (e) => {
     e.preventDefault();
 
     // Validate that at least two Tanods are selected
     if (selectedTanods.length < 2) {
       toast.error("Please select at least two Tanods for the schedule.");
+      return;
+    }
+    
+    // Validate that exactly one team leader is selected
+    if (!hasTeamLeader) {
+      toast.error("Please select exactly one team leader for the schedule.");
       return;
     }
     
@@ -462,7 +521,7 @@ const ScheduleForm = ({
             </div>
             <div className="mt-2 text-sm">
               <span className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
-                {shiftType === "Day Shift" ? "8:00 AM - 5:00 PM" : "5:00 PM - 6:00 AM"}
+                {shiftType === "Day Shift" ? "8:00 AM - 8:00 PM" : "8:00 PM - 8:00 AM"}
               </span>
             </div>
           </div>
@@ -500,28 +559,21 @@ const ScheduleForm = ({
               <input
                 type="date"
                 value={endDate}
-                onChange={handleEndDateChange}
+                readOnly={true}
                 className={`w-full px-4 py-2 rounded-lg border ${
                   isDarkMode 
                   ? 'bg-[#080917] border-[#1e2048] text-[#e7e8f4]' 
-                  : 'bg-white border-gray-300 text-gray-900'
+                  : 'bg-gray-100 border-gray-300 text-gray-900'
                 } focus:ring-2 ${
                   isDarkMode ? 'focus:ring-[#4750eb]' : 'focus:ring-[#141db8]'
-                } focus:border-transparent transition duration-200 ${
-                  scheduleStatus !== "Upcoming" ? 'opacity-60 cursor-not-allowed' : ''
-                }`}
-                min={shiftType === "Night Shift" ? 
-                  // For night shift, min date is next day after start date
-                  startDate ? new Date(new Date(startDate).setDate(new Date(startDate).getDate() + 1)).toISOString().split('T')[0] : 
-                  // If no start date, use tomorrow
-                  new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]
-                  : 
-                  // For day shift, min date is start date
-                  startDate || new Date().toISOString().split('T')[0]
-                }
-                required
-                disabled={scheduleStatus !== "Upcoming"}
+                } focus:border-transparent transition duration-200 cursor-not-allowed opacity-70`}
+                disabled={true}
               />
+              <small className={`mt-1 block ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} italic`}>
+                {shiftType === "Day Shift" 
+                  ? "Same day as start date" 
+                  : "Automatically set to next day"}
+              </small>
             </div>
           </div>
 
@@ -569,6 +621,35 @@ const ScheduleForm = ({
               <FaUsers className="inline mr-2" />
               Selected Tanods: {selectedTanods.length > 0 && <span className="ml-1 text-sm font-normal">({selectedTanods.length})</span>}
             </label>
+            
+            {/* Team Leader Status Display */}
+            {selectedTanods.length > 0 && (
+              <div className={`mb-3 p-3 rounded-lg border ${
+                hasTeamLeader
+                  ? isDarkMode ? 'border-yellow-600 bg-yellow-900/20' : 'border-yellow-300 bg-yellow-50'
+                  : isDarkMode ? 'border-red-600 bg-red-900/20' : 'border-red-300 bg-red-50'
+              }`}>
+                <div className="flex items-center">
+                  <FaCrown className={`mr-2 ${
+                    hasTeamLeader
+                      ? isDarkMode ? 'text-yellow-500' : 'text-yellow-600'
+                      : isDarkMode ? 'text-red-500' : 'text-red-600'
+                  }`} />
+                  {hasTeamLeader ? (
+                    <div>
+                      <p className={`font-medium ${isDarkMode ? 'text-yellow-300' : 'text-yellow-800'}`}>
+                        Team Leader: {selectedTeamLeader.firstName} {selectedTeamLeader.lastName}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className={`font-medium ${isDarkMode ? 'text-red-300' : 'text-red-800'}`}>
+                      Please select exactly one team leader
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            
             {/* Action buttons for adding/removing tanods */}
             <div className="flex space-x-3 mb-3"> 
               <motion.button

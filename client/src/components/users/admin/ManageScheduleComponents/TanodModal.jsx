@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaUserCircle, FaSearch, FaUserPlus, FaUserMinus, FaTimes } from 'react-icons/fa';
+import { FaUserCircle, FaSearch, FaUserPlus, FaUserMinus, FaTimes, FaCrown } from 'react-icons/fa';
+import { toast } from 'react-toastify'; // Add this import
 
 const modalVariants = {
   hidden: { opacity: 0, y: -20, scale: 0.95 },
@@ -49,6 +50,32 @@ const TanodModal = ({
   isDarkMode
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedTeamLeader, setSelectedTeamLeader] = useState(null);
+  
+  // Find if there's already a team leader selected
+  useEffect(() => {
+    const findSelectedTeamLeader = () => {
+      // Check in the already selected tanods
+      for (const selectedId of selectedTanods) {
+        const tanod = tanods.find(t => t._id === selectedId);
+        if (tanod && tanod.isTeamLeader) {
+          return selectedId;
+        }
+      }
+      
+      // Check in newly checked tanods
+      for (const checkedId of checkedTanods) {
+        const tanod = tanods.find(t => t._id === checkedId);
+        if (tanod && tanod.isTeamLeader) {
+          return checkedId;
+        }
+      }
+      
+      return null;
+    };
+    
+    setSelectedTeamLeader(findSelectedTeamLeader());
+  }, [selectedTanods, checkedTanods, tanods]);
   
   // Filter tanods based on search term
   const filterTanods = (tanodsList) => {
@@ -59,8 +86,43 @@ const TanodModal = ({
     });
   };
 
+  // Modified toggle handler to manage team leader selections
+  const handleTanodToggle = (tanodId) => {
+    const tanod = tanods.find(t => t._id === tanodId);
+    
+    if (!tanod) return;
+    
+    if (tanod.isTeamLeader) {
+      // If this is a team leader
+      if (checkedTanods.includes(tanodId)) {
+        // Unchecking a team leader - allow it
+        handleToggleCheckbox(tanodId);
+        return;
+      } else if (selectedTeamLeader && selectedTeamLeader !== tanodId) {
+        // Trying to check a different team leader when one is already selected
+        toast.info(
+          <div>
+            <p>Only one team leader can be assigned to a schedule.</p>
+            <p className="text-sm mt-1">Please unselect the current team leader first.</p>
+          </div>
+        );
+        return;
+      }
+    }
+    
+    // For regular tanods or when no team leader conflict exists
+    handleToggleCheckbox(tanodId);
+  };
+
   const filteredAddTanods = filterTanods(tanods.filter(tanod => !selectedTanods.includes(tanod._id)));
   const filteredRemoveTanods = filterTanods(tanods.filter(tanod => selectedTanods.includes(tanod._id)));
+
+  // Helper to check if a tanod can be selected (for disabling UI)
+  const canSelectTanod = (tanod) => {
+    if (!tanod.isTeamLeader) return true;
+    if (checkedTanods.includes(tanod._id)) return true;
+    return !selectedTeamLeader || selectedTeamLeader === tanod._id;
+  };
 
   return (
     <>
@@ -103,6 +165,22 @@ const TanodModal = ({
                 </motion.button>
               </div>
               
+              {/* Team Leader Selection Notice */}
+              <div className={`px-6 py-2 ${
+                isDarkMode ? 'bg-[#191f8a20]' : 'bg-blue-50'
+              }`}>
+                <div className="flex items-center">
+                  <FaCrown className={`mr-2 ${
+                    isDarkMode ? 'text-yellow-500' : 'text-yellow-600'
+                  }`} />
+                  <p className="text-sm">
+                    {selectedTeamLeader 
+                      ? "One team leader is selected (required)" 
+                      : "Please select exactly one team leader"}
+                  </p>
+                </div>
+              </div>
+              
               {/* Search Bar */}
               <div className="px-6 py-4">
                 <div className="relative mb-4">
@@ -140,18 +218,23 @@ const TanodModal = ({
                         custom={index}
                         className={`py-3 flex items-center ${
                           checkedTanods.includes(tanod._id) 
-                          ? isDarkMode ? 'bg-[#191f8a20]' : 'bg-blue-50' 
-                          : ''
+                            ? isDarkMode ? 'bg-[#191f8a20]' : 'bg-blue-50' 
+                            : tanod.isTeamLeader && !canSelectTanod(tanod)
+                              ? isDarkMode ? 'bg-gray-800/30 cursor-not-allowed' : 'bg-gray-100/80 cursor-not-allowed'
+                              : ''
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={checkedTanods.includes(tanod._id)}
-                          onChange={() => handleToggleCheckbox(tanod._id)}
+                          onChange={() => handleTanodToggle(tanod._id)}
+                          disabled={tanod.isTeamLeader && !canSelectTanod(tanod)}
                           className={`form-checkbox h-5 w-5 rounded mr-3 ${
                             isDarkMode
-                            ? 'bg-[#080917] border-[#1e2048] text-green-500'
-                            : 'border-gray-300 text-green-600'
+                              ? 'bg-[#080917] border-[#1e2048] text-green-500'
+                              : 'border-gray-300 text-green-600'
+                          } ${
+                            tanod.isTeamLeader && !canSelectTanod(tanod) ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                         />
                         <div className="flex items-center flex-1">
@@ -164,7 +247,22 @@ const TanodModal = ({
                           ) : (
                             <FaUserCircle className={`w-10 h-10 mr-3 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`} />
                           )}
-                          <span>{tanod.firstName} {tanod.lastName}</span>
+                          <div>
+                            <span className="flex items-center">
+                              {tanod.firstName} {tanod.lastName}
+                              {tanod.isTeamLeader && (
+                                <FaCrown 
+                                  className={`ml-2 ${isDarkMode ? 'text-yellow-500' : 'text-yellow-600'}`} 
+                                  title="Team Leader"
+                                />
+                              )}
+                            </span>
+                            {tanod.isTeamLeader && (
+                              <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Team Leader
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </motion.div>
                     ))
@@ -305,7 +403,22 @@ const TanodModal = ({
                           ) : (
                             <FaUserCircle className={`w-10 h-10 mr-3 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`} />
                           )}
-                          <span>{tanod.firstName} {tanod.lastName}</span>
+                          <div>
+                            <span className="flex items-center">
+                              {tanod.firstName} {tanod.lastName}
+                              {tanod.isTeamLeader && (
+                                <FaCrown 
+                                  className={`ml-2 ${isDarkMode ? 'text-yellow-500' : 'text-yellow-600'}`} 
+                                  title="Team Leader"
+                                />
+                              )}
+                            </span>
+                            {tanod.isTeamLeader && (
+                              <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Team Leader
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </motion.div>
                     ))

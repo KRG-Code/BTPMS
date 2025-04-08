@@ -268,6 +268,8 @@ export const fetchPatrolLogs = async (memberId, scheduleId, setPatrolLogs, setSh
     setShowPatrolLogsModal(true);
   } catch (error) {
     console.error("Error fetching patrol logs:", error);
-    toast.error("Error fetching patrol logs.");
+    // Instead of showing an error toast, we'll just set empty logs and show the modal
+    setPatrolLogs([]);
+    setShowPatrolLogsModal(true);
   }
 };

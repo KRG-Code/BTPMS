@@ -21,6 +21,7 @@ const userSchema = new mongoose.Schema({
   gender: { type: String, enum: ['Male', 'Female', 'Others', 'None'], default: 'None' },
   profilePicture: { type: String },
   userType: { type: String, enum: ['resident', 'tanod', 'admin'], required: true },
+  isTeamLeader: { type: Boolean, default: false }, // New field for tracking team leader status
   isOnline: {
     type: Boolean,
     default: false

@@ -1,98 +1,71 @@
 const mongoose = require('mongoose');
 
 const incidentReportSchema = new mongoose.Schema({
-  incidentClassification: {
-    type: String,
-    enum: ['Normal Incident', 'Emergency Incident'],
-    default: 'Normal Incident',
-  },
   type: {
     type: String,
     required: true,
+    enum: ['Theft', 'Assault', 'Harassment', 'Vandalism', 'Noise Complaint', 'Suspicious Activity', 'Traffic Violation', 'Other']
   },
   location: {
-    type: String,
-    required: true,
-  },
-  // Add human-readable address field
-  address: {
-    type: String,
-    default: null
-  },
-  locationNote: {
-    type: String,
+    type: {
+      type: String,
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number],
+      required: true
+    }
   },
   description: {
     type: String,
-    required: true,
-  },
-  date: {
-    type: Date,
-    required: true,
-  },
-  time: {
-    type: String,
-    required: true,
-  },
-  fullName: {
-    type: String,
-  },
-  contactNumber: {
-    type: String,
+    required: true
   },
   status: {
     type: String,
-    enum: ['Pending', 'In Progress', 'Resolved', 'Rejected'],
+    required: true,
+    enum: ['Pending', 'Assigned', 'In Progress', 'Resolved', 'Closed'],
     default: 'Pending'
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  log: {
-    type: String,
-    default: null
-  },
-  resolvedAt: {
-    type: Date,
-    default: null
-  },
-  resolvedByFullName: {
-    type: String,
-    default: null
-  },
-  resolvedBy: {
+  reportedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    default: null
+    required: true
   },
   responder: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: null
+    ref: 'User'
   },
-  responderName: {
-    type: String,
-    default: null
+  responseDetails: {
+    type: String
   },
   respondedAt: {
-    type: Date,
-    default: null
+    type: Date
   },
-  reporter: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: null
-  },
-  // Add ticket ID field
-  ticketId: {
+  images: [String],
+  priority: {
     type: String,
-    unique: true
+    enum: ['Low', 'Medium', 'High', 'Critical'],
+    default: 'Medium'
   },
-  // Updated field for additional incident details
-  otherType: {
-    type: String
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
+}, {
+  timestamps: true
+});
+
+// Ensure location field is indexed
+incidentReportSchema.index({ location: '2dsphere' });
+
+// Automatically update the updatedAt time
+incidentReportSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
 });
 
 module.exports = mongoose.model('IncidentReport', incidentReportSchema);

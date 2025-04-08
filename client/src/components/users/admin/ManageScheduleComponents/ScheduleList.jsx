@@ -140,9 +140,6 @@ const ScheduleList = ({
     }
   };
 
-  // Define the minimum number of schedules before enabling scrolling
-  const MIN_SCHEDULES_FOR_SCROLL = 3;
-
   return (
     <motion.div 
       className="container mx-auto relative h-full flex flex-col"
@@ -236,9 +233,9 @@ const ScheduleList = ({
           isDarkMode ? 'border-[#1e2048]' : 'border-gray-200'
         }`}>
           <div 
-            className={`overflow-x-auto ${filteredSchedules.length > MIN_SCHEDULES_FOR_SCROLL ? 'overflow-y-auto' : 'overflow-y-hidden'}`} 
+            className="overflow-x-auto overflow-y-auto" 
             style={{ 
-              maxHeight: filteredSchedules.length > MIN_SCHEDULES_FOR_SCROLL ? "calc(100vh - 200px)" : "none",
+              maxHeight: "calc(100vh - 240px)",
               height: "100%"
             }}
           >

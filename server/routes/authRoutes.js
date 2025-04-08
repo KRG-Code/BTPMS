@@ -339,4 +339,345 @@ router.get('/public/rating-check/:identifier', async (req, res) => {
   }
 });
 
+// Add this new route for collective performance data
+router.get('/tanod-performance/collective', protect, async (req, res) => {
+  try {
+    // Fix: Use req.query instead of req.params
+    const { startDate, endDate, reportType } = req.query;
+    console.log('Received request for collective report with parameters:', { startDate, endDate, reportType });
+    
+    // Verify the user is authorized (admin only)
+    if (req.user.userType !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized to access collective reports' });
+    }
+
+    // Make sure we have the required model imports
+    const Schedule = mongoose.model('Schedule');
+    const IncidentReport = mongoose.model('IncidentReport');
+    
+    // Get all tanods
+    const tanods = await User.find({ userType: 'tanod' });
+    const totalTanods = tanods.length;
+    
+    console.log(`Found ${totalTanods} tanods for collective report`);
+    
+    // Initialize aggregates with default values
+    const aggregates = {
+      patrols: { total: 0, completed: 0, average: 0 },
+      attendance: { average: 0, onTimeAverage: 0, totalAbsences: 0 },
+      incidents: { total: 0, resolved: 0, responseRateAverage: 0 },
+      ratings: { average: 0, totalRatings: 0 }
+    };
+    
+    // Get data for each tanod
+    const tanodData = await Promise.all(tanods.map(async tanod => {
+      try {
+        // Get patrol stats
+        const patrolStats = await getPatrolStatsForTanod(tanod._id, startDate, endDate);
+        
+        // Get incident stats
+        const incidentStats = await getIncidentStatsForTanod(tanod._id, startDate, endDate);
+        
+        // Get attendance stats
+        const attendanceStats = await getAttendanceStatsForTanod(tanod._id, startDate, endDate);
+        
+        // Get rating data
+        const ratingsData = await getRatingsForTanod(tanod._id);
+        
+        // Update aggregates safely using optional chaining and nullish coalescing
+        aggregates.patrols.total += patrolStats?.totalPatrols ?? 0;
+        aggregates.patrols.completed += patrolStats?.completedPatrols ?? 0;
+        
+        if (attendanceStats?.attendanceRate) {
+          aggregates.attendance.average += parseFloat(attendanceStats.attendanceRate);
+        }
+        
+        if (attendanceStats?.onTimeRate) {
+          aggregates.attendance.onTimeAverage += parseFloat(attendanceStats.onTimeRate);
+        }
+        
+        aggregates.attendance.totalAbsences += 
+          (attendanceStats?.totalScheduled ?? 0) - (attendanceStats?.attended ?? 0);
+        
+        aggregates.incidents.total += incidentStats?.totalIncidentResponses ?? 0;
+        aggregates.incidents.resolved += incidentStats?.resolvedIncidents ?? 0;
+        
+        if (incidentStats?.responseRate) {
+          aggregates.incidents.responseRateAverage += parseFloat(incidentStats.responseRate);
+        }
+        
+        if (ratingsData?.overallRating) {
+          aggregates.ratings.average += parseFloat(ratingsData.overallRating);
+        }
+        
+        aggregates.ratings.totalRatings += ratingsData?.comments?.length ?? 0;
+        
+        return {
+          tanod: {
+            _id: tanod._id,
+            firstName: tanod.firstName,
+            lastName: tanod.lastName,
+            isTeamLeader: tanod.isTeamLeader
+          },
+          patrolStats,
+          incidentStats,
+          attendanceStats,
+          ratingsData
+        };
+      } catch (err) {
+        console.error(`Error processing tanod ${tanod._id}:`, err);
+        // Return placeholder data for this tanod to prevent breaking the map
+        return {
+          tanod: {
+            _id: tanod._id,
+            firstName: tanod.firstName,
+            lastName: tanod.lastName,
+            isTeamLeader: tanod.isTeamLeader
+          },
+          patrolStats: { totalPatrols: 0, completedPatrols: 0 },
+          incidentStats: { totalIncidentResponses: 0, resolvedIncidents: 0, responseRate: "0" },
+          attendanceStats: { totalScheduled: 0, attended: 0, attendanceRate: "0" },
+          ratingsData: { overallRating: "0.0", ratingCounts: [0, 0, 0, 0, 0], comments: [] }
+        };
+      }
+    }));
+    
+    // Calculate averages
+    if (totalTanods > 0) {
+      aggregates.patrols.average = (aggregates.patrols.total / totalTanods).toFixed(1);
+      aggregates.attendance.average = (aggregates.attendance.average / totalTanods).toFixed(1);
+      aggregates.attendance.onTimeAverage = (aggregates.attendance.onTimeAverage / totalTanods).toFixed(1);
+      aggregates.incidents.responseRateAverage = (aggregates.incidents.responseRateAverage / totalTanods).toFixed(1);
+      aggregates.ratings.average = (aggregates.ratings.average / totalTanods).toFixed(1);
+    }
+    
+    // Send response with all required data
+    res.json({
+      aggregates,
+      tanodData,
+      totalTanods,
+      reportType: reportType || 'monthly',
+      periodStart: startDate,
+      periodEnd: endDate
+    });
+  } catch (error) {
+    console.error('Error generating collective report:', error);
+    res.status(500).json({ 
+      message: 'Error generating collective report', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Fix helper functions to properly handle possible errors
+
+async function getPatrolStatsForTanod(tanodId, startDate, endDate) {
+  try {
+    const userObjectId = new mongoose.Types.ObjectId(tanodId);
+    
+    // Set up date filters
+    const dateFilter = {};
+    if (startDate) dateFilter.startTime = { $gte: new Date(startDate) };
+    if (endDate) dateFilter.endTime = { $lte: new Date(endDate) };
+    
+    // Make sure we have the required model
+    const Schedule = mongoose.model('Schedule');
+    
+    // Get all schedules where this tanod is assigned
+    const schedules = await Schedule.find({ 
+      tanods: userObjectId,
+      ...dateFilter
+    });
+
+    // Calculate stats
+    const totalPatrols = schedules.length;
+    const completedPatrols = schedules.filter(s => s.status === 'Completed').length;
+    
+    return {
+      totalPatrols,
+      completedPatrols
+    };
+  } catch (error) {
+    console.error(`Error fetching patrol stats for tanod ${tanodId}:`, error);
+    return { totalPatrols: 0, completedPatrols: 0 };
+  }
+}
+
+async function getIncidentStatsForTanod(tanodId, startDate, endDate) {
+  try {
+    const userObjectId = new mongoose.Types.ObjectId(tanodId);
+    
+    // Set up date filters
+    const dateFilter = {};
+    if (startDate) dateFilter.createdAt = { $gte: new Date(startDate) };
+    if (endDate) dateFilter.createdAt = { $lte: new Date(endDate) };
+    
+    // Make sure we have the required model
+    const IncidentReport = mongoose.model('IncidentReport');
+    
+    // Get all incident reports handled by this tanod
+    const incidents = await IncidentReport.find({
+      responder: userObjectId,
+      ...dateFilter
+    });
+
+    // Calculate stats
+    const totalResponses = incidents.length;
+    const resolvedIncidents = incidents.filter(i => i.status === 'Resolved').length;
+    const responseRate = totalResponses > 0 ? 
+        ((resolvedIncidents / totalResponses) * 100).toFixed(1) : '0';
+    
+    return {
+      totalIncidentResponses: totalResponses,
+      resolvedIncidents,
+      responseRate
+    };
+  } catch (error) {
+    console.error(`Error fetching incident stats for tanod ${tanodId}:`, error);
+    return { totalIncidentResponses: 0, resolvedIncidents: 0, responseRate: '0' };
+  }
+}
+
+async function getAttendanceStatsForTanod(tanodId, startDate, endDate) {
+  try {
+    const userObjectId = new mongoose.Types.ObjectId(tanodId);
+    
+    // Set up date filters
+    const dateFilter = {};
+    if (startDate) dateFilter.startTime = { $gte: new Date(startDate) };
+    if (endDate) dateFilter.endTime = { $lte: new Date(endDate) };
+    
+    // Make sure we have the required model
+    const Schedule = mongoose.model('Schedule');
+    
+    // Get all schedules where this tanod was assigned
+    const schedules = await Schedule.find({
+      tanods: userObjectId,
+      ...dateFilter
+    });
+
+    const totalScheduled = schedules.length;
+
+    // Find schedules where the tanod actually participated
+    const attendedSchedules = schedules.filter(schedule => 
+      schedule.patrolStatus && schedule.patrolStatus.some(status => 
+        status.tanodId && status.tanodId.toString() === tanodId.toString() && 
+        (status.status === 'Started' || status.status === 'Completed')
+      )
+    );
+
+    const attended = attendedSchedules.length;
+    const attendanceRate = totalScheduled > 0 ? 
+        ((attended / totalScheduled) * 100).toFixed(1) : '0';
+
+    return {
+      totalScheduled,
+      attended,
+      attendanceRate
+    };
+  } catch (error) {
+    console.error(`Error fetching attendance stats for tanod ${tanodId}:`, error);
+    return { totalScheduled: 0, attended: 0, attendanceRate: '0' };
+  }
+}
+
+async function getRatingsForTanod(tanodId) {
+  try {
+    // Make sure we have the required model
+    const TanodRating = mongoose.model('TanodRating');
+    
+    const tanodRating = await TanodRating.findOne({ tanodId })
+      .populate('ratings.userId', 'firstName lastName');
+
+    if (!tanodRating) {
+      return {
+        overallRating: "0.0",
+        ratingCounts: [0, 0, 0, 0, 0],
+        comments: []
+      };
+    }
+
+    const ratings = tanodRating.ratings || [];
+    const overallRating = ratings.length > 0
+      ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
+      : "0.0";
+
+    const ratingCounts = [0, 0, 0, 0, 0];
+    ratings.forEach(r => {
+      if (r.rating >= 1 && r.rating <= 5) {
+        ratingCounts[r.rating - 1]++;
+      }
+    });
+
+    const comments = ratings.map(r => ({
+      userId: r.userId?._id,
+      fullName: r.fullName || (r.userId ? `${r.userId.firstName} ${r.userId.lastName}` : "Anonymous"),
+      comment: r.comment,
+      rating: r.rating,
+      createdAt: r.createdAt
+    })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return {
+      overallRating,
+      ratingCounts,
+      comments
+    };
+  } catch (error) {
+    console.error(`Error fetching ratings for tanod ${tanodId}:`, error);
+    return {
+      overallRating: "0.0",
+      ratingCounts: [0, 0, 0, 0, 0],
+      comments: []
+    };
+  }
+}
+
+// Add this new route for password verification before generating reports
+router.post('/verify-password', protect, async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    // Ensure the user is an admin
+    if (req.user.userType !== 'admin') {
+      return res.status(403).json({ 
+        message: 'Access denied: Only administrators can verify for report generation',
+        verified: false
+      });
+    }
+    
+    // Get the user with password field
+    const user = await User.findById(req.user._id).select('+password');
+    
+    if (!user) {
+      return res.status(404).json({ 
+        message: 'User not found',
+        verified: false 
+      });
+    }
+    
+    // Compare provided password with stored password
+    const isMatch = await user.comparePassword(password);
+    
+    if (!isMatch) {
+      return res.status(200).json({ 
+        message: 'Incorrect password',
+        verified: false 
+      });
+    }
+    
+    // Password is correct
+    return res.status(200).json({ 
+      message: 'Password verified successfully',
+      verified: true 
+    });
+  } catch (error) {
+    console.error('Password verification error:', error);
+    res.status(500).json({ 
+      message: 'Server error during password verification',
+      verified: false 
+    });
+  }
+});
+
 module.exports = router;

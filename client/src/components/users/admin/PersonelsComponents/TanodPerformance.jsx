@@ -1,9 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
-import { FaTimes, FaShieldAlt, FaExclamationTriangle, FaTools, FaStar, FaCheckCircle, FaCalendarAlt, FaClock, FaChartPie, FaMapMarkedAlt, FaComments } from 'react-icons/fa';
+import { FaTimes, FaShieldAlt, FaExclamationTriangle, FaTools, FaStar, FaCheckCircle, FaCalendarAlt, FaClock, FaChartPie, FaMapMarkedAlt, FaComments, FaDownload } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import axios from 'axios';
+import PDFPreviewModal from './PDFPreviewModal';
+import PasswordVerificationModal from './PasswordVerificationModal';
+
+// Import and register all the required Chart.js components
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+
+// Register the components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 // Animation variants
 const backdropVariants = {
@@ -61,6 +90,8 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
     ratingCounts: [0, 0, 0, 0, 0],
     comments: []
   });
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // Fetch performance data for this tanod
   useEffect(() => {
@@ -181,6 +212,13 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
     ]
   };
 
+  // Generate unique IDs for each chart to prevent canvas reuse issues
+  const chartIds = {
+    incidentType: `incident-type-chart-${tanod._id}`,
+    monthlyPatrols: `monthly-patrols-chart-${tanod._id}`,
+    ratings: `ratings-chart-${tanod._id}`
+  };
+
   // Card component for displaying stats
   const StatCard = ({ title, value, subtitle, icon }) => {
     const getIconClass = () => {
@@ -243,6 +281,22 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
   const modalBgColor = isDarkMode ? 'bg-gray-800' : 'bg-white';
   const borderColor = isDarkMode ? 'border-gray-700' : 'border-gray-200';
   
+  // Use effect to clean up Chart.js instances on unmount
+  useEffect(() => {
+    return () => {
+      // This cleanup function runs when the component unmounts
+      const chartInstances = ChartJS.instances;
+      Object.keys(chartInstances).forEach(key => {
+        chartInstances[key].destroy();
+      });
+    };
+  }, []);
+
+  const handleVerificationSuccess = () => {
+    setShowPasswordModal(false);
+    setShowReportModal(true);
+  };
+
   return (
     <motion.div
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${bgColor} bg-opacity-80 backdrop-blur-sm overflow-y-auto`}
@@ -269,12 +323,23 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
             <FaChartPie />
             Performance Dashboard: {tanod.firstName} {tanod.lastName}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-white hover:text-gray-200 transition-colors"
-          >
-            <FaTimes size={20} />
-          </button>
+          <div className="flex items-center gap-3">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              className="text-white hover:text-gray-200 transition-colors flex items-center gap-1 bg-blue-700 bg-opacity-50 px-3 py-1 rounded"
+              onClick={() => setShowPasswordModal(true)}
+            >
+              <FaDownload size={14} />
+              <span className="text-sm">Report</span>
+            </motion.button>
+            <button
+              onClick={onClose}
+              className="text-white hover:text-gray-200 transition-colors"
+            >
+              <FaTimes size={20} />
+            </button>
+          </div>
         </div>
         
         {/* Modal Body */}
@@ -379,6 +444,7 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
                   <div className="h-64">
                     {performanceData.incidentTypeBreakdown.labels?.length > 0 ? (
                       <Doughnut 
+                        id={chartIds.incidentType}
                         data={incidentTypeChartData}
                         options={{
                           responsive: true,
@@ -415,6 +481,7 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
                   <div className="h-64">
                     {performanceData.patrolStats.monthlyPatrols?.length > 0 ? (
                       <Bar 
+                        id={chartIds.monthlyPatrols}
                         data={monthlyPatrolsData}
                         options={{
                           responsive: true,
@@ -613,6 +680,7 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
                     {ratingsData.ratingCounts.reduce((a, b) => a + b, 0) > 0 ? (
                       <div className="md:w-3/4 mx-auto h-48">
                         <Doughnut
+                          id={chartIds.ratings}
                           data={ratingsChartData}
                           options={{
                             responsive: true,
@@ -703,7 +771,21 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
         </div>
         
         {/* Modal Footer */}
-        <div className={`border-t ${borderColor} p-4 flex justify-end`}>
+        <div className={`border-t ${borderColor} p-4 flex justify-between`}>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowPasswordModal(true)}
+            className={`px-4 py-2 rounded-lg ${
+              isDarkMode 
+                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                : 'bg-blue-500 hover:bg-blue-600 text-white'
+            }`}
+          >
+            <FaDownload className="inline mr-2" size={14} />
+            Generate Report
+          </motion.button>
+          
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
@@ -718,6 +800,32 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
           </motion.button>
         </div>
       </motion.div>
+      
+      {/* Password Verification Modal */}
+      <PasswordVerificationModal 
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+        onVerified={handleVerificationSuccess}
+        isDarkMode={isDarkMode}
+        action="generate an individual performance report"
+      />
+      
+      {/* PDF Preview Modal */}
+      <PDFPreviewModal 
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        tanod={tanod}
+        performanceData={{
+          patrolStats: performanceData.patrolStats,
+          incidentStats: performanceData.incidentStats,
+          attendanceStats: performanceData.attendanceStats,
+          equipmentStats: performanceData.equipmentStats,
+          incidentTypeBreakdown: performanceData.incidentTypeBreakdown,
+          performanceComparison: performanceData.performanceComparison,
+          ratingsData: ratingsData
+        }}
+        isDarkMode={isDarkMode}
+      />
     </motion.div>
   );
 };

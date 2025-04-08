@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { FaEdit, FaTrash, FaSortUp, FaSortDown, FaSort, FaEnvelope, FaUserTag, FaPhone, FaUserCircle, FaChartLine } from 'react-icons/fa';
+import { FaEdit, FaTrash, FaSortUp, FaSortDown, FaSort, FaEnvelope, FaUserTag, FaPhone, FaUserCircle, FaChartLine, FaCrown, FaUserShield } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import Loading from '../../../../utils/Loading';
 import { useTheme } from '../../../../contexts/ThemeContext'; // Import useTheme hook
 import TanodPerformance from './TanodPerformance'; // Import the new component
 
-export default function TanodTable({ tanods, loading, handleDeleteTanod, handleEditClick }) {
+export default function TanodTable({ tanods, loading, handleDeleteTanod, handleEditClick, handleToggleTeamLeader }) {
   const { isDarkMode } = useTheme(); // Use theme context
   const [sortField, setSortField] = useState('firstName');
   const [sortDirection, setSortDirection] = useState('asc');
@@ -147,6 +147,7 @@ export default function TanodTable({ tanods, loading, handleDeleteTanod, handleE
               handleEditClick={handleEditClick} 
               handleDeleteTanod={handleDeleteTanod}
               handleViewPerformance={handleViewPerformance}
+              handleToggleTeamLeader={handleToggleTeamLeader}
               variants={cardVariants}
               isDarkMode={isDarkMode}
             />
@@ -240,23 +241,43 @@ export default function TanodTable({ tanods, loading, handleDeleteTanod, handleE
 }
 
 // Tanod Card Component
-function TanodCard({ tanod, handleEditClick, handleDeleteTanod, handleViewPerformance, variants, isDarkMode }) {
+function TanodCard({ tanod, handleEditClick, handleDeleteTanod, handleViewPerformance, handleToggleTeamLeader, variants, isDarkMode }) {
+  // Updated to ensure isTeamLeader is treated as a boolean
+  const isTeamLeader = tanod.isTeamLeader === true;
+  
   return (
     <motion.div
       variants={variants}
       whileHover={{ y: -5, transition: { duration: 0.2 } }}
       className={`rounded-xl overflow-hidden shadow-md transition-all duration-300 hover:shadow-xl border ${
-        isDarkMode ? 'bg-[#0e1022] border-[#1e2048]' : 'bg-white border-gray-100'
+        isTeamLeader
+          ? isDarkMode 
+            ? 'bg-[#0e1022] border-[#d4af37] border-2' 
+            : 'bg-white border-yellow-400 border-2'
+          : isDarkMode 
+            ? 'bg-[#0e1022] border-[#1e2048]' 
+            : 'bg-white border-gray-100'
       }`}
     >
       {/* Card Header */}
       <div className="relative">
         {/* Background gradient banner */}
         <div className={`h-24 ${
-          isDarkMode 
-            ? 'bg-gradient-to-r from-[#191f8a] to-[#4750eb]' 
-            : 'bg-gradient-to-r from-[#191d67] to-[#141db8]'
+          isTeamLeader
+            ? isDarkMode 
+              ? 'bg-gradient-to-r from-[#d4af37] to-[#f5cc7d]' 
+              : 'bg-gradient-to-r from-[#d4af37] to-[#ffd700]'
+            : isDarkMode 
+              ? 'bg-gradient-to-r from-[#191f8a] to-[#4750eb]' 
+              : 'bg-gradient-to-r from-[#191d67] to-[#141db8]'
         }`}></div>
+        
+        {/* Team Leader Badge */}
+        {isTeamLeader && (
+          <div className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-lg">
+            <FaCrown className="text-yellow-500 text-lg" />
+          </div>
+        )}
         
         {/* Profile picture */}
         <div className="absolute left-1/2 transform -translate-x-1/2 -bottom-12">
@@ -265,11 +286,15 @@ function TanodCard({ tanod, handleEditClick, handleDeleteTanod, handleViewPerfor
               <img
                 src={tanod.profilePicture}
                 alt={`${tanod.firstName} ${tanod.lastName}`}
-                className="h-24 w-24 rounded-full object-cover border-4 border-white shadow-md"
+                className={`h-24 w-24 rounded-full object-cover border-4 ${
+                  isTeamLeader ? 'border-yellow-400' : 'border-white'
+                } shadow-md`}
               />
             ) : (
               <div className={`h-24 w-24 rounded-full flex items-center justify-center ${
-                isDarkMode ? 'bg-[#080917] border-4 border-[#0e1022]' : 'bg-gray-100 border-4 border-white'
+                isTeamLeader
+                  ? isDarkMode ? 'bg-[#080917] border-4 border-yellow-400' : 'bg-gray-100 border-4 border-yellow-400'
+                  : isDarkMode ? 'bg-[#080917] border-4 border-[#0e1022]' : 'bg-gray-100 border-4 border-white'
               } shadow-md`}>
                 <FaUserCircle className={`h-16 w-16 ${isDarkMode ? 'text-[#1e2048]' : 'text-gray-300'}`} />
               </div>
@@ -284,18 +309,29 @@ function TanodCard({ tanod, handleEditClick, handleDeleteTanod, handleViewPerfor
       {/* Card Body */}
       <div className="pt-14 px-4 pb-4">
         <div className="text-center mb-4">
-          <h3 className={`text-lg font-bold truncate ${isDarkMode ? 'text-[#e7e8f4]' : 'text-gray-900'}`}>
+          <h3 className={`text-lg font-bold truncate ${isDarkMode ? 'text-[#e7e8f4]' : 'text-gray-900'} flex items-center justify-center`}>
+            {isTeamLeader && <FaCrown className="text-yellow-500 mr-1" />}
             {tanod.firstName} {tanod.lastName}
           </h3>
-          <span
-            className={`inline-flex mt-1 px-2 py-1 text-xs font-semibold rounded-full ${
-              tanod.isOnline
-                ? isDarkMode ? "bg-green-900 text-green-200" : "bg-green-100 text-green-800"
-                : isDarkMode ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
-            }`}
-          >
-            {tanod.isOnline ? "Online" : "Offline"}
-          </span>
+          <div className="flex justify-center items-center gap-2">
+            <span
+              className={`inline-flex mt-1 px-2 py-1 text-xs font-semibold rounded-full ${
+                tanod.isOnline
+                  ? isDarkMode ? "bg-green-900 text-green-200" : "bg-green-100 text-green-800"
+                  : isDarkMode ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+              }`}
+            >
+              {tanod.isOnline ? "Online" : "Offline"}
+            </span>
+            
+            {isTeamLeader && (
+              <span className={`inline-flex mt-1 px-2 py-1 text-xs font-semibold rounded-full ${
+                isDarkMode ? "bg-yellow-900 text-yellow-200" : "bg-yellow-100 text-yellow-800"
+              }`}>
+                Team Leader
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Tanod details */}
@@ -329,6 +365,21 @@ function TanodCard({ tanod, handleEditClick, handleDeleteTanod, handleViewPerfor
           >
             <FaEdit className="h-5 w-5" />
           </motion.button>
+          
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className={`p-2 ${
+              isTeamLeader
+                ? isDarkMode ? 'text-red-400 hover:bg-red-900' : 'text-red-600 hover:bg-red-50'
+                : isDarkMode ? 'text-yellow-400 hover:bg-yellow-900' : 'text-yellow-600 hover:bg-yellow-50'
+            } rounded-full transition-colors`}
+            onClick={() => handleToggleTeamLeader(tanod._id, isTeamLeader)}
+            title={isTeamLeader ? "Demote from Team Leader" : "Promote to Team Leader"}
+          >
+            {isTeamLeader ? <FaUserShield className="h-5 w-5" /> : <FaCrown className="h-5 w-5" />}
+          </motion.button>
+          
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
@@ -338,6 +389,7 @@ function TanodCard({ tanod, handleEditClick, handleDeleteTanod, handleViewPerfor
           >
             <FaChartLine className="h-5 w-5" />
           </motion.button>
+          
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
