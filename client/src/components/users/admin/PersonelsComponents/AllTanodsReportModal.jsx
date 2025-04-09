@@ -193,12 +193,17 @@ const AllTanodsReportModal = ({ isOpen, onClose, isDarkMode }) => {
                 }`}
               >
                 <FaDownload className="inline mr-2" />
-                Download PDF
+                Download Report
               </button>
             )}
           </div>
 
-          <div className="flex-grow overflow-auto rounded-lg border">
+          <div className="flex-grow overflow-auto rounded-lg border relative">
+            {/* Read-only message */}
+            <div className="text-xs text-center py-1 bg-gray-800 bg-opacity-75 text-white absolute w-full z-10">
+              This is a read-only preview. Use the download button above to save this report.
+            </div>
+
             {loading && (
               <div className="h-full flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -215,10 +220,32 @@ const AllTanodsReportModal = ({ isOpen, onClose, isDarkMode }) => {
             )}
             
             {reportData && !loading && !error && (
-              <PDFViewer style={{ width: '100%', height: '100%', minHeight: '400px' }}>
+              <PDFViewer 
+                style={{ width: '100%', height: '100%', minHeight: '400px' }}
+                showToolbar={false}
+              >
                 <CollectivePerformanceReport data={reportData} />
               </PDFViewer>
             )}
+            
+            {/* CSS to disable browser print and save functionality */}
+            <style jsx global>{`
+              iframe {
+                -webkit-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+              }
+              @media print {
+                body * {
+                  display: none !important;
+                }
+                body:after {
+                  content: "Printing is disabled. Please use the download button.";
+                  display: block !important;
+                }
+              }
+            `}</style>
           </div>
         </div>
       </motion.div>

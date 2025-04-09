@@ -324,15 +324,6 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
             Performance Dashboard: {tanod.firstName} {tanod.lastName}
           </h2>
           <div className="flex items-center gap-3">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              className="text-white hover:text-gray-200 transition-colors flex items-center gap-1 bg-blue-700 bg-opacity-50 px-3 py-1 rounded"
-              onClick={() => setShowPasswordModal(true)}
-            >
-              <FaDownload size={14} />
-              <span className="text-sm">Report</span>
-            </motion.button>
             <button
               onClick={onClose}
               className="text-white hover:text-gray-200 transition-colors"
@@ -783,7 +774,7 @@ const TanodPerformance = ({ tanod, onClose, isDarkMode }) => {
             }`}
           >
             <FaDownload className="inline mr-2" size={14} />
-            Generate Report
+            Download Report
           </motion.button>
           
           <motion.button

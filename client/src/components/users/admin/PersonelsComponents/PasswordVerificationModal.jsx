@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FaTimes, FaLock, FaEye, FaEyeSlash } from 'react-icons/fa';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 
 // Animation variants
 const backdropVariants = {
@@ -24,7 +25,7 @@ const modalVariants = {
   }
 };
 
-const PasswordVerificationModal = ({ isOpen, onClose, onVerified, isDarkMode, action = "generate report" }) => {
+const PasswordVerificationModal = ({ isOpen, onClose, onVerified, isDarkMode, action = "generate report", zIndex = 5000 }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -70,19 +71,12 @@ const PasswordVerificationModal = ({ isOpen, onClose, onVerified, isDarkMode, ac
   if (!isOpen) return null;
 
   return (
-    <motion.div
-      className={`fixed inset-0 flex items-center justify-center z-50 p-4 ${isDarkMode ? 'bg-black' : 'bg-gray-800'} bg-opacity-70 backdrop-blur-sm`}
-      variants={backdropVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-    >
-      <motion.div
-        className={`w-full max-w-md rounded-xl shadow-2xl overflow-hidden ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'}`}
-        variants={modalVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
+    <div className={`fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-[${zIndex}]`}>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className={`w-full max-w-md p-6 rounded-lg shadow-xl ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'}`}
       >
         <div className={`px-6 py-4 flex justify-between items-center ${isDarkMode ? 'bg-blue-900' : 'bg-blue-600'} text-white`}>
           <h2 className="text-xl font-bold flex items-center">
@@ -161,7 +155,7 @@ const PasswordVerificationModal = ({ isOpen, onClose, onVerified, isDarkMode, ac
           </div>
         </form>
       </motion.div>
-    </motion.div>
+    </div>
   );
 };
 

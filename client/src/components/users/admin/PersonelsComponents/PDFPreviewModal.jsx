@@ -40,37 +40,33 @@ const PDFPreviewModal = ({ isOpen, onClose, tanod, performanceData, isDarkMode }
   if (!isOpen) return null;
 
   const handlePrepareDownload = () => {
+    // Always show password modal first before downloading
     setShowPasswordModal(true);
   };
 
   const handleConfirmDownload = async (password) => {
-    setShowPasswordModal(false);
-    setIsDownloading(true);
-    
     try {
-      // Create filename
-      const fileName = `${tanod.firstName}_${tanod.lastName}_${reportType}_performance_${format(new Date(), 'yyyy-MM-dd')}`;
+      setIsDownloading(true);
       
-      // Create document props
-      const documentProps = {
-        tanod,
-        performanceData,
-        reportType,
-        reportPeriod
-      };
-      
-      // Generate and download the ZIP file with password protection
-      await createAndDownloadProtectedZip(
+      // Always use the password-protected zip function
+      const success = await createAndDownloadProtectedZip(
         TanodPerformanceReport,
-        documentProps,
+        { 
+          tanod, 
+          performanceData,
+          reportType,
+          reportPeriod
+        },
         password,
-        fileName
+        `${tanod.firstName}_${tanod.lastName}_Report_${new Date().toISOString().split('T')[0]}`
       );
       
-      toast.success("Report downloaded successfully");
+      if (success) {
+        setShowPasswordModal(false);
+      }
     } catch (error) {
-      console.error('Error creating report:', error);
-      toast.error("Failed to create report");
+      console.error('Error downloading report:', error);
+      toast.error('Failed to download report');
     } finally {
       setIsDownloading(false);
     }
@@ -98,6 +94,7 @@ const PDFPreviewModal = ({ isOpen, onClose, tanod, performanceData, isDarkMode }
             </button>
             <h2 className="text-lg font-semibold">Performance Report: {tanod.firstName} {tanod.lastName}</h2>
           </div>
+          
         </div>
 
         <div className="p-6 flex flex-col flex-grow overflow-hidden">
@@ -147,14 +144,24 @@ const PDFPreviewModal = ({ isOpen, onClose, tanod, performanceData, isDarkMode }
                   ? 'bg-blue-600 hover:bg-blue-700 text-white' 
                   : 'bg-blue-500 hover:bg-blue-600 text-white'
               }`}
+              disabled={isDownloading}
             >
               <FaDownload className="inline mr-2" />
-              Download PDF
+              {isDownloading ? "Preparing..." : "Download Report"}
             </button>
           </div>
 
-          <div className="flex-grow overflow-auto rounded-lg border">
-            <PDFViewer style={{ width: '100%', height: '100%', minHeight: '400px' }}>
+          <div className="flex-grow overflow-auto rounded-lg border relative">
+            {/* Read-only message */}
+            <div className="text-xs text-center py-1 bg-gray-800 bg-opacity-75 text-white absolute w-full z-10">
+              This is a read-only preview. Use the download button above to save this report.
+            </div>
+            
+            {/* PDF Viewer with disabled toolbar */}
+            <PDFViewer 
+              style={{ width: '100%', height: '100%', minHeight: '400px' }}
+              showToolbar={false}
+            >
               <TanodPerformanceReport 
                 tanod={tanod} 
                 performanceData={performanceData} 
@@ -162,6 +169,25 @@ const PDFPreviewModal = ({ isOpen, onClose, tanod, performanceData, isDarkMode }
                 reportPeriod={reportPeriod}
               />
             </PDFViewer>
+            
+            {/* CSS to disable browser print and save functionality */}
+            <style jsx global>{`
+              iframe {
+                -webkit-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+              }
+              @media print {
+                body * {
+                  display: none !important;
+                }
+                body:after {
+                  content: "Printing is disabled. Please use the download button.";
+                  display: block !important;
+                }
+              }
+            `}</style>
           </div>
         </div>
       </motion.div>

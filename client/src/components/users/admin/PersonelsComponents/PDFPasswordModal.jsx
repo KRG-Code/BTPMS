@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FaTimes, FaLock, FaEye, FaEyeSlash, FaRandom } from 'react-icons/fa';
+import { toast } from 'react-toastify';
 
 // Animation variants
 const backdropVariants = {
@@ -23,10 +24,13 @@ const modalVariants = {
   }
 };
 
-const PDFPasswordModal = ({ isOpen, onClose, onConfirm, isDarkMode }) => {
+const PDFPasswordModal = ({ isOpen, onClose, onConfirm, isDarkMode, zIndex = 5000 }) => {
   const [pdfPassword, setPdfPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [generatePassword, setGeneratePassword] = useState(true);
+  const [passwordsMatch, setPasswordsMatch] = useState(true);
 
   // Generate a random password
   const generateRandomPassword = () => {
@@ -41,43 +45,59 @@ const PDFPasswordModal = ({ isOpen, onClose, onConfirm, isDarkMode }) => {
   // When component mounts or when generatePassword changes, update pdfPassword
   useEffect(() => {
     if (generatePassword) {
-      setPdfPassword(generateRandomPassword());
+      const newPassword = generateRandomPassword();
+      setPdfPassword(newPassword);
+      setConfirmPassword(newPassword);
     } else {
       setPdfPassword('');
+      setConfirmPassword('');
     }
   }, [generatePassword]);
 
+  // Check if passwords match when either password changes
+  useEffect(() => {
+    if (!generatePassword) {
+      setPasswordsMatch(pdfPassword === confirmPassword);
+    } else {
+      setPasswordsMatch(true);
+    }
+  }, [pdfPassword, confirmPassword, generatePassword]);
+
   const handleConfirm = () => {
+    if (!pdfPassword) {
+      toast.error("Please enter a password");
+      return;
+    }
+    
+    if (pdfPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      setPasswordsMatch(false);
+      return;
+    }
+    
     onConfirm(pdfPassword);
   };
 
   const handleGenerateNewPassword = () => {
-    setPdfPassword(generateRandomPassword());
+    const newPassword = generateRandomPassword();
+    setPdfPassword(newPassword);
+    setConfirmPassword(newPassword);
   };
 
   if (!isOpen) return null;
 
   return (
-    <motion.div
-      className={`fixed inset-0 flex items-center justify-center z-50 p-4 ${isDarkMode ? 'bg-black' : 'bg-gray-800'} bg-opacity-70 backdrop-blur-sm`}
-      variants={backdropVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-      onClick={onClose}
-    >
-      <motion.div
-        className={`w-full max-w-md rounded-xl shadow-2xl overflow-hidden ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'}`}
-        variants={modalVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        onClick={(e) => e.stopPropagation()}
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-[9999]">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className={`w-full max-w-md p-6 rounded-lg shadow-xl ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'}`}
       >
         <div className={`px-6 py-4 flex justify-between items-center ${isDarkMode ? 'bg-blue-900' : 'bg-blue-600'} text-white`}>
           <h2 className="text-xl font-bold flex items-center">
             <FaLock className="mr-2" />
-            Secure ZIP Archive
+            Secure Report Download
           </h2>
           <button onClick={onClose} className="text-white hover:text-gray-200 transition-colors">
             <FaTimes size={20} />
@@ -110,7 +130,7 @@ const PDFPasswordModal = ({ isOpen, onClose, onConfirm, isDarkMode }) => {
               </div>
             </div>
             
-            <div className="relative">
+            <div className="relative mb-3">
               <input
                 type={showPassword ? "text" : "password"}
                 value={pdfPassword}
@@ -148,9 +168,45 @@ const PDFPasswordModal = ({ isOpen, onClose, onConfirm, isDarkMode }) => {
                 </button>
               </div>
             </div>
-            <p className={`mt-1 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            
+            {/* Confirm Password Field */}
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                readOnly={generatePassword}
+                className={`w-full pl-3 pr-10 py-2 rounded-md shadow-sm ${
+                  isDarkMode 
+                    ? 'bg-gray-700 text-white border-gray-600' 
+                    : 'bg-white text-gray-900 border-gray-300'
+                } ${!passwordsMatch ? 'border-red-500' : ''} ${generatePassword ? 'cursor-not-allowed' : ''}`}
+                placeholder={generatePassword ? '' : 'Confirm ZIP password'}
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center">
+                <button
+                  type="button"
+                  className="pr-3"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? (
+                    <FaEyeSlash className={isDarkMode ? 'text-gray-400' : 'text-gray-500'} />
+                  ) : (
+                    <FaEye className={isDarkMode ? 'text-gray-400' : 'text-gray-500'} />
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            {!passwordsMatch && !generatePassword && (
+              <p className="mt-1 text-sm text-red-500">
+                Passwords do not match
+              </p>
+            )}
+            
+            <p className={`mt-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
               {generatePassword 
-                ? 'This password will be required to extract the ZIP contents. Please save it.' 
+                ? 'This password will be required to extract the ZIP archive. Please save it.' 
                 : 'Enter a password to encrypt your ZIP file. You will need this to access the report.'}
             </p>
           </div>
@@ -170,18 +226,21 @@ const PDFPasswordModal = ({ isOpen, onClose, onConfirm, isDarkMode }) => {
             <button
               type="button"
               onClick={handleConfirm}
+              disabled={!passwordsMatch}
               className={`px-4 py-2 rounded-md ${
-                isDarkMode 
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
+                !passwordsMatch
+                  ? 'bg-gray-500 cursor-not-allowed'
+                  : isDarkMode 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
               }`}
             >
-              Download Encrypted ZIP
+              Download Report
             </button>
           </div>
         </div>
       </motion.div>
-    </motion.div>
+    </div>
   );
 };
 

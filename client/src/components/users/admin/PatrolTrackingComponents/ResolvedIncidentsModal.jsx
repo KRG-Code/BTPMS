@@ -19,15 +19,20 @@ import {
   RiAlertLine,
   RiSearchLine,
   RiFilterLine,
-  RiDeleteBin7Line
+  RiDeleteBin7Line,
+  RiFileDownloadLine
 } from 'react-icons/ri';
-import { FaExclamationTriangle, FaSearch, FaSearchMinus, FaMapMarkerAlt, FaCalendarAlt, FaClock, FaFileAlt, FaUser, FaPhone, FaUserShield, FaClipboardCheck, FaCheckCircle } from 'react-icons/fa';
+import { FaExclamationTriangle, FaSearch, FaSearchMinus, FaMapMarkerAlt, FaCalendarAlt, FaClock, FaFileAlt, FaUser, FaPhone, FaUserShield, FaClipboardCheck, FaCheckCircle, FaFilePdf } from 'react-icons/fa';
+import PasswordVerificationModal from '../../admin/PersonelsComponents/PasswordVerificationModal';
+import PDFPasswordModal from '../../admin/PersonelsComponents/PDFPasswordModal';
+import { createAndDownloadProtectedZip } from '../../../../utils/zipUtils';
+import ResolvedIncidentReportPreview from './ResolvedIncidentReportPreview';
 
 // Animation variants
 const modalVariants = {
   hidden: {
     opacity: 0,
-    scale: 0.8,
+    scale: 0.8, 
     y: 50
   },
   visible: {
@@ -155,6 +160,11 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
   const [falseAlarms, setFalseAlarms] = useState([]); // Add state for false alarms
   const [viewType, setViewType] = useState('resolved'); // 'resolved' or 'falseAlarm'
   const [loading, setLoading] = useState(false); // Add loading state
+  // Add new state variables for report generation
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showReportPreview, setShowReportPreview] = useState(false);
+  const [showPdfPasswordModal, setShowPdfPasswordModal] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -701,43 +711,119 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
 
   // Add a toggle component for switching between resolved incidents and false alarms
   const ViewToggle = () => (
-    <div className={`flex p-1 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} mb-4`}>
-      <button
-        onClick={() => setViewType('resolved')}
-        className={`flex-1 py-2 px-4 rounded-lg transition-all duration-200 text-sm font-medium ${
-          viewType === 'resolved'
-            ? isDarkMode
-              ? 'bg-blue-600 text-white'
-              : 'bg-blue-500 text-white'
-            : isDarkMode
-            ? 'text-gray-300 hover:text-white'
-            : 'text-gray-700 hover:text-gray-900'
-        }`}
+    <div className="flex justify-between items-center mb-4">
+      <div className={`flex p-1 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
+        <button
+          onClick={() => setViewType('resolved')}
+          className={`flex-1 py-2 px-4 rounded-lg transition-all duration-200 text-sm font-medium ${
+            viewType === 'resolved'
+              ? isDarkMode
+                ? 'bg-blue-600 text-white'
+                : 'bg-blue-500 text-white'
+              : isDarkMode
+              ? 'text-gray-300 hover:text-white'
+              : 'text-gray-700 hover:text-gray-900'
+          }`}
+        >
+          <div className="flex items-center justify-center">
+            <FaCheckCircle className="mr-2" />
+            Resolved Incidents
+          </div>
+        </button>
+        <button
+          onClick={() => setViewType('falseAlarm')}
+          className={`flex-1 py-2 px-4 rounded-lg transition-all duration-200 text-sm font-medium ${
+            viewType === 'falseAlarm'
+              ? isDarkMode
+                ? 'bg-orange-600 text-white'
+                : 'bg-orange-500 text-white'
+              : isDarkMode
+              ? 'text-gray-300 hover:text-white'
+              : 'text-gray-700 hover:text-gray-900'
+          }`}
+        >
+          <div className="flex items-center justify-center">
+            <FaExclamationTriangle className="mr-2" />
+            False Alarms
+          </div>
+        </button>
+      </div>
+      
+      {/* Add Generate Report Button */}
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setShowPasswordModal(true)}
+        className={`py-2 px-4 rounded-lg ${
+          isDarkMode 
+            ? 'bg-purple-700 hover:bg-purple-600 text-white' 
+            : 'bg-purple-600 hover:bg-purple-500 text-white'
+        } flex items-center`}
       >
-        <div className="flex items-center justify-center">
-          <FaCheckCircle className="mr-2" />
-          Resolved Incidents
-        </div>
-      </button>
-      <button
-        onClick={() => setViewType('falseAlarm')}
-        className={`flex-1 py-2 px-4 rounded-lg transition-all duration-200 text-sm font-medium ${
-          viewType === 'falseAlarm'
-            ? isDarkMode
-              ? 'bg-orange-600 text-white'
-              : 'bg-orange-500 text-white'
-            : isDarkMode
-            ? 'text-gray-300 hover:text-white'
-            : 'text-gray-700 hover:text-gray-900'
-        }`}
-      >
-        <div className="flex items-center justify-center">
-          <FaExclamationTriangle className="mr-2" />
-          False Alarms
-        </div>
-      </button>
+        <FaFilePdf className="mr-2" />
+        Generate Report
+      </motion.button>
     </div>
   );
+
+  const handleVerificationSuccess = () => {
+    setShowPasswordModal(false);
+    setShowReportPreview(true);
+  };
+
+  const handleDownloadReport = () => {
+    setShowPdfPasswordModal(true);
+  };
+
+  const handleConfirmDownload = async (password) => {
+    try {
+      setIsDownloading(true);
+      
+      // Format date for filename
+      const dateStr = new Date().toISOString().split('T')[0];
+      const fileName = `Incident_Report_${dateStr}`;
+      
+      // Import the ResolvedIncidentReport dynamically
+      const ResolvedIncidentReport = (await import('./ResolvedIncidentReport')).default;
+      
+      // Get report configuration data from report preview component
+      const reportParams = {
+        incidents: resolvedIncidents,
+        falseAlarms: falseAlarms,
+        generatedDate: new Date().toISOString(),
+        dateRange: document.querySelector('input[type="date"]')?.value 
+          ? {
+              startDate: document.getElementsByName('startDate')[0]?.value,
+              endDate: document.getElementsByName('endDate')[0]?.value,
+            }
+          : undefined,
+        reportPeriod: document.getElementsByName('reportPeriod')[0]?.value || 'custom',
+        reportType: document.getElementsByName('reportType')[0]?.value || 'all'
+      };
+      
+      // Create and download the encrypted zip file
+      const success = await createAndDownloadProtectedZip(
+        ResolvedIncidentReport,
+        reportParams,
+        password,
+        fileName
+      );
+      
+      if (success) {
+        toast.success('Report downloaded successfully');
+        setShowPdfPasswordModal(false);
+        // Add a slight delay before closing the report preview
+        setTimeout(() => {
+          setShowReportPreview(false);
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      toast.error('Failed to download report');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -1077,6 +1163,36 @@ const ResolvedIncidentsModal = ({ isOpen, onClose, resolvedIncidents }) => {
             onClose={() => setShowAssistanceDetails(false)}
           />
         )}
+
+        {/* Add modals for report generation flow - Update z-indices */}
+        <PasswordVerificationModal
+          isOpen={showPasswordModal}
+          onClose={() => setShowPasswordModal(false)}
+          onVerified={handleVerificationSuccess}
+          isDarkMode={isDarkMode}
+          action="generate an incident report"
+          zIndex={5000} // Higher z-index than other modals
+        />
+        
+        {showReportPreview && (
+          <ResolvedIncidentReportPreview
+            isOpen={showReportPreview}
+            onClose={() => setShowReportPreview(false)}
+            onDownload={handleDownloadReport}
+            incidents={resolvedIncidents}
+            falseAlarms={falseAlarms}
+            isDarkMode={isDarkMode}
+          />
+        )}
+        
+        <PDFPasswordModal
+          isOpen={showPdfPasswordModal}
+          onClose={() => setShowPdfPasswordModal(false)}
+          onConfirm={handleConfirmDownload}
+          isDarkMode={isDarkMode}
+          isLoading={isDownloading}
+          zIndex={6000} // Highest z-index to appear above all other modals
+        />
       </motion.div>
     </AnimatePresence>
   );

@@ -19,6 +19,7 @@ const Schedule = require('./models/Schedule');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const noteRoutes = require('./routes/noteRoutes');
 const falseAlarmRoutes = require('./routes/falseAlarmRoutes'); // Import the new routes
+const zipRoutes = require('./routes/zipRoutes'); // Import zip routes
 
 dotenv.config(); // Load environment variables from .env
 const app = express();
@@ -73,7 +74,8 @@ admin.initializeApp({
 });
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Set Permissions-Policy header
 app.use((req, res, next) => {
@@ -169,6 +171,9 @@ app.use('/api/notes', noteRoutes);
 
 // Add false alarm routes
 app.use('/api/false-alarms', falseAlarmRoutes);
+
+// Use zip routes
+app.use('/api/zip', zipRoutes);
 
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {
