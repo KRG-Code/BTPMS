@@ -21,11 +21,7 @@ router.get('/user/:userId/equipments', protect, async (req, res) => {
       // Fetch the equipment for the user
       const equipments = await Equipment.find({ user: userId });
   
-      // Handle no equipment found
-      if (!equipments.length) {
-        return res.status(404).json({ message: 'No equipment found for this user.' });
-      }
-  
+      // Return equipment even if it's an empty array
       res.status(200).json(equipments);
     } catch (error) {
       console.error('Error fetching equipment:', error.message);

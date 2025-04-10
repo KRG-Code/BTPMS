@@ -1,37 +1,70 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 
-const ThemeContext = createContext();
+// Create context with default values
+const ThemeContext = createContext({
+  isDarkMode: false,
+  toggleTheme: () => {},
+  theme: 'light'
+});
 
-export function ThemeProvider({ children }) {
-  const [isDarkMode, setIsDarkMode] = useState(() => {
+export const ThemeProvider = ({ children }) => {
+  // Check localStorage for saved preference, or use system preference
+  const getInitialTheme = () => {
     const savedTheme = localStorage.getItem('theme');
-    return savedTheme === 'dark';
-  });
-
-  // Apply theme whenever it changes
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark-mode');
-      document.documentElement.classList.remove('light-mode');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.add('light-mode');
-      document.documentElement.classList.remove('dark-mode');
-      localStorage.setItem('theme', 'light');
+    
+    if (savedTheme) {
+      return savedTheme === 'dark';
     }
+    
+    // Check system preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return true;
+    }
+    
+    // Default to light mode
+    return false;
+  };
+
+  const [isDarkMode, setIsDarkMode] = useState(getInitialTheme());
+
+  // Apply theme to document when it changes
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark-mode', isDarkMode);
+    document.documentElement.classList.toggle('light-mode', !isDarkMode);
+    
+    // Update body class for broader compatibility
+    document.body.classList.toggle('dark-mode', isDarkMode);
+    document.body.classList.toggle('light-mode', !isDarkMode);
+    
+    // Store preference in localStorage
+    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
+  // Toggle theme function
   const toggleTheme = () => {
-    setIsDarkMode(prevMode => !prevMode);
+    setIsDarkMode(prev => !prev);
   };
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleTheme }}>
+    <ThemeContext.Provider value={{ 
+      isDarkMode, 
+      toggleTheme,
+      theme: isDarkMode ? 'dark' : 'light'
+    }}>
       {children}
     </ThemeContext.Provider>
   );
-}
+};
 
-export function useTheme() {
-  return useContext(ThemeContext);
-}
+// Custom hook for consuming the theme context
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  
+  return context;
+};
+
+export default ThemeContext;

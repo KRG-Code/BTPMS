@@ -15,6 +15,7 @@ exports.protect = async (req, res, next) => {
     
     // If no token found, return 401
     if (!token) {
+      console.error("No auth header or token present");
       return res.status(401).json({ message: 'Not authorized, no token' });
     }
     
@@ -26,6 +27,7 @@ exports.protect = async (req, res, next) => {
       const user = await User.findById(decoded.id).select('-password');
       
       if (!user) {
+        console.error("Valid token but user not found in database");
         return res.status(401).json({ message: 'Not authorized, user not found' });
       }
       
@@ -56,6 +58,9 @@ exports.protect = async (req, res, next) => {
         }
       }
       // END OF NEW CODE
+
+      console.log("Processing token:", token ? token.substring(0, 10) + "..." : "None");
+      console.log("User found from token:", req.user ? { id: req.user._id, name: req.user.firstName } : "None");
 
       next();
     } catch (error) {

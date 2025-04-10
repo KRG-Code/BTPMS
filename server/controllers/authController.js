@@ -437,9 +437,25 @@ exports.addEquipment = async (req, res) => {
 
   try {
     // Check if the inventory item exists and has sufficient quantity
-    const inventoryItem = await Inventory.findOne({ name });
+    const inventoryItem = await Inventory.findOne({ 
+      name: { $regex: new RegExp(`^${name}$`, 'i') }
+    });
+    
     if (!inventoryItem || inventoryItem.quantity <= 0) {
       return res.status(400).json({ message: "Item unavailable in inventory." });
+    }
+
+    // Check if user has already borrowed this item and not returned it
+    const existingBorrowedItem = await Equipment.findOne({
+      user: req.user.id,
+      name: { $regex: new RegExp(`^${name}$`, 'i') },
+      returnDate: new Date("1970-01-01T00:00:00.000Z") // Default date for unreturned items
+    });
+
+    if (existingBorrowedItem) {
+      return res.status(400).json({ 
+        message: "You already have this item checked out. Please return it before borrowing another one."
+      });
     }
 
     // Create a new equipment entry
@@ -447,16 +463,19 @@ exports.addEquipment = async (req, res) => {
       name,
       borrowDate,
       returnDate,
-      imageUrl,
+      // Use the provided imageUrl or fallback to the inventory item's imageUrl if available
+      imageUrl: imageUrl || inventoryItem.imageUrl || null,
       user: req.user.id,
     });
 
     // Save equipment to indicate it has been borrowed
     const savedEquipment = await newEquipment.save();
 
-    // Decrease inventory quantity by 1
+    // Decrease inventory quantity by 1 but keep total the same
     inventoryItem.quantity -= 1;
     await inventoryItem.save();
+    
+    console.log(`Equipment borrowed: ${name}. Updated inventory: quantity=${inventoryItem.quantity}, total=${inventoryItem.total}`);
 
     res.status(201).json(savedEquipment);
   } catch (error) {
@@ -484,16 +503,26 @@ exports.updateEquipment = async (req, res) => {
     if (!equipment) {
       return res.status(404).json({ message: "Equipment not found" });
     }
+    
+    // Get previous return date to check if this is a return operation
+    const previousReturnDate = new Date(equipment.returnDate);
+    const isReturn = previousReturnDate.getFullYear() <= 1970 && req.body.returnDate && new Date(req.body.returnDate).getFullYear() > 1970;
 
     // Update return date
     equipment.returnDate = req.body.returnDate;
     const updatedEquipment = await equipment.save();
 
-    // Increment inventory quantity by 1 after return
-    const inventoryItem = await Inventory.findOne({ name: equipment.name });
-    if (inventoryItem) {
-      inventoryItem.quantity += 1;
-      await inventoryItem.save();
+    // Increment inventory quantity by 1 after return (only if this is a return operation)
+    if (isReturn) {
+      const inventoryItem = await Inventory.findOne({ 
+        name: { $regex: new RegExp(`^${equipment.name}$`, 'i') } 
+      });
+      
+      if (inventoryItem) {
+        inventoryItem.quantity += 1;
+        await inventoryItem.save();
+        console.log(`Equipment returned: ${equipment.name}. Updated inventory: quantity=${inventoryItem.quantity}, total=${inventoryItem.total}`);
+      }
     }
 
     res.json(updatedEquipment);

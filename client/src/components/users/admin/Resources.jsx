@@ -6,22 +6,28 @@ import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  FaUserCircle, 
+  FaUserShield,
   FaBox, 
-  FaPlus, 
-  FaTimes, 
-  FaEdit, 
-  FaTrash, 
-  FaEye, 
   FaExchangeAlt,
-  FaCalendarAlt,
-  FaArrowLeft,
-  FaCheck,
-  FaClock,
-  FaHistory,
-  FaUserShield  // Added FaUserShield to the imports
+  FaEye,
+  FaUserCircle,
+  FaCar,
+  FaCarAlt,
+  FaClipboardList,
+  FaChartBar // Added chart icon
 } from "react-icons/fa";
-import { useTheme } from "../../../contexts/ThemeContext";  // Fixed import path
+import { useTheme } from "../../../contexts/ThemeContext";
+import { uploadProfileImage } from "../../../firebase";
+
+// Import the components
+import TanodCard from "./ResourcesComponents/TanodCard";
+import InventoryModal from "./ResourcesComponents/InventoryModal";
+import EquipmentModal from "./ResourcesComponents/EquipmentModal";
+import VehicleModal from "./ResourcesComponents/VehicleModal";
+import VehicleRequestsModal from "./ResourcesComponents/VehicleRequestsModal";
+// Import new components for report generation
+import PasswordVerificationModal from './PersonelsComponents/PasswordVerificationModal';
+import ResourcesReportModal from './ResourcesComponents/ResourcesReportModal';
 
 dayjs.extend(customParseFormat);
 
@@ -46,18 +52,6 @@ const itemVariants = {
   }
 };
 
-const fadeIn = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.4 } },
-  exit: { opacity: 0, transition: { duration: 0.2 } }
-};
-
-const slideUp = {
-  hidden: { y: 50, opacity: 0 },
-  visible: { y: 0, opacity: 1, transition: { type: "spring", duration: 0.5 } },
-  exit: { y: -20, opacity: 0, transition: { duration: 0.2 } }
-};
-
 export default function Resources() {
   const { isDarkMode } = useTheme();
   const [tanods, setTanods] = useState([]);
@@ -67,18 +61,100 @@ export default function Resources() {
   const [inventoryItems, setInventoryItems] = useState([]);
   const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [showVehicleRequestsModal, setShowVehicleRequestsModal] = useState(false); // New state for vehicle requests modal
+  const [vehicles, setVehicles] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState(0); // Track number of pending requests
   const [showReturned, setShowReturned] = useState(false);
   const [filterDate, setFilterDate] = useState("");
   const [loadingEquipments, setLoadingEquipments] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", quantity: "" });
   const [editMode, setEditMode] = useState(false);
   const [currentItemId, setCurrentItemId] = useState(null);
-  const [viewMode, setViewMode] = useState("grid"); // "grid" or "table"
+  const [viewMode, setViewMode] = useState("grid");
+  const [currentItem, setCurrentItem] = useState(null);
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [itemImageFile, setItemImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [processingRequestId, setProcessingRequestId] = useState(null);
+  const [selectedRequestId, setSelectedRequestId] = useState(null);
+  const [showRejectionModal, setShowRejectionModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [vehicleRequests, setVehicleRequests] = useState([]);
+  
+  // Add new states for report generation
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const baseURL = `${process.env.REACT_APP_API_URL}`;
   let deleteToastId = null;
 
-  // Fetch tanods and inventory data
+  // Theme-aware styles
+  const cardBgClass = isDarkMode ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800';
+  const buttonClass = isDarkMode 
+    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+    : 'bg-blue-500 hover:bg-blue-600 text-white';
+  const secondaryButtonClass = isDarkMode
+    ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+    : 'bg-gray-200 hover:bg-gray-300 text-gray-800';
+  const inputClass = isDarkMode
+    ? 'bg-gray-700 border-gray-600 text-gray-200 focus:border-blue-500'
+    : 'bg-white border-gray-300 text-gray-700 focus:border-blue-500';
+  const modalBgClass = isDarkMode
+    ? 'bg-gray-900 text-gray-200 border border-gray-700'
+    : 'bg-white text-gray-800 border border-gray-300';
+  const headerClass = isDarkMode
+    ? 'bg-gray-800 text-gray-200 border-b border-gray-700'
+    : 'bg-gray-50 text-gray-800 border-b border-gray-200';
+  const tableHeaderClass = isDarkMode
+    ? 'bg-gray-800 text-gray-200 border-b border-gray-700'
+    : 'bg-gray-50 text-gray-700 border-b border-gray-200';
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const socket = new WebSocket(`${process.env.REACT_APP_WS_URL}?token=${token}`);
+
+    socket.onopen = () => {
+      console.log("WebSocket connected - Resources");
+      socket.send(JSON.stringify({ type: "join", room: "resources" }));
+      socket.send(JSON.stringify({ type: "join", room: "vehicle-requests" }));
+    };
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      if (data.type === 'vehicleRequestUpdate') {
+        // Update pending requests count
+        checkPendingRequestsCount();
+        
+        // Show a toast notification
+        const vehicle = data.request.vehicleId?.name || 'Vehicle';
+        const requesterName = data.request.requesterId?.firstName 
+          ? `${data.requesterId.firstName} ${data.requesterId.lastName}`
+          : 'A tanod';
+          
+        toast.info(`New vehicle request: ${vehicle} by ${requesterName}`);
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    socket.onclose = () => {
+      console.log("WebSocket disconnected");
+    };
+
+    return () => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    };
+  }, []);
+
+  // Fetch tanods, inventory data, and vehicles
   useEffect(() => {
     const fetchTanods = async () => {
       const token = localStorage.getItem("token");
@@ -114,13 +190,7 @@ export default function Resources() {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         });
-
-        const inventoryWithBorrowed = response.data.map((item) => ({
-          ...item,
-          currentlyBorrowed: item.total - item.quantity,
-        }));
-
-        setInventoryItems(inventoryWithBorrowed);
+        setInventoryItems(response.data);
       } catch (error) {
         toast.error("Failed to load inventory items.");
       }
@@ -128,7 +198,57 @@ export default function Resources() {
 
     fetchTanods();
     fetchInventory();
+    fetchVehicles();
+    checkPendingRequestsCount(); // Add this to check pending requests
   }, [baseURL]);
+
+  // Check for pending vehicle requests
+  const checkPendingRequestsCount = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(
+        `${baseURL}/vehicles/requests/count?status=Pending`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      
+      setPendingRequests(response.data.count);
+    } catch (error) {
+      console.error("Error checking pending requests:", error);
+    }
+  };
+
+  // Add this useEffect to load vehicle requests when the component mounts
+  useEffect(() => {
+    // Fetch vehicle requests when component mounts
+    const fetchVehicleRequests = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.get(`${process.env.REACT_APP_API_URL}/vehicles/requests`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setVehicleRequests(response.data);
+      } catch (error) {
+        console.error("Error fetching vehicle requests:", error);
+      }
+    };
+
+    fetchVehicleRequests();
+  }, []);
+
+  // Reset form function
+  const resetForm = () => {
+    setNewItem({ name: "", quantity: "" });
+    setEditMode(false);
+    setCurrentItemId(null);
+    setCurrentItem(null);
+    setItemImageFile(null);
+    setImagePreview(null);
+    setShowItemForm(false);
+  };
 
   // Add or update inventory item
   const handleAddOrUpdateItem = async (e) => {
@@ -139,16 +259,38 @@ export default function Resources() {
     }
 
     try {
-      if (editMode) {
+      setUploadingImage(true);
+      let updatedItem = { ...newItem };
+
+      // Handle image upload if a file was selected
+      if (itemImageFile) {
+        try {
+          const uniqueId = Date.now().toString();
+          const imageUrl = await uploadProfileImage(itemImageFile, `inventory_${uniqueId}`);
+          
+          if (imageUrl) {
+            updatedItem.imageUrl = imageUrl;
+          }
+        } catch (uploadError) {
+          toast.error('Failed to upload image, but continuing with item update');
+        }
+      }
+
+      if (editMode && currentItemId) {
         const response = await axios.put(
           `${baseURL}/auth/inventory/${currentItemId}`,
-          newItem,
+          updatedItem,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`,
             },
           }
         );
+        
+        if (!updatedItem.imageUrl && response.data.imageUrl) {
+          response.data.imageUrl = response.data.imageUrl;
+        }
+        
         setInventoryItems((prevItems) =>
           prevItems.map((item) =>
             item._id === currentItemId ? response.data : item
@@ -158,7 +300,7 @@ export default function Resources() {
       } else {
         const response = await axios.post(
           `${baseURL}/auth/inventory`,
-          newItem,
+          updatedItem,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -169,19 +311,66 @@ export default function Resources() {
         toast.success("Item added to inventory.");
       }
 
-      setNewItem({ name: "", quantity: "" });
-      setEditMode(false);
-      setCurrentItemId(null);
+      resetForm();
     } catch (error) {
       toast.error("Failed to add or update item.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // Handle image selection for items
+  const handleItemImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    if (!file.type.match('image.*')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    try {
+      const previewURL = URL.createObjectURL(file);
+      setImagePreview(previewURL);
+      setItemImageFile(file);
+      
+      toast.info('Image selected. Click Save to upload your new item image.');
+    } catch (error) {
+      toast.error('Failed to prepare image preview');
     }
   };
 
   // Edit an inventory item
   const handleEditItem = (item) => {
     setEditMode(true);
-    setNewItem({ name: item.name, quantity: item.quantity });
+    setNewItem({ 
+      name: item.name, 
+      quantity: item.total
+    });
     setCurrentItemId(item._id);
+    setCurrentItem(item);
+    setImagePreview(item.imageUrl || null);
+    setShowItemForm(true);
+    setItemImageFile(null);
+  };
+
+  // Toggle form visibility
+  const toggleItemForm = () => {
+    if (showItemForm && (editMode || newItem.name || newItem.quantity || itemImageFile)) {
+      const confirmed = window.confirm("Discard changes?");
+      if (!confirmed) return;
+    }
+    
+    setShowItemForm(!showItemForm);
+    
+    if (showItemForm) {
+      resetForm();
+    }
   };
 
   // Handle delete item action with confirmation
@@ -208,11 +397,7 @@ export default function Resources() {
           </motion.button>
         </div>
       </div>,
-      { 
-        autoClose: false,
-        closeButton: false,
-        draggable: false
-      }
+      { autoClose: false, closeButton: false, draggable: false }
     );
   };
 
@@ -290,27 +475,281 @@ export default function Resources() {
     );
   };
 
-  // Theme-aware styles
-  const cardBgClass = isDarkMode ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800';
-  const buttonClass = isDarkMode 
-    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-    : 'bg-blue-500 hover:bg-blue-600 text-white';
-  const secondaryButtonClass = isDarkMode
-    ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-    : 'bg-gray-200 hover:bg-gray-300 text-gray-800';
-  const inputClass = isDarkMode
-    ? 'bg-gray-700 border-gray-600 text-gray-200 focus:border-blue-500'
-    : 'bg-white border-gray-300 text-gray-700 focus:border-blue-500';
-  const modalBgClass = isDarkMode
-    ? 'bg-gray-900 text-gray-200 border border-gray-700'
-    : 'bg-white text-gray-800 border border-gray-300';
-  const headerClass = isDarkMode
-    ? 'bg-gray-800 text-gray-200 border-b border-gray-700'
-    : 'bg-gray-50 text-gray-800 border-b border-gray-200';
-  const tableHeaderClass = isDarkMode
-    ? 'bg-gray-800 text-gray-200 border-b border-gray-700'
-    : 'bg-gray-50 text-gray-700 border-b border-gray-200';
-  
+  // Handle reset item total
+  const handleResetItemTotal = async (itemId) => {
+    try {
+      const response = await axios.put(
+        `${baseURL}/auth/inventory/${itemId}`,
+        { resetTotal: true },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+      
+      setInventoryItems((prevItems) =>
+        prevItems.map((item) =>
+          item._id === itemId ? response.data : item
+        )
+      );
+      toast.success("Item quantities reset successfully.");
+    } catch (error) {
+      toast.error("Failed to reset item quantities.");
+    }
+  };
+
+  // Add a new function to refresh inventory data
+  const refreshInventory = async () => {
+    try {
+      const response = await axios.get(`${baseURL}/auth/inventory`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      
+      setInventoryItems(response.data);
+      toast.success("Inventory data refreshed successfully.");
+    } catch (error) {
+      toast.error("Failed to refresh inventory data.");
+    }
+  };
+
+  // Add a function to properly refresh vehicle data with populated drivers
+  const refreshVehicles = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        toast.error("Please log in.");
+        return;
+      }
+
+      // Show loading notification
+      const loadingToast = toast.loading("Refreshing vehicle data...");
+      
+      // Use axios to fetch vehicles with populate parameter
+      const response = await axios.get(`${baseURL}/vehicles?populate=true&t=${Date.now()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      // Process each vehicle to ensure driver images have cache-busting
+      const processedVehicles = response.data.map(vehicle => {
+        if (vehicle.assignedDriver && vehicle.assignedDriver.profilePicture) {
+          // Add cache-busting parameter to driver profile image URLs
+          vehicle.assignedDriver.profilePicture = 
+            `${vehicle.assignedDriver.profilePicture}?t=${Date.now()}`;
+        }
+        return vehicle;
+      });
+      
+      // Update state with processed vehicle data
+      setVehicles(processedVehicles);
+      
+      // Success notification
+      toast.dismiss(loadingToast);
+      toast.success("Vehicle data refreshed successfully");
+    } catch (error) {
+      toast.error("Failed to refresh vehicles");
+      console.error("Vehicle refresh error:", error);
+    }
+  };
+
+  const handleApproveVehicleRequest = async (requestId) => {
+    try {
+      setProcessingRequestId(requestId);
+      const token = localStorage.getItem("token");
+      
+      // First show confirmation
+      toast.info(
+        <div className="flex flex-col">
+          <p className="mb-3">Are you sure you want to approve this vehicle request?</p>
+          <div className="flex justify-center gap-2">
+            <button
+              onClick={() => {
+                toast.dismiss();
+                confirmApproveVehicleRequest(requestId, token);
+              }}
+              className="bg-green-500 text-white px-3 py-1.5 rounded-lg"
+            >
+              Yes, Approve
+            </button>
+            <button
+              onClick={() => {
+                toast.dismiss();
+                setProcessingRequestId(null);
+              }}
+              className="bg-gray-500 text-white px-3 py-1.5 rounded-lg"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>,
+        { 
+          autoClose: false, 
+          closeButton: false,
+          position: "top-center",
+          style: { zIndex: 9999 } 
+        }
+      );
+    } catch (error) {
+      console.error("Error handling vehicle request approval:", error);
+      toast.error("Failed to prepare approval action");
+      setProcessingRequestId(null);
+    }
+  };
+
+  const confirmApproveVehicleRequest = async (requestId, token) => {
+    try {
+      // Use a loading toast with higher z-index
+      const loadingToast = toast.loading("Approving request...", {
+        position: "top-center",
+        style: { zIndex: 9999 }
+      });
+      
+      const response = await axios.put(
+        `${process.env.REACT_APP_API_URL}/vehicles/requests/${requestId}/approve`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      
+      if (response.data) {
+        toast.dismiss(loadingToast);
+        toast.success("Vehicle request approved successfully", {
+          position: "top-center",
+          style: { zIndex: 9999 }
+        });
+        
+        // Update the request in state immediately (WebSocket will do this too, but this is faster)
+        setVehicleRequests((prev) =>
+          prev.map((req) =>
+            req._id === requestId ? { ...req, status: 'Approved' } : req
+          )
+        );
+        
+        // Refresh vehicle list to reflect status changes
+        if (typeof refreshVehicles === 'function') {
+          refreshVehicles();
+        }
+      }
+    } catch (error) {
+      console.error("Error approving vehicle request:", error);
+      toast.error(error.response?.data?.message || "Failed to approve request", {
+        position: "top-center",
+        style: { zIndex: 9999 }
+      });
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
+  // Handle vehicle request rejection
+  const handleRejectVehicleRequest = async (requestId) => {
+    try {
+      setProcessingRequestId(requestId);
+      setSelectedRequestId(requestId);
+      setShowRejectionModal(true);
+    } catch (error) {
+      console.error("Error preparing vehicle request rejection:", error);
+      toast.error("Failed to prepare rejection action");
+      setProcessingRequestId(null);
+    }
+  };
+
+  const confirmRejectVehicleRequest = async (requestId, reason) => {
+    try {
+      const token = localStorage.getItem("token");
+      
+      // Use a loading toast with higher z-index
+      const loadingToast = toast.loading("Rejecting request...", {
+        position: "top-center",
+        style: { zIndex: 9999 }
+      });
+      
+      const response = await axios.put(
+        `${process.env.REACT_APP_API_URL}/vehicles/requests/${requestId}/reject`,
+        { reason },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      
+      if (response.data) {
+        toast.dismiss(loadingToast);
+        toast.success("Vehicle request rejected successfully", {
+          position: "top-center",
+          style: { zIndex: 9999 }
+        });
+        
+        // Update the request in state to reflect the change immediately
+        setVehicleRequests((prev) =>
+          prev.map((req) =>
+            req._id === requestId ? { ...req, status: 'Rejected', rejectionReason: reason } : req
+          )
+        );
+        
+        // Reset UI state
+        setShowRejectionModal(false);
+        setRejectionReason("");
+      }
+    } catch (error) {
+      console.error("Error rejecting vehicle request:", error);
+      toast.error(error.response?.data?.message || "Failed to reject request", {
+        position: "top-center",
+        style: { zIndex: 9999 }
+      });
+    } finally {
+      setProcessingRequestId(null);
+      setSelectedRequestId(null);
+    }
+  };
+
+  // Add proper onClose function for the VehicleRequestsModal
+  const handleCloseVehicleRequestsModal = () => {
+    setShowVehicleRequestsModal(false);
+  };
+
+  // Enhanced function to fetch vehicles with better error handling
+  const fetchVehicles = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      
+      const response = await axios.get(`${baseURL}/vehicles`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.data && Array.isArray(response.data)) {
+        setVehicles(response.data);
+      } else {
+        toast.error("Failed to load vehicles: Unexpected data format");
+      }
+    } catch (error) {
+      if (error.response) {
+        toast.error(`Failed to load vehicles: ${error.response.data.message || 'Server error'}`);
+      } else if (error.request) {
+        toast.error("Failed to load vehicles: No server response");
+      } else {
+        toast.error("Failed to load vehicles: Request setup error");
+      }
+    }
+  };
+
+  // Add new handler for password verification success
+  const handleVerificationSuccess = () => {
+    setShowPasswordModal(false);
+    setShowReportModal(true);
+  };
+
   return (
     <motion.div 
       className={`container mx-auto px-4 sm:px-6 lg:px-8 py-6 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}
@@ -340,6 +779,18 @@ export default function Resources() {
         </div>
         
         <div className="flex flex-wrap gap-3">
+          {/* Add report generation button */}
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowPasswordModal(true)}
+            className={`px-4 py-2 rounded-lg shadow flex items-center ${
+              isDarkMode ? 'bg-purple-600 hover:bg-purple-700' : 'bg-purple-500 hover:bg-purple-600'} text-white`}
+          >
+            <FaChartBar className="mr-2" />
+            Generate Audit Report
+          </motion.button>
+          
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
@@ -348,6 +799,34 @@ export default function Resources() {
           >
             <FaBox className="mr-2" />
             Manage Inventory
+          </motion.button>
+          
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowVehicleModal(!showVehicleModal)}
+            className={`px-4 py-2 rounded-lg shadow flex items-center ${
+              isDarkMode ? 'bg-green-600 hover:bg-green-700' : 'bg-green-500 hover:bg-green-600'} text-white`}
+          >
+            <FaCar className="mr-2" />
+            Manage Vehicles
+          </motion.button>
+          
+          {/* Vehicle Requests Button */}
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowVehicleRequestsModal(true)}
+            className={`px-4 py-2 rounded-lg shadow flex items-center ${
+              isDarkMode ? 'bg-amber-600 hover:bg-amber-700' : 'bg-amber-500 hover:bg-amber-600'} text-white`}
+          >
+            <FaClipboardList className="mr-2" />
+            Vehicle Requests
+            {pendingRequests > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs bg-red-600 rounded-full text-white">
+                {pendingRequests}
+              </span>
+            )}
           </motion.button>
           
           <motion.button
@@ -422,6 +901,7 @@ export default function Resources() {
                       >
                         <td className="py-4 px-6 whitespace-nowrap">
                           <div className="flex items-center">
+                            {/* ...existing code for tanod profile image... */}
                             {tanod.profilePicture ? (
                               <img
                                 src={tanod.profilePicture}
@@ -429,12 +909,8 @@ export default function Resources() {
                                 className="w-10 h-10 rounded-full object-cover"
                               />
                             ) : (
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-                              }`}>
-                                <FaUserCircle className={`w-8 h-8 ${
-                                  isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                                }`} />
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-200">
+                                <FaUserCircle className="w-8 h-8 text-gray-400" />
                               </div>
                             )}
                           </div>
@@ -469,436 +945,99 @@ export default function Resources() {
       {/* Inventory Modal */}
       <AnimatePresence>
         {showInventoryModal && (
-          <motion.div 
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div 
-              className={`${modalBgClass} rounded-xl shadow-xl w-full max-w-4xl relative overflow-hidden`}
-              variants={slideUp}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <div className={`${headerClass} px-6 py-4 flex items-center justify-between`}>
-                <div className="flex items-center">
-                  <FaBox className="mr-2" />
-                  <h2 className="text-xl font-bold">Inventory Management</h2>
-                </div>
-                <motion.button
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => {
-                    setShowInventoryModal(false);
-                    setEditMode(false);
-                    setNewItem({ name: "", quantity: "" });
-                  }}
-                  className={`p-2 rounded-full ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`}
-                  aria-label="Close"
-                >
-                  <FaTimes />
-                </motion.button>
-              </div>
-              
-              <div className="p-6">
-                <form onSubmit={handleAddOrUpdateItem} className="mb-8">
-                  <div className="mb-6">
-                    <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
-                      {editMode ? 'Edit Inventory Item' : 'Add New Item'}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="md:col-span-2">
-                        <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                          Item Name
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Enter item name"
-                          value={newItem.name}
-                          onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                          className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 ${inputClass}`}
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                          Quantity
-                        </label>
-                        <input
-                          type="number"
-                          placeholder="Enter quantity"
-                          value={newItem.quantity}
-                          onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-                          className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 ${inputClass}`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-end space-x-3">
-                    {editMode && (
-                      <motion.button
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        type="button"
-                        onClick={() => {
-                          setEditMode(false);
-                          setNewItem({ name: "", quantity: "" });
-                        }}
-                        className={`px-4 py-2 rounded-lg ${secondaryButtonClass}`}
-                      >
-                        Cancel Edit
-                      </motion.button>
-                    )}
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                      type="submit"
-                      className={`px-4 py-2 rounded-lg flex items-center ${editMode ? 
-                        (isDarkMode ? 'bg-yellow-600 hover:bg-yellow-700 text-white' : 'bg-yellow-500 hover:bg-yellow-600 text-white') : 
-                        (isDarkMode ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-500 hover:bg-green-600 text-white')
-                      }`}
-                    >
-                      {editMode ? (
-                        <>
-                          <FaEdit className="mr-2" />
-                          Update Item
-                        </>
-                      ) : (
-                        <>
-                          <FaPlus className="mr-2" />
-                          Add Item
-                        </>
-                      )}
-                    </motion.button>
-                  </div>
-                </form>
-                
-                <h3 className={`text-lg font-semibold mb-4 pb-2 border-b ${isDarkMode ? 'text-gray-200 border-gray-700' : 'text-gray-800 border-gray-200'}`}>
-                  Inventory Items
-                </h3>
-                
-                {inventoryItems.length === 0 ? (
-                  <div className={`text-center py-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    <FaBox className="mx-auto text-4xl mb-3 opacity-30" />
-                    <p>No items in inventory</p>
-                    <p className="text-sm mt-2">Add your first item using the form above</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className={`w-full ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                      <thead className={tableHeaderClass}>
-                        <tr>
-                          <th className="py-3 px-4 text-left">Item Name</th>
-                          <th className="py-3 px-4 text-center">Available</th>
-                          <th className="py-3 px-4 text-center">Borrowed</th>
-                          <th className="py-3 px-4 text-center">Total</th>
-                          <th className="py-3 px-4 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className={isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'}>
-                        {inventoryItems.map((item) => (
-                          <motion.tr 
-                            key={item._id}
-                            whileHover={{ backgroundColor: isDarkMode ? 'rgba(55, 65, 81, 0.3)' : 'rgba(249, 250, 251, 0.8)' }}
-                            layout
-                          >
-                            <td className="py-3 px-4">{item.name}</td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                item.quantity > 0 
-                                  ? isDarkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'
-                                  : isDarkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800'
-                              }`}>
-                                {item.quantity}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                isDarkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
-                              }`}>
-                                {item.currentlyBorrowed}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-center">{item.total}</td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex justify-end space-x-2">
-                                <motion.button
-                                  whileHover={{ scale: 1.1 }}
-                                  whileTap={{ scale: 0.9 }}
-                                  onClick={() => handleEditItem(item)}
-                                  className={`p-1.5 rounded-full ${
-                                    isDarkMode ? 'bg-yellow-800 hover:bg-yellow-700 text-yellow-200' : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'
-                                  }`}
-                                  aria-label="Edit"
-                                >
-                                  <FaEdit />
-                                </motion.button>
-                                <motion.button
-                                  whileHover={{ scale: 1.1 }}
-                                  whileTap={{ scale: 0.9 }}
-                                  onClick={() => handleDeleteItem(item._id)}
-                                  className={`p-1.5 rounded-full ${
-                                    isDarkMode ? 'bg-red-800 hover:bg-red-700 text-red-200' : 'bg-red-100 hover:bg-red-200 text-red-700'
-                                  }`}
-                                  aria-label="Delete"
-                                >
-                                  <FaTrash />
-                                </motion.button>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
+          <InventoryModal
+            inventoryItems={inventoryItems}
+            showItemForm={showItemForm}
+            toggleItemForm={toggleItemForm}
+            resetForm={resetForm}
+            handleEditItem={handleEditItem}
+            handleDeleteItem={handleDeleteItem}
+            handleResetItemTotal={handleResetItemTotal}
+            refreshInventory={refreshInventory}
+            editMode={editMode}
+            newItem={newItem}
+            setNewItem={setNewItem}
+            handleAddOrUpdateItem={handleAddOrUpdateItem}
+            handleItemImageChange={handleItemImageChange}
+            imagePreview={imagePreview}
+            itemImageFile={itemImageFile}
+            uploadingImage={uploadingImage}
+            currentItem={currentItem}
+            setShowInventoryModal={setShowInventoryModal}
+            isDarkMode={isDarkMode}
+            modalBgClass={modalBgClass}
+            headerClass={headerClass}
+            tableHeaderClass={tableHeaderClass}
+            secondaryButtonClass={secondaryButtonClass}
+            inputClass={inputClass}
+          />
         )}
       </AnimatePresence>
 
       {/* Equipment Modal */}
       <AnimatePresence>
         {showEquipmentModal && selectedTanod && (
-          <motion.div 
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div 
-              className={`${modalBgClass} rounded-xl shadow-xl w-full max-w-4xl relative overflow-hidden`}
-              variants={slideUp}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <div className={`${headerClass} px-6 py-4 flex items-center justify-between`}>
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 mr-3">
-                    {selectedTanod.profilePicture ? (
-                      <img
-                        src={selectedTanod.profilePicture}
-                        alt={selectedTanod.firstName}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-                      }`}>
-                        <FaUserCircle className={`w-8 h-8 ${
-                          isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                        }`} />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">
-                      {selectedTanod.firstName} {selectedTanod.lastName}'s Equipment
-                    </h2>
-                    <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Manage borrowed and returned items
-                    </p>
-                  </div>
-                </div>
-                <motion.button
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setShowEquipmentModal(false)}
-                  className={`p-2 rounded-full ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`}
-                  aria-label="Close"
-                >
-                  <FaTimes />
-                </motion.button>
-              </div>
-              
-              <div className="p-6">
-                {/* Filter Controls */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                  <div className="flex flex-wrap gap-2">
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => setShowReturned(false)}
-                      className={`px-4 py-2 rounded-lg flex items-center ${!showReturned 
-                        ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white') 
-                        : (isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700')
-                      }`}
-                    >
-                      <FaBox className="mr-2" />
-                      Currently Borrowed
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => setShowReturned(true)}
-                      className={`px-4 py-2 rounded-lg flex items-center ${showReturned 
-                        ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white') 
-                        : (isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700')
-                      }`}
-                    >
-                      <FaHistory className="mr-2" />
-                      Returned Items
-                    </motion.button>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <FaCalendarAlt className={`mr-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                    <input
-                      type="date"
-                      value={filterDate}
-                      onChange={(e) => setFilterDate(e.target.value)}
-                      className={`px-3 py-2 rounded-lg border ${inputClass}`}
-                    />
-                  </div>
-                </div>
-                
-                {/* Equipment List */}
-                {loadingEquipments ? (
-                  <div className="flex justify-center items-center py-12">
-                    <div className="loader">
-                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-                      <p className="mt-3">Loading equipment data...</p>
-                    </div>
-                  </div>
-                ) : filteredItems.length === 0 ? (
-                  <div className={`text-center py-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    <FaBox className="mx-auto text-5xl mb-4 opacity-30" />
-                    <h3 className="text-lg font-medium mb-2">No equipment found</h3>
-                    <p>{showReturned ? 
-                      'No items have been returned yet' : 
-                      'No items are currently borrowed'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {filteredItems.map((item, index) => (
-                      <motion.div
-                        key={index}
-                        variants={itemVariants}
-                        initial="hidden"
-                        animate="visible"
-                        className={`rounded-lg overflow-hidden shadow-md border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}
-                      >
-                        <div className="flex">
-                          {/* Item Image */}
-                          <div className="w-1/3">
-                            {item.imageUrl ? (
-                              <img
-                                src={item.imageUrl}
-                                alt={item.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className={`w-full h-full flex items-center justify-center ${
-                                isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-                              }`}>
-                                <FaBox className="text-4xl opacity-30" />
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Item Details */}
-                          <div className="w-2/3 p-4">
-                            <h3 className="font-bold text-lg mb-2">{item.name}</h3>
-                            <div className="space-y-1.5">
-                              <div className="flex items-start">
-                                <span className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  <FaClock className="mr-1.5 inline" />
-                                  Borrowed:
-                                </span>
-                                <span className="ml-2 block">
-                                  {formatDate(item.borrowDate)}
-                                </span>
-                              </div>
-                              
-                              <div className="flex items-start">
-                                <span className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  <FaCheck className="mr-1.5 inline" />
-                                  Returned:
-                                </span>
-                                <span className="ml-2 block">
-                                  {formatDate(item.returnDate)}
-                                </span>
-                              </div>
-                              
-                              <div className="mt-3">
-                                {item.returnDate === "1970-01-01T00:00:00.000Z" ? (
-                                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                                    isDarkMode ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800'
-                                  }`}>
-                                    Currently Borrowed
-                                  </span>
-                                ) : (
-                                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                                    isDarkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'
-                                  }`}>
-                                    Returned
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
+          <EquipmentModal
+            selectedTanod={selectedTanod}
+            filteredItems={filteredItems}
+            showReturned={showReturned}
+            setShowReturned={setShowReturned}
+            filterDate={filterDate}
+            setFilterDate={setFilterDate}
+            loadingEquipments={loadingEquipments}
+            setShowEquipmentModal={setShowEquipmentModal}
+            formatDate={formatDate}
+            isDarkMode={isDarkMode}
+            modalBgClass={modalBgClass}
+            headerClass={headerClass}
+            inputClass={inputClass}
+          />
         )}
       </AnimatePresence>
+
+      {/* Vehicle Modal */}
+      <AnimatePresence>
+        {showVehicleModal && (
+          <VehicleModal
+            vehicles={vehicles}
+            setVehicles={setVehicles}
+            showVehicleModal={showVehicleModal}
+            setShowVehicleModal={setShowVehicleModal}
+            isDarkMode={isDarkMode}
+            tanods={tanods}
+            uploadProfileImage={uploadProfileImage}
+            refreshVehicles={refreshVehicles} // Pass the refresh function
+            baseURL={baseURL} // Pass the baseURL for API calls
+          />
+        )}
+      </AnimatePresence>
+      
+      {/* New Vehicle Requests Modal */}
+      <AnimatePresence>
+        {showVehicleRequestsModal && (
+          <VehicleRequestsModal
+            isOpen={showVehicleRequestsModal}
+            onClose={handleCloseVehicleRequestsModal} // Pass proper close handler
+            refreshVehicles={fetchVehicles} // Pass the fetchVehicles function
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Password Verification Modal */}
+      <PasswordVerificationModal 
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+        onVerified={handleVerificationSuccess}
+        isDarkMode={isDarkMode}
+        action="generate resources audit report"
+      />
+      
+      {/* Resources Audit Report Modal */}
+      <ResourcesReportModal 
+        isOpen={showReportModal} 
+        onClose={() => setShowReportModal(false)} 
+        isDarkMode={isDarkMode} 
+      />
     </motion.div>
   );
 }
-
-// Tanod Card Component
-const TanodCard = ({ tanod, handleViewEquipment, isDarkMode, buttonClass }) => {
-  return (
-    <motion.div 
-      whileHover={{ y: -5, boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}
-      className={`rounded-xl overflow-hidden shadow-md ${
-        isDarkMode ? 'bg-gray-750 border border-gray-700' : 'bg-white border border-gray-200'
-      }`}
-    >
-      <div className={`h-24 flex items-center justify-center ${
-        isDarkMode ? 'bg-gradient-to-r from-blue-900 to-purple-900' : 'bg-gradient-to-r from-blue-500 to-indigo-500'
-      }`}>
-        {tanod.profilePicture ? (
-          <img
-            src={tanod.profilePicture}
-            alt={tanod.firstName}
-            className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md"
-          />
-        ) : (
-          <div className="w-20 h-20 rounded-full flex items-center justify-center bg-gray-200 border-4 border-white shadow-md">
-            <FaUserCircle className="w-14 h-14 text-gray-400" />
-          </div>
-        )}
-      </div>
-      
-      <div className="p-4">
-        <h3 className={`font-bold text-center truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
-          {tanod.firstName} {tanod.lastName}
-        </h3>
-        <p className={`text-sm text-center truncate mb-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-          {tanod.contactNumber || "No contact info"}
-        </p>
-        
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => handleViewEquipment(tanod)}
-          className={`w-full py-2 rounded-lg flex items-center justify-center ${buttonClass}`}
-        >
-          <FaEye className="mr-2" />
-          View Equipment
-        </motion.button>
-      </div>
-    </motion.div>
-  );
-};

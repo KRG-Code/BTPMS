@@ -844,3 +844,17 @@ body.modal-open {
   }
 }
 
+/* Ensure toasts always appear on top of modals */
+.Toastify__toast-container {
+  z-index: 99999 !important;
+}
+
+.Toastify__toast {
+  z-index: 99999 !important;
+}
+
+/* Make sure toast overlay content is visible */
+.Toastify__toast-body {
+  z-index: 100000 !important;
+}
+

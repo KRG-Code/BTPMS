@@ -16,6 +16,10 @@ const inventorySchema = new mongoose.Schema({
     required: true,
     min: [0, "Total cannot be negative"],
   },
+  imageUrl: {
+    type: String,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now,

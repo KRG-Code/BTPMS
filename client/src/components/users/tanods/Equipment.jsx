@@ -11,16 +11,16 @@ import { useTheme } from "../../../contexts/ThemeContext";
 import {
   FaPlus,
   FaTimes,
-  FaCalendarAlt,
-  FaExchangeAlt,
-  FaUpload,
-  FaArrowLeft,
-  FaImage,
-  FaCheck,
-  FaSearch,
   FaFilter,
-  FaExclamationTriangle,
+  FaCar,
+  FaExclamationTriangle
 } from "react-icons/fa";
+
+// Import component files
+import EquipmentFilter from "./EquipmentsComponents/EquipmentFilter";
+import EquipmentForm from "./EquipmentsComponents/EquipmentForm";
+import EquipmentList from "./EquipmentsComponents/EquipmentList";
+import VehicleSection from "./EquipmentsComponents/VehicleSection";
 
 dayjs.extend(customParseFormat);
 
@@ -39,21 +39,6 @@ const slideUp = {
   })
 };
 
-const staggerContainer = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05
-    }
-  }
-};
-
-const tableRowVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } }
-};
-
 const formVariants = {
   hidden: { opacity: 0, scale: 0.95 },
   visible: { opacity: 1, scale: 1, transition: { duration: 0.3 } },
@@ -64,17 +49,34 @@ const Equipment = () => {
   const [items, setItems] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [newItem, setNewItem] = useState({ image: null });
-  const [imagePreview, setImagePreview] = useState(null);
   const [selectedItem, setSelectedItem] = useState("");
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
+  const [alreadyBorrowed, setAlreadyBorrowed] = useState(false);
   const [showReturned, setShowReturned] = useState(false);
   const [filterDate, setFilterDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const { isDarkMode } = useTheme();
+  const [assignedVehicles, setAssignedVehicles] = useState([]);
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [showVehicleForm, setShowVehicleForm] = useState(false);
+  const [vehicleUsage, setVehicleUsage] = useState({
+    startMileage: "",
+    endMileage: "",
+    date: new Date().toISOString().split('T')[0],
+    destination: "",
+    notes: "",
+    status: "Good condition"
+  });
+  const [vehicleUsageHistory, setVehicleUsageHistory] = useState([]);
+  const [loadingVehicles, setLoadingVehicles] = useState(false);
+  const [viewingHistory, setViewingHistory] = useState(false);
+  const [viewingVehicles, setViewingVehicles] = useState(false);
 
-  const baseURL = `${process.env.REACT_APP_API_URL}`;
+  // Make sure baseURL is set correctly and consistent with server configuration
+  // Remove any trailing slash to avoid path construction issues
+  const baseURL = process.env.REACT_APP_API_URL.replace(/\/$/, '');
 
   // Theme-aware styles
   const cardBg = isDarkMode ? 'bg-gray-800' : 'bg-white';
@@ -88,6 +90,8 @@ const Equipment = () => {
   const buttonSecondary = isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300';
   const buttonDanger = isDarkMode ? 'bg-red-600 hover:bg-red-700' : 'bg-red-500 hover:bg-red-600';
   const pageBg = isDarkMode ? 'bg-gray-900' : 'bg-gray-50';
+  // Define headerClass that was missing
+  const headerClass = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200';
 
   useEffect(() => {
     const fetchEquipments = async () => {
@@ -116,38 +120,191 @@ const Equipment = () => {
         toast.error("Failed to load inventory items.");
       }
     };
+    
+    const fetchAssignedVehicles = async () => {
+      setLoadingVehicles(true);
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        
+        const userId = localStorage.getItem("userId");
+        if (!userId) return;
+        
+        const apiUrl = `${baseURL}/vehicles/assigned-to/${userId}`;
+        const response = await axios.get(apiUrl, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (response.data && Array.isArray(response.data)) {
+          setAssignedVehicles(response.data);
+          
+          if (response.data.length > 0) {
+            setSelectedVehicle(response.data[0]);
+            setViewingVehicles(true);
+            fetchVehicleUsageHistory(response.data[0]._id);
+          } else {
+            // Try alternative API path (without /api prefix)
+            const altApiUrl = baseURL.includes('/api') 
+              ? baseURL.replace('/api', '') + '/vehicles/assigned-to/' + userId
+              : baseURL + '/vehicles/assigned-to/' + userId;
+            
+            try {
+              const altResponse = await axios.get(altApiUrl, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              
+              if (altResponse.data && Array.isArray(altResponse.data) && altResponse.data.length > 0) {
+                setAssignedVehicles(altResponse.data);
+                setSelectedVehicle(altResponse.data[0]);
+                setViewingVehicles(true);
+                fetchVehicleUsageHistory(altResponse.data[0]._id);
+              }
+            } catch (altError) {
+              // Silent fallback failure
+            }
+          }
+        }
+      } catch (error) {
+        if (error.response) {
+          // Try direct API endpoint as another fallback option
+          try {
+            const userId = localStorage.getItem("userId");
+            const token = localStorage.getItem("token");
+            const directUrl = `${process.env.REACT_APP_API_URL.replace(/\/$/, '')}/vehicles/assigned-to/${userId}`;
+            
+            const directResponse = await axios.get(directUrl, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            if (directResponse.data && Array.isArray(directResponse.data) && directResponse.data.length > 0) {
+              setAssignedVehicles(directResponse.data);
+              setSelectedVehicle(directResponse.data[0]);
+              setViewingVehicles(true);
+              fetchVehicleUsageHistory(directResponse.data[0]._id);
+            }
+          } catch (directError) {
+            // Silent fallback failure
+          }
+        }
+      } finally {
+        setLoadingVehicles(false);
+      }
+    };
+
+    // Set up WebSocket connection for real-time updates
+    const setupWebSocket = () => {
+      const token = localStorage.getItem("token");
+      const userId = localStorage.getItem("userId");
+      if (!token || !userId) return;
+      
+      // Get WebSocket URL from env or fallback
+      const wsUrl = process.env.REACT_APP_WS_URL || 
+        (process.env.REACT_APP_API_URL || "").replace(/^http/, 'ws').replace('/api', '') || 
+        "ws://localhost:5000";
+      
+      const ws = new WebSocket(`${wsUrl}?token=${token}`);
+      
+      ws.onopen = () => {
+        console.log("WebSocket connected in Equipment component");
+        
+        // Join user-specific room for updates
+        ws.send(JSON.stringify({ type: 'join', room: `user-${userId}` }));
+        
+        // Also join general room for vehicle requests
+        ws.send(JSON.stringify({ type: 'join', room: 'vehicle-requests' }));
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("WebSocket message received in Equipment:", data);
+          
+          // Handle vehicle request updates
+          if (data.type === 'vehicleRequestUpdate') {
+            const updatedRequest = data.request;
+            
+            // Check if the request belongs to this user
+            if (updatedRequest.requesterId?._id === userId || updatedRequest.requesterId === userId) {
+              // If request was approved, refresh assigned vehicles
+              if (updatedRequest.status === 'Approved') {
+                fetchAssignedVehicles();
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error processing WebSocket message:", error);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+      
+      ws.onclose = () => {
+        console.log("WebSocket disconnected");
+      };
+      
+      return ws;
+    };
+    
+    const ws = setupWebSocket();
 
     fetchEquipments();
     fetchInventory();
+    fetchAssignedVehicles();
+    
+    return () => {
+      if (ws) ws.close();
+    };
   }, [baseURL]);
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setNewItem({ ...newItem, image: file });
-      setImagePreview(URL.createObjectURL(file));
+  // Add this function to check if the user has already borrowed this item
+  const checkAlreadyBorrowed = (itemName) => {
+    // Find non-returned items with the same name
+    const unreturned = items.filter(item => 
+      item.name.toLowerCase() === itemName.toLowerCase() && 
+      item.returnDate === "1970-01-01T00:00:00.000Z"
+    );
+    
+    return unreturned.length > 0;
+  };
+
+  const handleItemSelection = (itemId) => {
+    setSelectedItem(itemId);
+    const selected = inventory.find(item => item._id === itemId);
+    
+    if (selected) {
+      setSelectedInventoryItem(selected);
+      
+      // Check if already borrowed
+      const isBorrowed = checkAlreadyBorrowed(selected.name);
+      setAlreadyBorrowed(isBorrowed);
+      
+      if (isBorrowed) {
+        toast.warning(`You already have a ${selected.name} checked out. Please return it before borrowing another one.`);
+      }
+    } else {
+      setSelectedInventoryItem(null);
+      setAlreadyBorrowed(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const selectedInventoryItem = inventory.find(item => item._id === selectedItem);
     if (!selectedInventoryItem) {
       toast.error("Please select a valid item.");
       return;
     }
 
-    if (!newItem.image) {
-      toast.error("Please upload an image of the equipment.");
+    if (alreadyBorrowed) {
+      toast.error(`You already have a ${selectedInventoryItem.name} checked out. Please return it first.`);
       return;
     }
 
     try {
-      toast.info("Uploading image... Please wait.", { autoClose: false, toastId: "upload" });
-      const storageRef = ref(storage, `Equipments/${newItem.image.name}`);
-      const snapshot = await uploadBytes(storageRef, newItem.image);
-      const imageUrl = await getDownloadURL(snapshot.ref);
-      toast.dismiss("upload");
+      toast.info("Borrowing equipment... Please wait.", { autoClose: false, toastId: "borrow" });
+
+      const imageUrl = selectedInventoryItem.imageUrl || 'https://placehold.co/100x100?text=No+Image';
 
       const formData = {
         name: selectedInventoryItem.name,
@@ -168,11 +325,13 @@ const Equipment = () => {
       ));
       setItems([...items, response.data]);
       setShowForm(false);
-      setNewItem({ image: null });
-      setImagePreview(null);
+      setSelectedItem("");
+      setSelectedInventoryItem(null);
+      toast.dismiss("borrow");
       toast.success("Item borrowed successfully!");
     } catch (error) {
-      toast.error("Error adding equipment. Please try again.");
+      toast.dismiss("borrow");
+      toast.error("Error borrowing equipment. Please try again.");
     }
   };
 
@@ -187,7 +346,7 @@ const Equipment = () => {
             className={`${isDarkMode ? 'bg-green-600 hover:bg-green-700' : 'bg-green-500 hover:bg-green-600'} text-white py-2 px-4 rounded-lg`}
             onClick={() => confirmReturn(itemId)}
           >
-            <FaCheck className="mr-2 inline" /> Yes, Return Item
+            Yes, Return Item
           </motion.button>
           <motion.button 
             whileHover={{ scale: 1.05 }} 
@@ -195,7 +354,7 @@ const Equipment = () => {
             className={`${buttonSecondary} py-2 px-4 rounded-lg`}
             onClick={() => toast.dismiss()}
           >
-            <FaTimes className="mr-2 inline" /> Cancel
+            Cancel
           </motion.button>
         </div>
       </div>,
@@ -214,7 +373,6 @@ const Equipment = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Update the inventory to increase the returned item quantity
       const inventoryItem = inventory.find(item => item.name === itemToReturn.name);
       if (inventoryItem) {
         const updatedInventory = inventory.map(item => 
@@ -238,7 +396,7 @@ const Equipment = () => {
   const formatDate = (date) => {
     const notReturnedDate = "1970-01-01T00:00:00.000Z";
     return date === notReturnedDate 
-      ? <span className="text-red-500 flex items-center"><FaExclamationTriangle className="mr-1" /> Not Returned</span> 
+      ? null
       : dayjs(date).format("hh:mm A DD-MM-YYYY");
   };
 
@@ -269,87 +427,128 @@ const Equipment = () => {
     return matchesReturnStatus && matchesDate && matchesSearch;
   });
 
-  // Loading skeletons
-  const TableSkeleton = () => (
-    <div className="animate-pulse">
-      <div className={`h-10 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded mb-4`}></div>
-      {[...Array(3)].map((_, i) => (
-        <div key={i} className={`h-16 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded mb-3`}></div>
-      ))}
-    </div>
-  );
+  // Function to fetch vehicle usage history
+  const fetchVehicleUsageHistory = async (vehicleId) => {
+    if (!vehicleId) return;
+  
+    try {
+      // Initialize as empty array to avoid 'filter is not a function' error
+      setVehicleUsageHistory([]);
+      
+      const token = localStorage.getItem("token");
+      // Use correct endpoint for getting vehicle usage history
+      const response = await axios.get(`${baseURL}/vehicles/${vehicleId}/usage`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Ensure we always set an array, even if the API returns something else
+      if (Array.isArray(response.data)) {
+        setVehicleUsageHistory(response.data);
+      } else if (response.data && Array.isArray(response.data.history)) {
+        // If the API returns an object with a history property that's an array
+        setVehicleUsageHistory(response.data.history);
+      } else {
+        console.warn("Unexpected data structure from API:", response.data);
+        setVehicleUsageHistory([]); // Set empty array if data is not as expected
+      }
+    } catch (error) {
+      console.error("Failed to load vehicle usage history:", error);
+      setVehicleUsageHistory([]); // Set empty array in case of error
+      toast.error("Failed to load vehicle history");
+    }
+  };
 
-  const CardSkeleton = () => (
-    <div className="animate-pulse">
-      {[...Array(3)].map((_, i) => (
-        <div key={i} className={`${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded-xl h-44 mb-4`}></div>
-      ))}
-    </div>
-  );
+  // Function to handle vehicle selection
+  const handleVehicleSelect = (vehicle) => {
+    setSelectedVehicle(vehicle);
+    fetchVehicleUsageHistory(vehicle._id);
+    setViewingHistory(false);
+  };
 
-  // Mobile Equipment Card component
-  const EquipmentCard = ({ item }) => {
-    return (
-      <motion.div 
-        variants={tableRowVariants}
-        whileHover={{ scale: 1.01 }}
-        className={`${cardBg} shadow-md rounded-xl overflow-hidden border ${borderColor} mb-4`}
-      >
-        <div className={`px-4 py-3 border-b ${borderColor} flex justify-between items-center`}>
-          <div className="flex items-center">
-            <span className={`font-medium ${textColor}`}>{item.name}</span>
-          </div>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center ${getStatusBadgeClass(item.returnDate)}`}>
-            {item.returnDate === "1970-01-01T00:00:00.000Z" ? 'Borrowed' : 'Returned'}
-          </span>
-        </div>
-        
-        <div className="p-4">
-          <div className="flex space-x-3">
-            <div className="flex-shrink-0">
-              <img 
-                src={item.imageUrl} 
-                alt={item.name} 
-                className="w-24 h-24 object-cover rounded-lg border border-gray-300"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = 'https://placehold.co/100x100?text=No+Image';
-                }}
-              />
-            </div>
-            
-            <div className="flex-1">
-              <div className="mb-2">
-                <div className="flex items-center mb-1">
-                  <FaCalendarAlt className={`mr-2 ${subTextColor}`} />
-                  <span className={`text-xs font-medium ${subTextColor}`}>Borrowed</span>
-                </div>
-                <p className={`${textColor} text-sm`}>{dayjs(item.borrowDate).format("hh:mm A DD-MM-YYYY")}</p>
-              </div>
-              
-              <div>
-                <div className="flex items-center mb-1">
-                  <FaExchangeAlt className={`mr-2 ${subTextColor}`} />
-                  <span className={`text-xs font-medium ${subTextColor}`}>Returned</span>
-                </div>
-                <p className={`text-sm`}>{formatDate(item.returnDate)}</p>
-              </div>
-            </div>
-          </div>
-          
-          {item.returnDate === "1970-01-01T00:00:00.000Z" && (
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => handleReturn(item._id)}
-              className={`w-full mt-3 py-2 px-4 rounded-lg ${buttonDanger} text-white flex items-center justify-center`}
-            >
-              <FaCheck className="mr-2" /> Return Item
-            </motion.button>
-          )}
-        </div>
-      </motion.div>
-    );
+  // Handle vehicle usage form changes
+  const handleVehicleUsageChange = (e) => {
+    const { name, value } = e.target;
+    setVehicleUsage(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Submit vehicle usage
+  const handleSubmitVehicleUsage = async (e) => {
+    e.preventDefault();
+    
+    if (!vehicleUsage.startMileage || !vehicleUsage.endMileage || !vehicleUsage.destination) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    
+    const startMileage = parseFloat(vehicleUsage.startMileage);
+    const endMileage = parseFloat(vehicleUsage.endMileage);
+    
+    if (isNaN(startMileage) || isNaN(endMileage)) {
+      toast.error("Mileage must be a number");
+      return;
+    }
+    
+    if (endMileage <= startMileage) {
+      toast.error("End mileage must be greater than start mileage");
+      return;
+    }
+    
+    if (selectedVehicle.currentMileage && startMileage < selectedVehicle.currentMileage) {
+      toast.error(`Start mileage cannot be less than vehicle's current mileage (${selectedVehicle.currentMileage})`);
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem("token");
+      
+      const loadingToast = toast.loading("Recording vehicle usage...");
+      
+      const response = await axios.post(
+        `${baseURL}/vehicles/${selectedVehicle._id}/usage`,
+        {
+          ...vehicleUsage,
+          mileageUsed: endMileage - startMileage
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      
+      setAssignedVehicles(vehicles => 
+        vehicles.map(v => 
+          v._id === selectedVehicle._id 
+            ? { ...v, currentMileage: endMileage } 
+            : v
+        )
+      );
+      
+      setSelectedVehicle(prev => ({
+        ...prev,
+        currentMileage: endMileage
+      }));
+      
+      setVehicleUsage({
+        startMileage: endMileage.toString(),
+        endMileage: "",
+        date: new Date().toISOString().split('T')[0],
+        destination: "",
+        notes: "",
+        status: "Good condition"
+      });
+      
+      fetchVehicleUsageHistory(selectedVehicle._id);
+      
+      setShowVehicleForm(false);
+      
+      toast.dismiss(loadingToast);
+      toast.success("Vehicle usage recorded successfully");
+    } catch (error) {
+      console.error("Error recording vehicle usage:", error);
+      toast.error("Failed to record vehicle usage");
+    }
   };
 
   return (
@@ -359,13 +558,29 @@ const Equipment = () => {
       variants={fadeIn}
       className={`container mx-auto px-4 py-6 ${pageBg} min-h-screen`}
     >
-      <ToastContainer position="top-right" theme={isDarkMode ? "dark" : "light"} />
+      <ToastContainer 
+        position="top-right" 
+        theme={isDarkMode ? "dark" : "light"} 
+        style={{ zIndex: 9999 }}
+        toastStyle={{ zIndex: 9999 }}
+        closeButton={true}
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
       
+      {/* Page Header with Equipment Management title and Filter/Borrow/Vehicle buttons */}
       <motion.div variants={slideUp} custom={0}>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
           <h1 className={`text-2xl font-bold mb-4 md:mb-0 ${textColor}`}>Equipment Management</h1>
           
           <div className="flex flex-wrap gap-2">
+            {/* Toggle Filters Button */}
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`px-4 py-2 rounded-lg flex items-center text-sm ${
@@ -376,331 +591,159 @@ const Equipment = () => {
               {showFilters ? 'Hide Filters' : 'Show Filters'}
             </button>
             
+            {/* Vehicle Button - Make sure it properly toggles the viewingVehicles state */}
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setViewingVehicles(!viewingVehicles)}
+              className={`px-4 py-2 rounded-lg flex items-center ${
+                assignedVehicles.length > 0
+                  ? isDarkMode ? 'bg-green-600 hover:bg-green-700' : 'bg-green-500 hover:bg-green-600'
+                  : isDarkMode ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-yellow-500 hover:bg-yellow-600'
+              } text-white shadow-sm relative`}
+            >
+              <FaCar className="mr-2" />
+              Vehicles
+              {assignedVehicles.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {assignedVehicles.length}
+                </span>
+              )}
+            </motion.button>
+            
+            {/* Get Equipment Button (renamed from Borrow Equipment) */}
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
               onClick={() => setShowForm(!showForm)}
               className={`${buttonPrimary} text-white font-medium py-2 px-4 rounded-lg flex items-center`}
             >
-              {showForm ? <><FaTimes className="mr-2" /> Cancel</> : <><FaPlus className="mr-2" /> Borrow Equipment</>}
+              {showForm ? <><FaTimes className="mr-2" /> Cancel</> : <><FaPlus className="mr-2" /> Get Equipment</>}
             </motion.button>
           </div>
         </div>
       </motion.div>
 
-      {/* Expandable Filters Section */}
+      {/* Vehicle Section - Always show when toggled */}
       <AnimatePresence>
-        {showFilters && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden mb-6"
+        {viewingVehicles && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-6 overflow-hidden"
           >
-            <motion.div 
-              variants={staggerContainer}
-              initial="hidden"
-              animate="visible"
-              className={`p-4 rounded-xl ${cardBg} border ${borderColor} shadow-md`}
-            >
-              <motion.h2 
-                variants={slideUp} 
-                custom={0} 
-                className={`text-lg font-semibold mb-4 flex items-center ${textColor}`}
-              >
-                <FaFilter className="mr-2" /> Filter Equipment
-              </motion.h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <motion.div variants={slideUp} custom={1} className="flex flex-col">
-                  <label className={`text-sm font-medium mb-1.5 ${subTextColor}`}>Search Items</label>
-                  <div className="relative">
-                    <FaSearch className="absolute left-3 top-2.5 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search by name..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className={`w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputBg} ${inputText}`}
-                    />
-                  </div>
-                </motion.div>
-                
-                <motion.div variants={slideUp} custom={2} className="flex flex-col">
-                  <label className={`text-sm font-medium mb-1.5 ${subTextColor}`}>Filter by Date</label>
-                  <input
-                    type="date"
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputBg} ${inputText}`}
-                  />
-                </motion.div>
-                
-                <motion.div variants={slideUp} custom={3} className="flex flex-col">
-                  <label className={`text-sm font-medium mb-1.5 ${subTextColor}`}>Status</label>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => setShowReturned(false)}
-                      className={`flex-1 py-2 px-3 rounded-lg ${!showReturned 
-                        ? buttonPrimary + ' text-white' 
-                        : buttonSecondary + ` ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}`}
-                    >
-                      Borrowed
-                    </button>
-                    <button
-                      onClick={() => setShowReturned(true)}
-                      className={`flex-1 py-2 px-3 rounded-lg ${showReturned 
-                        ? buttonPrimary + ' text-white' 
-                        : buttonSecondary + ` ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}`}
-                    >
-                      Returned
-                    </button>
-                  </div>
-                </motion.div>
+            {loadingVehicles ? (
+              <div className="animate-pulse">
+                <div className={`h-40 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded-xl mb-4`}></div>
               </div>
-            </motion.div>
+            ) : assignedVehicles.length === 0 ? (
+              <motion.div 
+                className={`${cardBg} rounded-xl shadow-md border ${borderColor} overflow-hidden p-6 text-center`}
+              >
+                <FaCar className={`text-5xl mx-auto mb-4 ${subTextColor}`} />
+                <h3 className={`text-xl font-semibold mb-2 ${textColor}`}>No Vehicle Assigned</h3>
+                <p className={`${subTextColor} mb-6`}>You don't have any vehicles assigned to you at the moment.</p>
+                <div className="flex justify-center items-center">
+                  <FaExclamationTriangle className={`text-xl mr-2 ${
+                    isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
+                  }`} />
+                  <p className={`${subTextColor}`}>If you need a vehicle for your duties, please contact your administrator.</p>
+                </div>
+              </motion.div>
+            ) : (
+              <VehicleSection 
+                assignedVehicles={assignedVehicles}
+                setAssignedVehicles={setAssignedVehicles} // Add this line to pass the setter
+                selectedVehicle={selectedVehicle}
+                handleVehicleSelect={handleVehicleSelect}
+                showVehicleForm={showVehicleForm}
+                setShowVehicleForm={setShowVehicleForm}
+                vehicleUsage={vehicleUsage}
+                handleVehicleUsageChange={handleVehicleUsageChange}
+                handleSubmitVehicleUsage={handleSubmitVehicleUsage}
+                vehicleUsageHistory={vehicleUsageHistory}
+                viewingHistory={viewingHistory}
+                setViewingHistory={setViewingHistory}
+                loadingVehicles={loadingVehicles}
+                fetchVehicleUsageHistory={fetchVehicleUsageHistory}
+                isDarkMode={isDarkMode}
+                textColor={textColor}
+                subTextColor={subTextColor}
+                borderColor={borderColor}
+                cardBg={cardBg}
+                buttonPrimary={buttonPrimary}
+                buttonSecondary={buttonSecondary}
+                headerClass={headerClass}
+                inputBg={inputBg}
+                inputText={inputText}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Filters Section */}
+      <EquipmentFilter 
+        showFilters={showFilters}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        filterDate={filterDate}
+        setFilterDate={setFilterDate}
+        showReturned={showReturned}
+        setShowReturned={setShowReturned}
+        isDarkMode={isDarkMode}
+        inputBg={inputBg}
+        inputText={inputText}
+        cardBg={cardBg}
+        borderColor={borderColor}
+        textColor={textColor}
+        subTextColor={subTextColor}
+        buttonPrimary={buttonPrimary}
+        buttonSecondary={buttonSecondary}
+      />
 
       {/* Borrow Equipment Form */}
-      <AnimatePresence>
-        {showForm && (
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={formVariants}
-            className={`mb-6 ${cardBg} rounded-lg shadow-lg border ${borderColor} overflow-hidden`}
-          >
-            <div className={`${isDarkMode ? 'bg-gray-900/50' : 'bg-gray-50'} px-4 py-3 border-b ${borderColor}`}>
-              <h2 className={`text-lg font-semibold ${textColor} flex items-center`}>
-                <FaUpload className="mr-2" />
-                Borrow Equipment
-              </h2>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${subTextColor}`}>
-                    Select Equipment
-                  </label>
-                  <select
-                    value={selectedItem}
-                    onChange={(e) => setSelectedItem(e.target.value)}
-                    required
-                    className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputBg} ${inputText}`}
-                  >
-                    <option value="">-- Select Item --</option>
-                    {inventory.map((item) => (
-                      <option key={item._id} value={item._id}>
-                        {item.name} (Available: {item.quantity})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${subTextColor}`}>
-                    Upload Image
-                  </label>
-                  <div className={`border-2 border-dashed ${borderColor} rounded-lg p-4 text-center hover:border-blue-500 transition-colors`}>
-                    <input 
-                      type="file" 
-                      id="equipment-image"
-                      onChange={handleImageChange} 
-                      required 
-                      className="hidden"
-                      accept="image/*" 
-                    />
-                    <label 
-                      htmlFor="equipment-image"
-                      className={`cursor-pointer flex flex-col items-center justify-center ${
-                        imagePreview ? 'h-32' : 'h-24'
-                      }`}
-                    >
-                      {imagePreview ? (
-                        <img 
-                          src={imagePreview} 
-                          alt="Preview" 
-                          className="h-full object-contain rounded mb-2" 
-                        />
-                      ) : (
-                        <>
-                          <FaImage className={`text-4xl mb-2 ${subTextColor}`} />
-                          <p className={`text-sm ${subTextColor}`}>
-                            Click to upload equipment image
-                          </p>
-                          <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                            JPG, PNG or GIF files
-                          </p>
-                        </>
-                      )}
-                    </label>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex justify-end space-x-3 mt-6">
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => {
-                    setShowForm(false);
-                    setImagePreview(null);
-                    setNewItem({ image: null });
-                  }}
-                  className={`py-2 px-4 rounded-lg ${buttonSecondary} ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
-                >
-                  <FaTimes className="mr-2 inline" />
-                  Cancel
-                </motion.button>
-                
-                <motion.button
-                  type="submit"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className={`py-2 px-5 rounded-lg ${buttonPrimary} text-white`}
-                >
-                  <FaCheck className="mr-2 inline" />
-                  Borrow Item
-                </motion.button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <EquipmentForm 
+        showForm={showForm}
+        handleSubmit={handleSubmit}
+        selectedItem={selectedItem}
+        handleItemSelection={handleItemSelection}
+        inventory={inventory}
+        alreadyBorrowed={alreadyBorrowed}
+        selectedInventoryItem={selectedInventoryItem}
+        setShowForm={setShowForm}
+        setSelectedItem={setSelectedItem}
+        setSelectedInventoryItem={setSelectedInventoryItem}
+        setAlreadyBorrowed={setAlreadyBorrowed}
+        isDarkMode={isDarkMode}
+        cardBg={cardBg}
+        borderColor={borderColor}
+        textColor={textColor}
+        subTextColor={subTextColor}
+        inputBg={inputBg}
+        inputText={inputText}
+        buttonPrimary={buttonPrimary}
+        buttonSecondary={buttonSecondary}
+        formVariants={formVariants}
+      />
 
-      {/* Results section */}
-      <motion.div variants={slideUp} custom={1}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className={`text-xl font-bold ${textColor}`}>
-            {showReturned ? "Returned Equipment" : "Borrowed Equipment"}
-          </h2>
-          <span className={`text-sm ${subTextColor}`}>
-            {filteredItems.length} {filteredItems.length === 1 ? 'item' : 'items'} found
-          </span>
-        </div>
-      </motion.div>
-
-      {/* Desktop Table View (hidden on mobile) */}
-      <motion.div 
-        variants={fadeIn}
-        className="hidden md:block"
-      >
-        {loading ? (
-          <TableSkeleton />
-        ) : filteredItems.length === 0 ? (
-          <motion.div 
-            variants={slideUp} 
-            custom={3}
-            className={`flex flex-col items-center justify-center p-8 rounded-xl ${cardBg} border ${borderColor}`}
-          >
-            <FaExchangeAlt size={48} className={`${subTextColor} mb-4`} />
-            <p className={`${textColor} text-lg font-medium mb-2`}>No equipment found</p>
-            <p className={`${subTextColor}`}>Try adjusting your filters or borrow new equipment</p>
-          </motion.div>
-        ) : (
-          <motion.div 
-            variants={staggerContainer}
-            className={`overflow-hidden rounded-xl shadow-lg border ${borderColor}`}
-          >
-            <div className="overflow-x-auto">
-              <table className={`min-w-full ${cardBg}`}>
-                <thead className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} border-b ${borderColor}`}>
-                  <tr>
-                    <th className={`py-3.5 px-4 text-left text-sm font-medium ${subTextColor}`}>Item Name</th>
-                    <th className={`py-3.5 px-4 text-left text-sm font-medium ${subTextColor}`}>Borrow Date & Time</th>
-                    <th className={`py-3.5 px-4 text-left text-sm font-medium ${subTextColor}`}>Return Date & Time</th>
-                    <th className={`py-3.5 px-4 text-left text-sm font-medium ${subTextColor}`}>Image</th>
-                    <th className={`py-3.5 px-4 text-left text-sm font-medium ${subTextColor}`}>Status</th>
-                    <th className={`py-3.5 px-4 text-right text-sm font-medium ${subTextColor}`}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  <AnimatePresence>
-                    {filteredItems.map((item, index) => (
-                      <motion.tr 
-                        key={item._id}
-                        variants={tableRowVariants}
-                        initial="hidden"
-                        animate="visible"
-                        exit="hidden"
-                        custom={index}
-                        className={`${hoverBg} transition-colors`}
-                      >
-                        <td className={`py-4 px-4 whitespace-nowrap ${textColor} font-medium`}>{item.name}</td>
-                        <td className={`py-4 px-4 whitespace-nowrap ${textColor}`}>
-                          {dayjs(item.borrowDate).format("hh:mm A DD-MM-YYYY")}
-                        </td>
-                        <td className={`py-4 px-4 whitespace-nowrap`}>
-                          {formatDate(item.returnDate)}
-                        </td>
-                        <td className={`py-4 px-4`}>
-                          <img 
-                            src={item.imageUrl} 
-                            alt={item.name} 
-                            className="w-16 h-16 object-cover rounded border border-gray-300"
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.src = 'https://placehold.co/80x80?text=No+Image';
-                            }}
-                          />
-                        </td>
-                        <td className={`py-4 px-4 whitespace-nowrap`}>
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(item.returnDate)}`}>
-                            {item.returnDate === "1970-01-01T00:00:00.000Z" ? 'Borrowed' : 'Returned'}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 whitespace-nowrap text-right">
-                          {item.returnDate === "1970-01-01T00:00:00.000Z" && (
-                            <motion.button
-                              whileHover={{ scale: 1.03 }}
-                              whileTap={{ scale: 0.98 }}
-                              onClick={() => handleReturn(item._id)}
-                              className={`inline-flex items-center px-3 py-1.5 rounded-lg ${buttonDanger} text-white text-sm`}
-                            >
-                              <FaCheck className="mr-1.5" /> Return Item
-                            </motion.button>
-                          )}
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                </tbody>
-              </table>
-            </div>
-          </motion.div>
-        )}
-      </motion.div>
-
-      {/* Mobile Card View (hidden on desktop) */}
-      <motion.div 
-        variants={staggerContainer}
-        initial="hidden"
-        animate="visible"
-        className="md:hidden"
-      >
-        {loading ? (
-          <CardSkeleton />
-        ) : filteredItems.length === 0 ? (
-          <motion.div 
-            variants={slideUp} 
-            custom={3}
-            className={`flex flex-col items-center justify-center p-8 rounded-xl ${cardBg} border ${borderColor}`}
-          >
-            <FaExchangeAlt size={40} className={`${subTextColor} mb-3`} />
-            <p className={`${textColor} text-base font-medium mb-1`}>No equipment found</p>
-            <p className={`${subTextColor} text-sm text-center`}>Try adjusting your filters or borrow new equipment</p>
-          </motion.div>
-        ) : (
-          filteredItems.map((item) => (
-            <EquipmentCard key={item._id} item={item} />
-          ))
-        )}
-      </motion.div>
+      {/* Equipment List Section */}
+      <EquipmentList 
+        loading={loading}
+        filteredItems={filteredItems}
+        showReturned={showReturned}
+        textColor={textColor}
+        subTextColor={subTextColor}
+        handleReturn={handleReturn}
+        formatDate={formatDate}
+        getStatusBadgeClass={getStatusBadgeClass}
+        isDarkMode={isDarkMode}
+        cardBg={cardBg}
+        borderColor={borderColor}
+        hoverBg={hoverBg}
+        buttonDanger={buttonDanger}
+      />
     </motion.div>
   );
 };
