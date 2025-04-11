@@ -1,0 +1,48 @@
+[{
+  "_id": {
+    "$oid": "67f7f7f2ecddf4994b4db6f9"
+  },
+  "vehicleId": {
+    "$oid": "67f79bc0d18b072c0558a4db"
+  },
+  "userId": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "driverId": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "startMileage": 70,
+  "endMileage": 80,
+  "mileageUsed": 10,
+  "date": {
+    "$date": "2025-04-11T00:00:00.000Z"
+  },
+  "startTime": {
+    "$date": "2025-04-10T16:49:00.000Z"
+  },
+  "endDateTime": {
+    "$date": "2025-04-11T16:54:00.000Z"
+  },
+  "completionDate": {
+    "$date": "2025-04-10T16:55:13.868Z"
+  },
+  "destination": "Quirino Highway, Quezon City",
+  "destinationCoordinates": {
+    "latitude": 14.74359199911357,
+    "longitude": 121.07833404082093
+  },
+  "reason": "Emergency Response",
+  "notes": "khghgjgh",
+  "status": "Completed",
+  "condition": "Good condition",
+  "requestId": {
+    "$oid": "67f7f7c3ecddf4994b4db658"
+  },
+  "createdAt": {
+    "$date": "2025-04-10T16:55:14.113Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-10T16:55:14.113Z"
+  },
+  "__v": 0
+}]

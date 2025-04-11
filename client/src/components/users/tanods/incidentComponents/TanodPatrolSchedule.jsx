@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,7 +15,8 @@ import {
   FaCheck,
   FaExclamationTriangle,
   FaRegClock,
-  FaSpinner
+  FaSpinner,
+  FaDatabase
 } from "react-icons/fa";
 
 // Animation variants
@@ -71,11 +72,15 @@ const TanodPatrolSchedule = ({
   setShowTodaySchedule, 
   fetchUpcomingPatrols, 
   fetchCurrentPatrolArea, 
-  uploadPatrolLogs 
+  uploadPatrolLogs,
+  userLocation // Make sure this prop is passed from Map.jsx
 }) => {
   const socketRef = useRef(null);
   const [loading, setLoading] = useState({});
   const [confirmingEnd, setConfirmingEnd] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState(null); // State for current location
+  const [savedDatabaseLocation, setSavedDatabaseLocation] = useState(null); // New state for saved database location
+  const [useCurrentLocation, setUseCurrentLocation] = useState(false); // Toggle between saved and current location
   const { isDarkMode } = useTheme();
 
   // Theme-aware styling
@@ -90,6 +95,108 @@ const TanodPatrolSchedule = ({
   const buttonSuccess = isDarkMode ? 'bg-green-600 hover:bg-green-700' : 'bg-green-500 hover:bg-green-600';
   const buttonSecondary = isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300';
   const headerBg = isDarkMode ? 'bg-gray-900' : 'bg-blue-50';
+
+  // Add a function to fetch the user's saved location from the database
+  const fetchSavedLocation = async () => {
+    const token = localStorage.getItem('token');
+    const userId = localStorage.getItem('userId');
+    
+    if (!token || !userId) {
+      toast.error("Authentication required");
+      return;
+    }
+    
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/locations/active`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      const userLocationData = response.data.find(loc => 
+        loc.userId && 
+        (typeof loc.userId === 'string' ? loc.userId === userId : loc.userId._id === userId)
+      );
+      
+      if (userLocationData) {
+        setSavedDatabaseLocation({
+          latitude: userLocationData.latitude,
+          longitude: userLocationData.longitude
+        });
+        
+        // If this is the first time loading, use the saved location by default
+        if (!currentLocation) {
+          setCurrentLocation({
+            latitude: userLocationData.latitude,
+            longitude: userLocationData.longitude
+          });
+        }
+        
+        return userLocationData;
+      } else {
+        toast.warning("No saved location found in database");
+      }
+    } catch (error) {
+      console.error("Error fetching saved location:", error);
+      toast.error("Failed to fetch your saved location");
+    }
+  };
+
+  // Update useEffect to fetch both current and saved locations
+  useEffect(() => {
+    // Fetch saved location from database first
+    fetchSavedLocation();
+    
+    // Still get current location as a backup option
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          toast.error('Unable to get your live location. Will use saved location if available.');
+        },
+        { enableHighAccuracy: true }
+      );
+    } else {
+      toast.error('Geolocation is not supported by your browser. Will use saved location only.');
+    }
+    
+    // Use location from parent component if available
+    if (userLocation) {
+      setCurrentLocation({
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude
+      });
+    }
+  }, [userLocation]);
+
+  // Add function to check if a point is inside a polygon
+  const isPointInPolygon = (point, polygon) => {
+    if (!point || !polygon || !polygon.length) return false;
+
+    // Extract coordinates from polygon
+    const vertices = polygon.map(coord => [coord.lat, coord.lng]);
+    
+    // Ray casting algorithm for point-in-polygon detection
+    let inside = false;
+    let x = point.latitude;
+    let y = point.longitude;
+    
+    for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+      const xi = vertices[i][0], yi = vertices[i][1];
+      const xj = vertices[j][0], yj = vertices[j][1];
+      
+      const intersect = ((yi > y) !== (yj > y))
+          && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    
+    return inside;
+  };
 
   const startPatrol = async (patrolId, startTime) => {
     const token = localStorage.getItem("token");
@@ -107,6 +214,37 @@ const TanodPatrolSchedule = ({
       return;
     }
 
+    // Get the patrol area polygon for the schedule
+    const patrol = todayPatrols.find(p => p._id === patrolId);
+    
+    if (!patrol || !patrol.patrolArea || !patrol.patrolArea.coordinates) {
+      toast.error("Patrol area information is missing. Please contact an administrator.");
+      return;
+    }
+
+    // Use saved database location if available, otherwise use current location
+    const locationToCheck = useCurrentLocation ? currentLocation : (savedDatabaseLocation || currentLocation);
+    
+    // Check if location is available
+    if (!locationToCheck) {
+      toast.error("Unable to determine your location. Please try again or refresh the page.");
+      return;
+    }
+
+    // Check if user is inside the patrol area
+    const isInside = isPointInPolygon(locationToCheck, patrol.patrolArea.coordinates);
+    
+    if (!isInside) {
+      toast.error(
+        <div>
+          <p className="font-semibold mb-1">You are not in the patrol area</p>
+          <p className="text-sm">Please go to {patrol.patrolArea.legend} to start your patrol.</p>
+        </div>, 
+        { autoClose: 5000 }
+      );
+      return;
+    }
+
     setLoading(prev => ({ ...prev, [patrolId]: true }));
 
     try {
@@ -120,28 +258,41 @@ const TanodPatrolSchedule = ({
       fetchUpcomingPatrols(); // Refresh the patrols list
       fetchCurrentPatrolArea(); // Update the map with the current patrol area
 
-      // Connect to WebSocket when patrol starts
-      const userId = localStorage.getItem("userId");
-      socketRef.current = io(`${process.env.REACT_APP_API_URL}/namespace`, {
-        query: { userId },
-      });
+      // Use try-catch for socket connection to prevent errors from disrupting UI
+      try {
+        // Connect to WebSocket when patrol starts
+        const userId = localStorage.getItem("userId");
+        
+        // Get socket URL without the namespace
+        const socketUrl = process.env.REACT_APP_API_URL;
+        
+        // Connect to root namespace instead of specifying '/namespace'
+        socketRef.current = io(socketUrl, {
+          query: { userId },
+          transports: ['websocket'],
+          reconnectionAttempts: 3
+        });
 
-      socketRef.current.on('connect', () => {
-        console.log('Connected to WebSocket');
-      });
+        socketRef.current.on('connect', () => {
+          console.log('Connected to WebSocket');
+        });
 
-      socketRef.current.on('disconnect', () => {
-        console.log('Disconnected from WebSocket');
-      });
+        socketRef.current.on('disconnect', () => {
+          console.log('Disconnected from WebSocket');
+        });
 
-      socketRef.current.on('connect_error', (error) => {
-        console.error('WebSocket connection error:', error);
-        toast.error("Connection error occurred");
-      });
+        socketRef.current.on('connect_error', (error) => {
+          // Just log the error rather than showing a toast
+          console.warn('WebSocket connection error:', error);
+        });
 
-      socketRef.current.on('locationUpdate', (location) => {
-        console.log('Location update:', location);
-      });
+        socketRef.current.on('locationUpdate', (location) => {
+          console.log('Location update:', location);
+        });
+      } catch (socketError) {
+        // Just log socket errors - don't interrupt patrol functionality
+        console.warn('Socket connection failed:', socketError);
+      }
     } catch (error) {
       console.error("Error starting patrol:", error);
       toast.error("Failed to start patrol.");
@@ -320,6 +471,11 @@ const TanodPatrolSchedule = ({
     const startDate = new Date(patrol.startTime);
     const endDate = new Date(patrol.endTime);
     
+    // Determine which location to use for UI display
+    const locationToCheck = useCurrentLocation ? currentLocation : (savedDatabaseLocation || currentLocation);
+    const isInPatrolArea = locationToCheck ? 
+      isPointInPolygon(locationToCheck, patrol.patrolArea?.coordinates) : false;
+    
     return (
       <motion.div 
         variants={itemVariants}
@@ -367,6 +523,66 @@ const TanodPatrolSchedule = ({
             <p className={`${textColor} font-medium`}>
               {patrol.patrolArea ? patrol.patrolArea.legend : "No area assigned"}
             </p>
+            
+            {/* Updated location status indicator with toggle */}
+            {patrol.patrolArea && locationToCheck && (
+              <div className="mt-1">
+                <div className="flex items-center text-xs mb-1">
+                  <span className={`mr-1 w-2 h-2 rounded-full ${
+                    isInPatrolArea
+                      ? 'bg-green-500'
+                      : 'bg-red-500'
+                  }`}></span>
+                  <span className={subTextColor}>
+                    {isInPatrolArea
+                      ? "You are inside the patrol area"
+                      : "You are outside the patrol area"}
+                  </span>
+                </div>
+                
+                <div className="flex items-center space-x-2 mt-1">
+                  <button 
+                    onClick={() => {
+                      if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                          (position) => {
+                            setCurrentLocation({
+                              latitude: position.coords.latitude,
+                              longitude: position.coords.longitude
+                            });
+                            toast.info("Live location updated");
+                          },
+                          (error) => {
+                            toast.error("Unable to get your location");
+                          },
+                          { enableHighAccuracy: true }
+                        );
+                      }
+                    }}
+                    className={`${buttonSecondary} px-1 py-0.5 rounded text-xs flex items-center`}
+                    title="Refresh live location"
+                  >
+                    <FaMapMarkerAlt className="inline mr-1" /> Refresh Live
+                  </button>
+
+                  <button 
+                    onClick={fetchSavedLocation}
+                    className={`${buttonSecondary} px-1 py-0.5 rounded text-xs flex items-center`}
+                    title="Refresh database location"
+                  >
+                    <FaDatabase className="inline mr-1" /> Refresh DB
+                  </button>
+
+                  <button 
+                    onClick={toggleLocationSource}
+                    className={`${useCurrentLocation ? buttonSuccess : buttonPrimary} px-1 py-0.5 rounded text-xs text-white flex items-center`}
+                    title="Toggle location source"
+                  >
+                    {useCurrentLocation ? 'Using: Live' : 'Using: DB'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="flex justify-end">
@@ -392,6 +608,12 @@ const TanodPatrolSchedule = ({
       </motion.div>
     </motion.div>
   );
+
+  // Add a toggle function to switch between current and saved location
+  const toggleLocationSource = () => {
+    setUseCurrentLocation(prev => !prev);
+    toast.info(`Using ${!useCurrentLocation ? 'current live' : 'saved database'} location`);
+  };
 
   return (
     <motion.div

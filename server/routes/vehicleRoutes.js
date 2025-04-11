@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const { protect } = require('../middleware/authMiddleware');
 const vehicleController = require('../controllers/vehicleController');
 
+
+
 // API logging middleware to troubleshoot route calls
 router.use((req, res, next) => {
   console.log(`Vehicle API called: ${req.method} ${req.originalUrl}`);
@@ -111,6 +113,12 @@ router.put('/:vehicleId/condition', protect, vehicleController.updateVehicleCond
 
 // Add this route to get all vehicle usages for a specific user
 router.get('/usages/user/:userId', protect, vehicleController.getVehicleUsagesForUser);
+
+// Add new routes for audit reports
+router.get('/audit-report', protect, vehicleController.generateAuditReport);
+
+// Add route for generating vehicle audit report
+router.get('/audit-report', protect, vehicleController.generateAuditReport);
 
 // Other existing routes
 router.get('/:id', protect, vehicleController.getVehicleById);

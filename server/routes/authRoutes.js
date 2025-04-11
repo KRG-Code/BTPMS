@@ -2,6 +2,7 @@
 const express = require('express');
 const { body } = require('express-validator');
 const mongoose = require('mongoose'); // Add this import
+const authController = require('../controllers/authController'); // Add this import
 const TanodRating = require('../models/Rating'); // Add this import
 const User = require('../models/User'); // Add this import
 const {
@@ -156,6 +157,21 @@ router.get('/inventory', protect, getInventory);          // Get inventory
 router.post('/inventory', protect, addInventoryItem);     // Add item to inventory
 router.put('/inventory/:id', protect, updateInventoryItem); // Update item
 router.delete('/inventory/:id', protect, deleteInventoryItem); // Delete item
+
+// Add route for equipment audit report
+router.get('/inventory/equipment-audit-report', protect, authController.generateEquipmentAuditReport);
+
+// Add route for combined inventory audit report
+router.get('/inventory/combined-audit-report', protect, (req, res) => {
+  // Route protection middleware to ensure only admin users can access
+  if (req.user.userType !== 'admin') {
+    return res.status(403).json({ message: 'Not authorized to access combined reports' });
+  }
+  
+  // Forward to the inventoryController
+  const inventoryController = require('../controllers/inventoryController');
+  return inventoryController.generateCombinedAuditReport(req, res);
+});
 
 // Schedule routes
 router.post('/schedule', protect, createSchedule);

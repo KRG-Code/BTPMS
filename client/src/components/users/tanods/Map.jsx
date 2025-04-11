@@ -158,7 +158,7 @@ const TanodMap = () => {
     localStorage.setItem("isTrackingVisible", "true");
     localStorage.setItem("isTracking", "true");
     
-    // Initialize socket connection
+    // Initialize socket connection using your previous working code
     socketRef.current = io(`${process.env.REACT_APP_API_URL}/namespace`, {
       query: { userId: localStorage.getItem("userId") },
     });
@@ -625,27 +625,17 @@ const TanodMap = () => {
   // Initialize socket with better error handling
   const initializeSocket = () => {
     const token = localStorage.getItem('token');
-    if (!token) return null;
+    const userId = localStorage.getItem('userId');
+    if (!token || !userId) return null;
     
-    const socketUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://barangaypatrol.lgu1.com' 
-      : 'http://localhost:5000';
-    
-    const socket = io(socketUrl, {
+    return io(`${process.env.REACT_APP_API_URL}/namespace`, {
+      query: { userId },
       auth: { token },
-      withCredentials: true,
-      transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000
     });
-
-    socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
-
-    return socket;
   };
 
   return (
@@ -702,6 +692,7 @@ const TanodMap = () => {
           userProfile={userProfile}
           prevUserLocation={prevUserLocation}
           setPrevUserLocation={setPrevUserLocation}
+          userLocation={userLocation} // Make sure to pass userLocation here
         />
       </div>
       

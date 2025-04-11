@@ -63,8 +63,10 @@ const ResourcesReportModal = ({ isOpen, onClose, isDarkMode }) => {
       
       if (auditCategory === 'equipment') {
         endpoint = `${process.env.REACT_APP_API_URL}/equipments/audit-report`;
-      } else {
+      } else if (auditCategory === 'vehicle') {
         endpoint = `${process.env.REACT_APP_API_URL}/vehicles/audit-report`;
+      } else if (auditCategory === 'combined') {
+        endpoint = `${process.env.REACT_APP_API_URL}/auth/inventory/combined-audit-report`;
       }
       
       const response = await axios.get(endpoint, {
@@ -160,8 +162,9 @@ const ResourcesReportModal = ({ isOpen, onClose, isDarkMode }) => {
                       : 'bg-white border-gray-300'
                   }`}
                 >
-                  <option value="equipment">Equipment Audit</option>
+                  <option value="equipment">Equipment & Inventory Audit</option>
                   <option value="vehicle">Vehicle Usage Audit</option>
+                  {/* Removed combined option */}
                 </select>
               </div>
               

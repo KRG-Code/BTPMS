@@ -1847,3 +1847,263 @@ exports.getTodaySchedulesForTanod = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+// Generate equipment audit report
+exports.generateEquipmentAuditReport = async (req, res) => {
+  try {
+    // Extract parameters for filtering
+    const { reportType = 'monthly', startDate, endDate } = req.query;
+    
+    // Define date range based on report type
+    const dateRange = getDateRangeFromReportType(reportType, startDate, endDate);
+    
+    // Get equipment data with proper population
+    const allEquipments = await Equipment.find({})
+      .populate('user', 'firstName lastName');
+    
+    // Filter by date range if needed
+    const equipmentsInPeriod = allEquipments.filter(eq => 
+      new Date(eq.createdAt) >= dateRange.startDate && 
+      new Date(eq.createdAt) <= dateRange.endDate
+    );
+    
+    // Get inventory items with full data
+    const inventoryItems = await Inventory.find();
+    
+    // Calculate statistics more accurately
+    const currentlyBorrowed = allEquipments.filter(eq => 
+      eq.returnDate === "1970-01-01T00:00:00.000Z" || !eq.returnDate
+    ).length;
+    
+    const overdueItems = allEquipments.filter(eq => {
+      if (eq.returnDate === "1970-01-01T00:00:00.000Z" || !eq.returnDate) {
+        const dueDate = eq.dueDate ? new Date(eq.dueDate) : null;
+        return dueDate && dueDate < new Date();
+      }
+      return false;
+    }).length;
+    
+    const equipmentStats = {
+      totalItems: inventoryItems.reduce((sum, item) => sum + (item.total || 0), 0),
+      currentlyBorrowed,
+      overdueItems,
+      returnRate: calculateReturnRate(allEquipments)
+    };
+    
+    // Get top borrowers with improved logic for days calculation
+    const borrowerStats = {};
+    
+    allEquipments.forEach(eq => {
+      if (!eq.user || !eq.user._id) return;
+      
+      const userId = eq.user._id.toString();
+      const userName = `${eq.user.firstName || ''} ${eq.user.lastName || ''}`;
+      
+      if (!borrowerStats[userId]) {
+        borrowerStats[userId] = {
+          name: userName.trim() || 'Unknown User',
+          userId: userId,
+          itemsBorrowed: 0,
+          itemsReturned: 0,
+          returnedOnTime: 0,
+          totalDaysKept: 0
+        };
+      }
+      
+      borrowerStats[userId].itemsBorrowed++;
+      
+      // Check if item was returned and calculate days properly
+      if (eq.returnDate && eq.returnDate !== "1970-01-01T00:00:00.000Z") {
+        borrowerStats[userId].itemsReturned++;
+        
+        // Calculate days kept - ensure positive values only
+        const borrowDate = new Date(eq.borrowDate || eq.createdAt);
+        const returnDate = new Date(eq.returnDate);
+        
+        // Ensure the dates are valid
+        if (!isNaN(borrowDate) && !isNaN(returnDate)) {
+          const daysKept = Math.max(0, Math.floor((returnDate - borrowDate) / (1000 * 60 * 60 * 24)));
+          borrowerStats[userId].totalDaysKept += daysKept;
+        }
+        
+        // Check if returned on time
+        const dueDate = eq.dueDate ? new Date(eq.dueDate) : null;
+        if (dueDate && returnDate <= dueDate) {
+          borrowerStats[userId].returnedOnTime++;
+        }
+      }
+    });
+    
+    const topBorrowers = Object.values(borrowerStats)
+      .map(borrower => ({
+        name: borrower.name,
+        itemsBorrowed: borrower.itemsBorrowed,
+        returnRate: borrower.itemsReturned > 0 
+          ? Math.round((borrower.returnedOnTime / borrower.itemsReturned) * 100) 
+          : 0,
+        averageDaysKept: borrower.itemsReturned > 0 
+          ? Math.round(borrower.totalDaysKept / borrower.itemsReturned) 
+          : 0
+      }))
+      .sort((a, b) => b.itemsBorrowed - a.itemsBorrowed)
+      .slice(0, 10); // Top 10 borrowers
+    
+    // Most borrowed items with improved tracking
+    const itemBorrowStats = {};
+    
+    // First add all inventory items to ensure we capture everything
+    inventoryItems.forEach(item => {
+      itemBorrowStats[item.name] = {
+        name: item.name,
+        borrowCount: 0,
+        damageCount: 0,
+        availableCount: item.total || 0
+      };
+    });
+    
+    // Then count actual borrowing activity
+    allEquipments.forEach(eq => {
+      if (!eq.name && !eq.itemName) return;
+      
+      const itemName = eq.itemName || eq.name;
+      
+      if (!itemBorrowStats[itemName]) {
+        // Item was borrowed but isn't in current inventory
+        itemBorrowStats[itemName] = {
+          name: itemName,
+          borrowCount: 0,
+          damageCount: 0,
+          availableCount: 0 // We don't know how many are available
+        };
+      }
+      
+      itemBorrowStats[itemName].borrowCount++;
+      
+      if (eq.condition === 'damaged') {
+        itemBorrowStats[itemName].damageCount++;
+      }
+    });
+    
+    const mostBorrowedItems = Object.values(itemBorrowStats)
+      .filter(item => item.borrowCount > 0) // Only include items that have been borrowed
+      .map(item => ({
+        name: item.name,
+        borrowCount: item.borrowCount,
+        availableCount: item.availableCount,
+        damageRate: item.borrowCount > 0 
+          ? Math.round((item.damageCount / item.borrowCount) * 100) 
+          : 0
+      }))
+      .sort((a, b) => b.borrowCount - a.borrowCount)
+      .slice(0, 10); // Top 10 items
+    
+    // Recent transactions with better formatting and date information
+    const recentTransactions = await Equipment.find()
+      .populate('user', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .then(transactions => transactions.map(tx => {
+        const isReturned = tx.returnDate && tx.returnDate !== "1970-01-01T00:00:00.000Z";
+        const borrowDate = new Date(tx.borrowDate || tx.createdAt);
+        const returnDate = isReturned ? new Date(tx.returnDate) : null;
+        
+        // Calculate days kept for returned items
+        let daysKept = null;
+        if (isReturned && !isNaN(borrowDate) && !isNaN(returnDate)) {
+          daysKept = Math.max(0, Math.floor((returnDate - borrowDate) / (1000 * 60 * 60 * 24)));
+        }
+        
+        return {
+          date: tx.createdAt,
+          userName: tx.user 
+            ? `${tx.user.firstName || ''} ${tx.user.lastName || ''}`.trim() || 'Unknown User'
+            : 'Unknown User',
+          itemName: tx.itemName || tx.name || 'Unknown Item',
+          action: isReturned ? 'Returned' : 'Borrowed',
+          borrowDate: borrowDate,
+          returnDate: returnDate,
+          daysKept: daysKept,
+          notes: tx.notes || (isReturned ? 'Item returned' : 'Item borrowed')
+        };
+      }));
+    
+    // Return complete report data with correct structure
+    res.json({
+      equipmentStats,
+      topBorrowers,
+      mostBorrowedItems,
+      recentTransactions,
+      reportPeriod: {
+        reportType,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate
+      }
+    });
+  } catch (error) {
+    console.error('Error generating equipment audit report:', error);
+    res.status(500).json({ 
+      message: 'Error generating audit report', 
+      error: error.message 
+    });
+  }
+};
+
+// Helper function to calculate return rate
+function calculateReturnRate(equipments) {
+  const returnedEquipments = equipments.filter(eq => 
+    eq.returnDate && eq.returnDate !== "1970-01-01T00:00:00.000Z"
+  );
+  
+  if (returnedEquipments.length === 0) return 0;
+  
+  const returnedOnTime = returnedEquipments.filter(eq => {
+    const returnDate = new Date(eq.returnDate);
+    const dueDate = new Date(eq.dueDate);
+    return returnDate <= dueDate;
+  });
+  
+  return Math.round((returnedOnTime.length / returnedEquipments.length) * 100);
+}
+
+// Helper function to calculate date range (same as in vehicleController)
+function getDateRangeFromReportType(reportType, startDateStr, endDateStr) {
+  const now = new Date();
+  let startDate, endDate;
+  
+  if (startDateStr && endDateStr) {
+    // Custom date range
+    startDate = new Date(startDateStr);
+    endDate = new Date(endDateStr);
+    endDate.setHours(23, 59, 59, 999); // Set to end of day
+  } else {
+    // Calculate based on report type
+    endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+    
+    switch (reportType) {
+      case 'weekly':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'monthly':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'quarterly':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 3);
+        break;
+      case 'annual':
+        startDate = new Date(now);
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      default:
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+    }
+    
+    startDate.setHours(0, 0, 0, 0);
+  }
+  
+  return { startDate, endDate };
+}

@@ -31,5 +31,7 @@ router.get('/user/:userId/equipments', protect, async (req, res) => {
   
 router.put('/:id', protect, equipmentController.updateEquipment);
 
+// Add new route for equipment audit report
+router.get('/audit-report', protect, equipmentController.generateEquipmentAuditReport);
 
 module.exports = router;

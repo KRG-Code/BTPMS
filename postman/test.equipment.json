@@ -1,0 +1,230 @@
+[{
+  "_id": {
+    "$oid": "67f69112af5a55750dbabbcf"
+  },
+  "name": "Flash Light",
+  "borrowDate": {
+    "$date": "2025-04-09T15:24:02.075Z"
+  },
+  "returnDate": {
+    "$date": "2025-04-09T15:45:47.883Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744211479515%2F1744211479517-images.jpg?alt=media&token=07995f6f-c017-4ed5-9f8c-c915e91c6235",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-09T15:24:02.287Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-09T15:45:47.983Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "67f69526af5a55750dbabd60"
+  },
+  "name": "Handcuff",
+  "borrowDate": {
+    "$date": "2025-04-09T15:41:24.852Z"
+  },
+  "returnDate": {
+    "$date": "2025-04-09T20:03:39.838Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744212716602%2F1744212716609-images%20(2).jpg?alt=media&token=018a5eba-d7c2-4908-a812-2c486448a6ba",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-09T15:41:26.108Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-09T20:03:40.006Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "67f69536af5a55750dbabda2"
+  },
+  "name": "Baton",
+  "borrowDate": {
+    "$date": "2025-04-09T15:41:41.764Z"
+  },
+  "returnDate": {
+    "$date": "2025-04-10T16:58:24.579Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744212758980%2F1744212758980-images%20(3).jpg?alt=media&token=5732a59d-d2c4-488e-a830-d00b03a07fa6",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-09T15:41:42.979Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-10T16:58:24.698Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "67f69548af5a55750dbabdae"
+  },
+  "name": "whistle",
+  "borrowDate": {
+    "$date": "2025-04-09T15:41:59.979Z"
+  },
+  "returnDate": {
+    "$date": "1970-01-01T00:00:00.000Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744212781635%2F1744212781635-images%20(1).jpg?alt=media&token=677e1893-4e7c-4db8-94e8-f0b0d5b69d51",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-09T15:42:00.073Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-09T15:42:00.073Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "67f6954faf5a55750dbabdb4"
+  },
+  "name": "Raincoat",
+  "borrowDate": {
+    "$date": "2025-04-09T15:42:07.362Z"
+  },
+  "returnDate": {
+    "$date": "1970-01-01T00:00:00.000Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744213154587%2F1744213154590-images%20(4).jpg?alt=media&token=6a76ced0-39e9-4d02-a92c-6d3ee845a12e",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-09T15:42:07.457Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-09T15:42:07.457Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "67f69554af5a55750dbabdba"
+  },
+  "name": "Rainboots",
+  "borrowDate": {
+    "$date": "2025-04-09T15:42:12.491Z"
+  },
+  "returnDate": {
+    "$date": "1970-01-01T00:00:00.000Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744213186948%2F1744213186948-images%20(5).jpg?alt=media&token=cd83f761-6ff1-42bc-9113-f9cc5ab9bc80",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-09T15:42:12.623Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-09T15:42:12.623Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "67f6955baf5a55750dbabdc0"
+  },
+  "name": "First Aid Kit",
+  "borrowDate": {
+    "$date": "2025-04-09T15:42:19.467Z"
+  },
+  "returnDate": {
+    "$date": "1970-01-01T00:00:00.000Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744213222798%2F1744213222798-81a8W%2BLrAwL._AC_SL1500_.jpg?alt=media&token=80f23daa-d751-45d7-90af-aa76a930667e",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-09T15:42:19.563Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-09T15:42:19.563Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "67f69630af5a55750dbabe0e"
+  },
+  "name": "Flash Light",
+  "borrowDate": {
+    "$date": "2025-04-09T15:45:52.379Z"
+  },
+  "returnDate": {
+    "$date": "1970-01-01T00:00:00.000Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744211479515%2F1744211479517-images.jpg?alt=media&token=07995f6f-c017-4ed5-9f8c-c915e91c6235",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-09T15:45:52.499Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-09T15:45:52.499Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "67f6d2a007459df51eded27d"
+  },
+  "name": "Handcuff",
+  "borrowDate": {
+    "$date": "2025-04-09T20:03:44.104Z"
+  },
+  "returnDate": {
+    "$date": "1970-01-01T00:00:00.000Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744212716602%2F1744212716609-images%20(2).jpg?alt=media&token=018a5eba-d7c2-4908-a812-2c486448a6ba",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-09T20:03:44.251Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-09T20:03:44.251Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "67f7f8b4ecddf4994b4db81f"
+  },
+  "name": "Baton",
+  "borrowDate": {
+    "$date": "2025-04-10T16:58:28.610Z"
+  },
+  "returnDate": {
+    "$date": "1970-01-01T00:00:00.000Z"
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/barangay-tanod-ms.appspot.com/o/profilePictures%2Finventory_1744212758980%2F1744212758980-images%20(3).jpg?alt=media&token=5732a59d-d2c4-488e-a830-d00b03a07fa6",
+  "user": {
+    "$oid": "670ccc4783de1355c2f97be0"
+  },
+  "createdAt": {
+    "$date": "2025-04-10T16:58:28.751Z"
+  },
+  "updatedAt": {
+    "$date": "2025-04-10T16:58:28.751Z"
+  },
+  "__v": 0
+}]

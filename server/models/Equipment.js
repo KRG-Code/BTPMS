@@ -1,3 +1,4 @@
+
 // equipment.js
 const mongoose = require("mongoose");
 

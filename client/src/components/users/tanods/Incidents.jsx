@@ -93,7 +93,8 @@ const Incidents = ({
   initializeSocket,
   userProfile,
   prevUserLocation,
-  setPrevUserLocation
+  setPrevUserLocation,
+  userLocation // Add this prop to fix the undefined error
 }) => {
   const [patrols, setPatrols] = useState([]);
   const [upcomingPatrols, setUpcomingPatrols] = useState([]);
@@ -831,6 +832,7 @@ const Incidents = ({
               fetchUpcomingPatrols={fetchUpcomingPatrols}
               fetchCurrentPatrolArea={fetchCurrentPatrolArea}
               uploadPatrolLogs={uploadPatrolLogs}
+              userLocation={userLocation} // Pass the current user location
             />
           </div>
         </div>

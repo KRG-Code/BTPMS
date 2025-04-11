@@ -1017,3 +1017,292 @@ exports.getVehicleUsagesForUser = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
+// Generate vehicle audit report
+exports.generateAuditReport = async (req, res) => {
+  try {
+    // Extract parameters for filtering
+    const { reportType = 'monthly', startDate, endDate } = req.query;
+    
+    // Define date range based on report type
+    const dateRange = getDateRangeFromReportType(reportType, startDate, endDate);
+    
+    // Get all vehicles with populated driver information
+    const vehicles = await Vehicle.find()
+      .populate('assignedDriver', 'firstName lastName profilePicture');
+    
+    // Get vehicle usage within date range with proper population
+    const vehicleUsage = await VehicleUsage.find({
+      date: { $gte: dateRange.startDate, $lte: dateRange.endDate }
+    }).populate('vehicleId', 'name licensePlate status')
+      .populate('userId', 'firstName lastName');
+    
+    // Calculate vehicle statistics
+    const totalVehicles = vehicles.length;
+    const activeVehicles = vehicles.filter(v => v.status === 'In Use').length;
+    const maintenanceVehicles = vehicles.filter(v => v.status === 'Maintenance').length;
+    const totalTrips = vehicleUsage.length;
+    
+    // Calculate total mileage
+    const totalMileage = vehicleUsage.reduce((sum, usage) => {
+      // Try to use mileageUsed field first, if not available calculate from start/end
+      const mileage = usage.mileageUsed || 
+        (usage.endMileage && usage.startMileage ? 
+         Math.max(0, usage.endMileage - usage.startMileage) : 0);
+      return sum + mileage;
+    }, 0);
+    
+    // Calculate average mileage per trip
+    const averageMileage = totalTrips > 0 ? (totalMileage / totalTrips).toFixed(1) : 0;
+    
+    // Calculate monthly usage distribution
+    const monthlyVehicleUsage = getMonthlyVehicleUsage(vehicleUsage, dateRange);
+    const maxMonthlyUsage = Math.max(...monthlyVehicleUsage.map(m => m.count), 0);
+    
+    // Analyze reasons for trips
+    const reasonCounts = {};
+    vehicleUsage.forEach(usage => {
+      const reason = usage.reason || 'Not Specified';
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+    
+    // Find most common reason
+    let mostCommonReason = 'None';
+    let mostCommonReasonCount = 0;
+    
+    for (const [reason, count] of Object.entries(reasonCounts)) {
+      if (count > mostCommonReasonCount) {
+        mostCommonReason = reason;
+        mostCommonReasonCount = count;
+      }
+    }
+    
+    // Calculate percentage for most common reason
+    const mostCommonReasonPercent = totalTrips > 0 ? 
+      ((mostCommonReasonCount / totalTrips) * 100).toFixed(1) : 0;
+    
+    // Analyze most used vehicles
+    const vehicleUsageStats = {};
+    
+    vehicleUsage.forEach(usage => {
+      const vehicleId = usage.vehicleId?._id?.toString();
+      if (!vehicleId) return;
+      
+      if (!vehicleUsageStats[vehicleId]) {
+        const vehicle = vehicles.find(v => v._id.toString() === vehicleId);
+        if (!vehicle) return;
+        
+        vehicleUsageStats[vehicleId] = {
+          vehicleId,
+          name: usage.vehicleId.name || vehicle.name,
+          licensePlate: usage.vehicleId.licensePlate || vehicle.licensePlate,
+          model: vehicle.model,
+          status: usage.vehicleId.status || vehicle.status,
+          tripCount: 0,
+          totalMileage: 0
+        };
+      }
+      
+      vehicleUsageStats[vehicleId].tripCount++;
+      
+      // Calculate mileage for this trip
+      const mileage = usage.mileageUsed || 
+        (usage.endMileage && usage.startMileage ? 
+         Math.max(0, usage.endMileage - usage.startMileage) : 0);
+      
+      vehicleUsageStats[vehicleId].totalMileage += mileage;
+    });
+    
+    // Convert to array and sort by trip count
+    const mostUsedVehicles = Object.values(vehicleUsageStats)
+      .sort((a, b) => b.tripCount - a.tripCount)
+      .slice(0, 10);
+    
+    // Analyze driver statistics
+    const driverStats = {};
+    
+    vehicleUsage.forEach(usage => {
+      const userId = usage.userId?._id?.toString();
+      if (!userId) return;
+      
+      if (!driverStats[userId]) {
+        driverStats[userId] = {
+          userId,
+          name: `${usage.userId.firstName || ''} ${usage.userId.lastName || ''}`.trim(),
+          tripCount: 0,
+          totalMileage: 0,
+          reasons: {}
+        };
+      }
+      
+      driverStats[userId].tripCount++;
+      
+      // Calculate mileage for this trip
+      const mileage = usage.mileageUsed || 
+        (usage.endMileage && usage.startMileage ? 
+         Math.max(0, usage.endMileage - usage.startMileage) : 0);
+      
+      driverStats[userId].totalMileage += mileage;
+      
+      // Track reasons
+      const reason = usage.reason || 'Not Specified';
+      driverStats[userId].reasons[reason] = (driverStats[userId].reasons[reason] || 0) + 1;
+    });
+    
+    // Find most common reason for each driver
+    Object.values(driverStats).forEach(driver => {
+      let maxCount = 0;
+      let mostCommonReason = 'None';
+      
+      for (const [reason, count] of Object.entries(driver.reasons)) {
+        if (count > maxCount) {
+          maxCount = count;
+          mostCommonReason = reason;
+        }
+      }
+      
+      driver.mostCommonReason = mostCommonReason;
+    });
+    
+    // Convert to array and sort by trip count
+    const topDrivers = Object.values(driverStats)
+      .sort((a, b) => b.tripCount - a.tripCount)
+      .slice(0, 10);
+    
+    // Process recent transactions
+    const recentTransactions = vehicleUsage
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 20)
+      .map(tx => ({
+        date: tx.date,
+        userName: tx.userId ? `${tx.userId.firstName || ''} ${tx.userId.lastName || ''}`.trim() : 'Unknown User',
+        vehicleName: tx.vehicleId?.name || 'Unknown Vehicle',
+        startMileage: tx.startMileage || 0,
+        endMileage: tx.endMileage || 0,
+        mileageUsed: tx.mileageUsed || 
+          (tx.endMileage && tx.startMileage ? 
+           Math.max(0, tx.endMileage - tx.startMileage) : 0),
+        reason: tx.reason || '-'
+      }));
+    
+    // Create vehicle statistics object
+    const vehicleStats = {
+      totalVehicles,
+      activeVehicles,
+      maintenanceVehicles,
+      totalTrips,
+      totalMileage,
+      averageMileage: parseFloat(averageMileage),
+      mostCommonReason,
+      mostCommonReasonPercent: parseFloat(mostCommonReasonPercent),
+      maxMonthlyUsage
+    };
+    
+    // Return complete report data
+    res.json({
+      vehicleStats,
+      monthlyVehicleUsage,
+      mostUsedVehicles,
+      topDrivers,
+      recentTransactions,
+      reportPeriod: {
+        reportType,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate
+      }
+    });
+  } catch (error) {
+    console.error('Error generating vehicle audit report:', error);
+    res.status(500).json({ 
+      message: 'Error generating audit report', 
+      error: error.message 
+    });
+  }
+};
+
+// Helper function to get monthly vehicle usage
+function getMonthlyVehicleUsage(usageData, dateRange) {
+  // Start with first day of the month from startDate
+  const startMonth = new Date(dateRange.startDate);
+  startMonth.setDate(1);
+  
+  // End with last day of the month from endDate
+  const endMonth = new Date(dateRange.endDate);
+  endMonth.setMonth(endMonth.getMonth() + 1, 0);
+  
+  const months = [];
+  let currentMonth = new Date(startMonth);
+  
+  // Create an array of month ranges
+  while (currentMonth <= endMonth) {
+    // Create last day of current month
+    const lastDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    
+    months.push({
+      name: currentMonth.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      startDate: new Date(currentMonth),
+      endDate: new Date(lastDayOfMonth),
+      count: 0
+    });
+    
+    // Move to next month
+    currentMonth.setMonth(currentMonth.getMonth() + 1);
+  }
+  
+  // Count usage for each month
+  usageData.forEach(usage => {
+    const usageDate = new Date(usage.date);
+    
+    for (const month of months) {
+      if (usageDate >= month.startDate && usageDate <= month.endDate) {
+        month.count++;
+        break;
+      }
+    }
+  });
+  
+  return months;
+}
+
+// Helper function to calculate date range from report type
+function getDateRangeFromReportType(reportType, startDateStr, endDateStr) {
+  const now = new Date();
+  let startDate, endDate;
+  
+  if (startDateStr && endDateStr) {
+    // Custom date range
+    startDate = new Date(startDateStr);
+    endDate = new Date(endDateStr);
+    endDate.setHours(23, 59, 59, 999); // Set to end of day
+  } else {
+    // Calculate based on report type
+    endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+    
+    switch (reportType) {
+      case 'weekly':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'monthly':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'quarterly':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 3);
+        break;
+      case 'annual':
+        startDate = new Date(now);
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      default:
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+    }
+    
+    startDate.setHours(0, 0, 0, 0);
+  }
+  
+  return { startDate, endDate };
+}
