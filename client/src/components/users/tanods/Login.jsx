@@ -5,7 +5,7 @@ import { loginFieldsTanod } from "../../constants/formFields";
 import { useNavigate } from 'react-router-dom';
 import FormAction from "../../forms/FormAction";
 import FormExtra from "../../forms/FormExtra";
-import Input from "../../inputs/Input";
+import Input from "../residents/singupComponents/Input";
 import { validateLoginTanod } from '../../../utils/validation';
 import { toast, ToastContainer } from 'react-toastify'; 
 import 'react-toastify/dist/ReactToastify.css'; 

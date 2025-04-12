@@ -18,6 +18,9 @@ const SelectionPage = lazy(() => import("./pages/SelectionPage"));
 const SignupPage = lazy(() => import("./pages/Signup"));
 const LoginTanod = lazy(() => import("./pages/LoginTanod"));
 
+// Add import for resident signup
+const ResidentSignup = lazy(() => import("./components/users/residents/Signup"));
+
 //Admin routes
 const AdminDashboard = lazy(() => import("./components/users/admin/AdminDashboard"));
 const ManageTanod = lazy(() => import("./components/users/admin/Personels"));
@@ -51,6 +54,9 @@ function App() {
                 {/* Public Routes */}
                 <Route path="/tanod-login" element={<LoginTanod />} />
                 <Route path="/signup" element={<SignupPage />} />
+                
+                {/* Add the new resident signup route */}
+                <Route path="/resident-signup" element={<ResidentSignup />} />
                 
                 {/* Public Resident Routes - No authentication needed */}
                 <Route path="/" element={<Home />} />

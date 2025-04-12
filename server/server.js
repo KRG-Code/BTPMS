@@ -188,6 +188,10 @@ app.use('/auth/inventory', require('./routes/inventoryRoutes'));
 app.use('/equipments', require('./routes/authEquipment'));
 app.use('/vehicles', require('./routes/vehicleRoutes'));
 
+// Add resident routes
+const residentRoutes = require('./routes/residentsRoute');
+app.use('/api/residents', residentRoutes);
+
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'client/build')));

@@ -206,19 +206,42 @@ const styles = StyleSheet.create({
 });
 
 const ResourcesAuditReport = ({ data, category, period }) => {
+  // Safe date formatting helper function
+  const safeFormat = (date, formatString = "MMMM dd, yyyy") => {
+    if (!date) return "N/A";
+    
+    // Check for invalid date strings
+    if (date === "1970-01-01T00:00:00.000Z" || 
+        date === "Invalid Date" ||
+        (typeof date === 'string' && date.startsWith('1970-01-01'))) {
+      return "Not Yet Returned";
+    }
+    
+    try {
+      const dateObj = new Date(date);
+      // Check if date is valid by testing if it returns NaN when getting time
+      if (isNaN(dateObj.getTime())) {
+        return "Invalid Date";
+      }
+      return format(dateObj, formatString);
+    } catch (error) {
+      return "Invalid Date";
+    }
+  };
+  
   // Format today's date
-  const formattedDate = format(new Date(), "MMMM dd, yyyy");
+  const formattedDate = safeFormat(new Date());
   
   // Format period dates with error handling
   let startDateFormatted = "Unknown";
   let endDateFormatted = "Unknown";
   
   try {
-    if (period.startDate) {
-      startDateFormatted = format(new Date(period.startDate), "MMMM dd, yyyy");
+    if (period && period.startDate) {
+      startDateFormatted = safeFormat(period.startDate);
     }
-    if (period.endDate) {
-      endDateFormatted = format(new Date(period.endDate), "MMMM dd, yyyy");
+    if (period && period.endDate) {
+      endDateFormatted = safeFormat(period.endDate);
     }
   } catch (error) {
     console.error("Error formatting dates:", error);
@@ -253,7 +276,7 @@ const ResourcesAuditReport = ({ data, category, period }) => {
     }
     
     try {
-      return format(new Date(dateStr), "MMM dd, yyyy");
+      return safeFormat(dateStr, "MMM dd, yyyy");
     } catch (e) {
       return "Invalid Date";
     }
@@ -524,7 +547,7 @@ const ResourcesAuditReport = ({ data, category, period }) => {
             )}
 
             {/* Recent Vehicle Transactions Table */}
-            {data.recentTransactions?.length > 0 && (
+            {data?.recentTransactions?.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Recent Vehicle Usage</Text>
                 
@@ -545,7 +568,7 @@ const ResourcesAuditReport = ({ data, category, period }) => {
                       index % 2 === 0 ? styles.tableRowEven : {}
                     ]}>
                       <View style={styles.tableCol}>
-                        <Text>{format(new Date(tx.date), "MM/dd/yyyy")}</Text>
+                        <Text>{safeFormat(tx.date, "MM/dd/yyyy")}</Text>
                       </View>
                       <View style={styles.tableColLeft}>
                         <Text>{tx.userName || 'Unknown'}</Text>
@@ -783,7 +806,7 @@ const ResourcesAuditReport = ({ data, category, period }) => {
             )}
             
             {/* Recent Equipment Transactions Table */}
-            {data.recentTransactions?.length > 0 && (
+            {data?.recentTransactions?.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Recent Equipment Transactions</Text>
                 
@@ -802,7 +825,7 @@ const ResourcesAuditReport = ({ data, category, period }) => {
                       index % 2 === 0 ? styles.tableRowEven : {}
                     ]}>
                       <View style={styles.tableCol}>
-                        <Text>{format(new Date(tx.borrowDate), "MM/dd/yyyy")}</Text>
+                        <Text>{safeFormat(tx.borrowDate, "MM/dd/yyyy")}</Text>
                       </View>
                       <View style={styles.tableCol}>
                         <Text style={tx.returnDate && 
@@ -810,7 +833,7 @@ const ResourcesAuditReport = ({ data, category, period }) => {
                             tx.returnDate.startsWith("1970-01-01") || 
                             new Date(tx.returnDate).getFullYear() === 1970) ? 
                             {color: '#ef4444'} : {}}>
-                          {tx.returnDate ? formatDate(tx.returnDate) : "Not Returned"}
+                          {formatDate(tx.returnDate)}
                         </Text>
                       </View>
                       <View style={styles.tableColLeft}>
