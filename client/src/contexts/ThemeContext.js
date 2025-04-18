@@ -10,15 +10,19 @@ const ThemeContext = createContext({
 export const ThemeProvider = ({ children }) => {
   // Check localStorage for saved preference, or use system preference
   const getInitialTheme = () => {
-    const savedTheme = localStorage.getItem('theme');
-    
-    if (savedTheme) {
-      return savedTheme === 'dark';
-    }
-    
-    // Check system preference
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return true;
+    try {
+      const savedTheme = localStorage.getItem('theme');
+      
+      if (savedTheme) {
+        return savedTheme === 'dark';
+      }
+      
+      // Check system preference
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return true;
+      }
+    } catch (error) {
+      console.error('Error retrieving theme preference:', error);
     }
     
     // Default to light mode
@@ -29,39 +33,71 @@ export const ThemeProvider = ({ children }) => {
 
   // Apply theme to document when it changes
   useEffect(() => {
-    document.documentElement.classList.toggle('dark-mode', isDarkMode);
-    document.documentElement.classList.toggle('light-mode', !isDarkMode);
+    try {
+      if (document && document.documentElement) {
+        document.documentElement.classList.toggle('dark-mode', isDarkMode);
+        document.documentElement.classList.toggle('light-mode', !isDarkMode);
+        
+        // Update body class for broader compatibility
+        if (document.body) {
+          document.body.classList.toggle('dark-mode', isDarkMode);
+          document.body.classList.toggle('light-mode', !isDarkMode);
+        }
+        
+        // Store preference in localStorage
+        localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+      }
+    } catch (error) {
+      console.error('Error applying theme:', error);
+    }
     
-    // Update body class for broader compatibility
-    document.body.classList.toggle('dark-mode', isDarkMode);
-    document.body.classList.toggle('light-mode', !isDarkMode);
-    
-    // Store preference in localStorage
-    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+    // Cleanup function
+    return () => {
+      try {
+        // No need to clean up on unmount as theme should persist
+      } catch (error) {
+        console.error('Error in theme cleanup:', error);
+      }
+    };
   }, [isDarkMode]);
 
-  // Toggle theme function
+  // Toggle theme function with error handling
   const toggleTheme = () => {
-    setIsDarkMode(prev => !prev);
+    try {
+      setIsDarkMode(prev => !prev);
+    } catch (error) {
+      console.error('Error toggling theme:', error);
+    }
   };
 
+  // Create a stable context value object that won't trigger unnecessary re-renders
+  const contextValue = React.useMemo(() => ({
+    isDarkMode, 
+    toggleTheme,
+    theme: isDarkMode ? 'dark' : 'light'
+  }), [isDarkMode]);
+
   return (
-    <ThemeContext.Provider value={{ 
-      isDarkMode, 
-      toggleTheme,
-      theme: isDarkMode ? 'dark' : 'light'
-    }}>
+    <ThemeContext.Provider value={contextValue}>
       {children}
     </ThemeContext.Provider>
   );
 };
 
-// Custom hook for consuming the theme context
+// Custom hook for consuming the theme context with error handling
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   
   if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider');
+    console.warn('useTheme was called outside of ThemeProvider, using default values');
+    // Return default values instead of throwing an error
+    return { 
+      isDarkMode: false, 
+      toggleTheme: () => {
+        console.warn('Theme toggle attempted outside provider');
+      },
+      theme: 'light'
+    };
   }
   
   return context;

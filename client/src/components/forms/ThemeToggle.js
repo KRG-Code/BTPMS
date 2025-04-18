@@ -4,11 +4,21 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { motion } from 'framer-motion';
 
 export default function ThemeToggle() {
-  const { isDarkMode, toggleTheme } = useTheme();
+  // Get theme values with safety fallbacks
+  const { isDarkMode = false, toggleTheme = () => {} } = useTheme() || {};
+  
+  const handleToggle = (e) => {
+    e.preventDefault();
+    try {
+      toggleTheme();
+    } catch (error) {
+      console.error('Error toggling theme:', error);
+    }
+  };
   
   return (
     <motion.button
-      onClick={toggleTheme}
+      onClick={handleToggle}
       className={`p-2 rounded-full transition-colors duration-300 ${
         isDarkMode 
           ? 'bg-gray-800 text-yellow-300 hover:bg-gray-700' 

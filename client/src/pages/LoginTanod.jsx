@@ -4,9 +4,19 @@ import Login from "../components/users/tanods/Login";
 import ThemeToggle from "../components/forms/ThemeToggle";
 import { useTheme } from '../contexts/ThemeContext';
 import { FaShieldAlt } from 'react-icons/fa';
+import { useEffect } from 'react';
 
 export default function LoginPage() {
-  const { isDarkMode } = useTheme();
+  // Get theme with a default fallback for safety
+  const { isDarkMode = false } = useTheme() || {};
+  
+  // Clean up any login-specific localStorage items
+  useEffect(() => {
+    // Clear any login-in-progress flags that might have been left behind
+    localStorage.removeItem('isCurrentlyLoggingIn');
+    
+    // Don't clear lastLoginDestination here - it's needed for redirection
+  }, []);
   
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gradient-to-r from-blue-50 to-indigo-50'}`}>

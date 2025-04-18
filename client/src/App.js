@@ -46,13 +46,12 @@ const ReportIncident= lazy(() => import("./components/users/residents/ReportInci
 
 function App() {
   return (
-    <ThemeProvider>  {/* Add ThemeProvider here */}
+    <ThemeProvider>  {/* Make sure ThemeProvider is at the top level */}
       <div className="flex-1 p-0 bg-background text-text">
         <BrowserRouter>
           <CombinedProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen" ><Loading type="spinner" /></div>}>
-              {/* We don't want a ToastContainer here, as components have their own */}
-              <ToastContainer />
+              <ToastContainer position="top-right" theme="light" /> {/* Set a default theme */}
               <Routes>
                 {/* Public Routes */}
                 <Route path="/tanod-login" element={<LoginTanod />} />

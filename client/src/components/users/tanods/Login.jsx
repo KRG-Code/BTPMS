@@ -44,7 +44,7 @@ export default function LoginTanod() {
   const [errors, setErrors] = useState({});
   const { login } = useCombinedContext();
   const navigate = useNavigate();
-  const { isDarkMode } = useTheme();
+  const { isDarkMode = false } = useTheme() || {}; // Add fallback for safety
   
   // MFA related states
   const [showMfaInput, setShowMfaInput] = useState(false);
@@ -57,6 +57,30 @@ export default function LoginTanod() {
   // Add these new state variables for the cooldown timer
   const [cooldownActive, setCooldownActive] = useState(false);
   const [cooldownTime, setCooldownTime] = useState(0);
+
+  // Handle logout and theme persistence before login
+  useEffect(() => {
+    // Clear any flags from previous login attempts
+    localStorage.removeItem('isCurrentlyLoggingIn');
+    
+    // Preserve theme setting when checking for existing login
+    const token = localStorage.getItem('token');
+    const userType = localStorage.getItem('userType');
+    
+    if (token && userType) {
+      // User is already logged in, redirect to appropriate dashboard
+      const destination = userType === 'admin' ? '/admindashboard' : '/dashboard';
+      
+      // Show toast message about logging out first
+      toast.info('Please logout first before accessing the login page', {
+        autoClose: 3000,
+        position: 'top-center'
+      });
+      
+      // Redirect to the appropriate dashboard
+      navigate(destination, { replace: true });
+    }
+  }, [navigate]);
 
   const handleChange = e => {
     setLoginState({ ...loginState, [e.target.id]: e.target.value });
@@ -146,26 +170,31 @@ export default function LoginTanod() {
       const data = await response.json();
       
       if (response.ok) {
-        await login(data.token);
-        localStorage.setItem("userType", tempUserType);
-        localStorage.setItem("userId", tempUserId);
-        
-        // Set tracking to enabled automatically
+        // Set tracking to enabled automatically (before navigation)
         localStorage.setItem("isTracking", "true");
         localStorage.setItem("isTrackingVisible", "true");
         
-        toast.success('Login successful!');
+        // Store destination before navigating to prevent redirect issues
+        const destination = tempUserType === 'admin' ? '/admindashboard' : '/dashboard';
+        localStorage.setItem("lastLoginDestination", destination);
         
-        if (tempUserType === 'admin') {
-          navigate('/admindashboard');
-        } else if (tempUserType === 'tanod') {
-          navigate('/dashboard');
+        // Use the updated login function with all relevant parameters
+        const loginSuccess = await login(data.token, tempUserType, tempUserId);
+        
+        if (loginSuccess) {
+          toast.success('Login successful!');
+          
+          // Use a slight delay to ensure state updates complete before navigation
+          setTimeout(() => {
+            navigate(destination, { replace: true });
+          }, 300);
         }
       } else {
         setMfaError(data.message || 'Invalid verification code.');
       }
     } catch (error) {
-      setMfaError('An error occurred during verification.');
+      console.error('MFA verification error:', error);
+      setMfaError('An error occurred during verification. Please try again.');
     } finally {
       setVerificationLoading(false);
     }

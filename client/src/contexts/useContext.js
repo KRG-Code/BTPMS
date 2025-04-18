@@ -93,7 +93,8 @@ export const CombinedProvider = ({ children }) => {
         // Only show error and redirect for non-public routes
         if (!isPublicRoute()) {
           toast.error('Session expired. Please log in again.');
-          navigate('/tanod-login');
+          // Don't force navigate - let protected routes handle this
+          // navigate('/tanod-login'); <- Remove this redirect
         }
       }
     } catch (error) {
@@ -110,14 +111,52 @@ export const CombinedProvider = ({ children }) => {
 
   // Check authentication status when component mounts and when route changes
   useEffect(() => {
-    fetchData();
+    // Only fetch data on initial mount or when navigating to a new protected route
+    // Don't fetch immediately after a login (which could trigger unwanted redirects)
+    const shouldFetchData = !localStorage.getItem('isCurrentlyLoggingIn');
+    
+    if (shouldFetchData) {
+      fetchData();
+    }
   }, [fetchData, location.pathname]);
 
-  const login = async (newToken) => {
-    localStorage.setItem('token', newToken);
-    setToken(newToken);
-    setIsAuthenticated(true);
-    await fetchData();
+  const login = async (newToken, newUserType = null, userId = null) => {
+    try {
+      // Set flag to prevent immediate re-fetch that could cause redirect
+      localStorage.setItem('isCurrentlyLoggingIn', 'true');
+      
+      // First store the token in localStorage and state
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+      
+      // If userType is provided directly (from MFA verification), use it
+      if (newUserType) {
+        localStorage.setItem('userType', newUserType);
+        setUserType(newUserType);
+      }
+      
+      // If userId is provided, store it
+      if (userId) {
+        localStorage.setItem('userId', userId);
+      }
+      
+      // Set authentication state to true
+      setIsAuthenticated(true);
+      
+      // Fetch user data to ensure we have the latest info
+      await fetchData();
+      
+      return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error('Error during login process. Please try again.');
+      return false;
+    } finally {
+      // Clear the flag after a short delay to ensure state updates have completed
+      setTimeout(() => {
+        localStorage.removeItem('isCurrentlyLoggingIn');
+      }, 1000);
+    }
   };
 
   const logout = () => {

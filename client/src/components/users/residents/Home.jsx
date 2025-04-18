@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaBars, FaTimes, FaExclamationTriangle, FaClock, FaUserClock, FaCheckCircle, FaBuilding, FaNewspaper, FaCalendarAlt, FaUsers, FaHandshake, FaQuoteLeft, FaEnvelope, FaPhone, FaTicketAlt, FaMapMarkedAlt, FaInfoCircle, FaHistory } from "react-icons/fa";
@@ -15,6 +15,7 @@ const Home = () => {
   const [showTicketLookup, setShowTicketLookup] = useState(false);
   const navigate = useNavigate();
   const { isDarkMode } = useTheme();
+
 
   // Animation variants
   const containerVariants = {
