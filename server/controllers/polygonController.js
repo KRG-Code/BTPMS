@@ -102,3 +102,28 @@ exports.getPolygonsByPatrolAreaId = async (req, res) => {
     res.status(500).json({ message: "Failed to retrieve polygons", error: error.message });
   }
 };
+
+// Add a new function to fetch only the San Agustin polygon for public access
+exports.getPublicPolygons = async (req, res) => {
+  try {
+    // Find the specific San Agustin polygon by ID or name
+    let polygon = await Polygon.findOne({ _id: "67f254b04615c73cdb3e7ee6" });
+    
+    // If not found by ID, try to find by legend
+    if (!polygon) {
+      polygon = await Polygon.findOne({ legend: "San Agustin" });
+    }
+    
+    // If found, return only this polygon as an array
+    if (polygon) {
+      res.status(200).json([polygon]);
+    } else {
+      // If no specific polygon found, return all polygons (fallback)
+      const polygons = await Polygon.find();
+      res.status(200).json(polygons);
+    }
+  } catch (error) {
+    console.error('Error fetching public polygons:', error);
+    res.status(500).json({ message: "Failed to retrieve polygons", error: error.message });
+  }
+};

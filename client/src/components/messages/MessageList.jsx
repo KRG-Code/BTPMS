@@ -45,6 +45,7 @@ export default function MessageList({ onClose, onConversationClick }) { // Accep
   const [showTanodList, setShowTanodList] = useState(false);
   const refreshIntervalRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [messageSearchTerm, setMessageSearchTerm] = useState(""); // Add state for message search
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
   useEffect(() => {
@@ -252,6 +253,16 @@ export default function MessageList({ onClose, onConversationClick }) { // Accep
     user.lastName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Add filtering for conversations
+  const filteredConversations = conversations.filter(conv => {
+    const otherParticipant = conv.participants.find(p => p._id !== localStorage.getItem("userId"));
+    const participantName = `${otherParticipant?.firstName || ''} ${otherParticipant?.lastName || ''}`.toLowerCase();
+    const messageContent = (conv.lastMessage || '').toLowerCase();
+    const searchLower = messageSearchTerm.toLowerCase();
+    
+    return participantName.includes(searchLower) || messageContent.includes(searchLower);
+  });
+
   const formatTime = (dateString) => {
     const date = new Date(dateString);
     const today = new Date();
@@ -424,6 +435,26 @@ export default function MessageList({ onClose, onConversationClick }) { // Accep
             </motion.div>
           ) : (
             <>
+              {/* Add search bar for conversations */}
+              <div className={`p-3 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                <div className={`relative w-full ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                  <RiSearchLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                  <input
+                    type="text"
+                    placeholder="Search conversations..."
+                    value={messageSearchTerm}
+                    onChange={(e) => setMessageSearchTerm(e.target.value)}
+                    className={`w-full py-2 pl-10 pr-4 rounded-lg border ${
+                      isDarkMode 
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder:text-gray-400' 
+                        : 'bg-white border-gray-300 text-black placeholder:text-gray-500'
+                    } focus:outline-none focus:ring-2 ${
+                      isDarkMode ? 'focus:ring-blue-500' : 'focus:ring-blue-500'
+                    }`}
+                  />
+                </div>
+              </div>
+
               {loading ? (
                 <div className="flex flex-col items-center justify-center h-40">
                   <div className={`w-8 h-8 border-4 border-t-transparent rounded-full animate-spin mb-3 ${
@@ -456,105 +487,111 @@ export default function MessageList({ onClose, onConversationClick }) { // Accep
                   animate="visible" 
                   className="divide-y"
                 >
-                  {conversations.map((conv) => {
-                    const otherParticipant = conv.participants.find(
-                      p => p._id !== localStorage.getItem("userId")
-                    );
-                    
-                    return (
-                      <motion.li
-                        key={conv._id}
-                        variants={itemVariants}
-                        onClick={() => {
-                          markConversationAsRead(conv._id);
-                          onConversationClick(conv);
-                        }}
-                        className={`cursor-pointer transition-all group ${
-                          !conv.read 
-                            ? isDarkMode 
-                              ? 'bg-blue-900 bg-opacity-20' 
-                              : 'bg-blue-50'
-                            : isDarkMode 
-                              ? 'hover:bg-gray-800' 
-                              : 'hover:bg-gray-50'
-                        }`}
-                        whileHover={{ 
-                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)'
-                        }}
-                      >
-                        <div className="py-4 px-4 flex items-start">
-                          {/* Avatar with online indicator */}
-                          <div className="relative">
-                            <div className={`w-12 h-12 rounded-full overflow-hidden ${
-                              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-                            } flex items-center justify-center`}>
-                              {otherParticipant?.profilePicture ? (
-                                <img
-                                  src={otherParticipant.profilePicture}
-                                  alt={`${otherParticipant.firstName}'s profile`}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <RiUser3Line className={`w-6 h-6 ${
-                                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                                }`} />
+                  {filteredConversations.length > 0 ? (
+                    filteredConversations.map((conv) => {
+                      const otherParticipant = conv.participants.find(
+                        p => p._id !== localStorage.getItem("userId")
+                      );
+                      
+                      return (
+                        <motion.li
+                          key={conv._id}
+                          variants={itemVariants}
+                          onClick={() => {
+                            markConversationAsRead(conv._id);
+                            onConversationClick(conv);
+                          }}
+                          className={`cursor-pointer transition-all group ${
+                            !conv.read 
+                              ? isDarkMode 
+                                ? 'bg-blue-900 bg-opacity-20' 
+                                : 'bg-blue-50'
+                              : isDarkMode 
+                                ? 'hover:bg-gray-800' 
+                                : 'hover:bg-gray-50'
+                          }`}
+                          whileHover={{ 
+                            backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)'
+                          }}
+                        >
+                          <div className="py-4 px-4 flex items-start">
+                            {/* Avatar with online indicator */}
+                            <div className="relative">
+                              <div className={`w-12 h-12 rounded-full overflow-hidden ${
+                                isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+                              } flex items-center justify-center`}>
+                                {otherParticipant?.profilePicture ? (
+                                  <img
+                                    src={otherParticipant.profilePicture}
+                                    alt={`${otherParticipant.firstName}'s profile`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <RiUser3Line className={`w-6 h-6 ${
+                                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                  }`} />
+                                )}
+                              </div>
+                              {otherParticipant?.isOnline && (
+                                <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
                               )}
                             </div>
-                            {otherParticipant?.isOnline && (
-                              <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
-                            )}
-                          </div>
-                          
-                          {/* Message content */}
-                          <div className="ml-3 flex-1 min-w-0">
-                            <div className="flex justify-between items-center mb-1">
-                              <p className={`font-semibold truncate ${!conv.read ? 'font-bold' : ''}`}>
-                                {otherParticipant?.firstName} {otherParticipant?.lastName}
-                              </p>
-                              <span className={`text-xs flex-shrink-0 ${
-                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            
+                            {/* Message content */}
+                            <div className="ml-3 flex-1 min-w-0">
+                              <div className="flex justify-between items-center mb-1">
+                                <p className={`font-semibold truncate ${!conv.read ? 'font-bold' : ''}`}>
+                                  {otherParticipant?.firstName} {otherParticipant?.lastName}
+                                </p>
+                                <span className={`text-xs flex-shrink-0 ${
+                                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                }`}>
+                                  {formatTime(conv.updatedAt || conv.createdAt)}
+                                </span>
+                              </div>
+                              <div className={`flex justify-between items-center ${
+                                !conv.read 
+                                  ? isDarkMode ? 'text-white' : 'text-gray-900'
+                                  : isDarkMode ? 'text-gray-300' : 'text-gray-700'
                               }`}>
-                                {formatTime(conv.updatedAt || conv.createdAt)}
-                              </span>
-                            </div>
-                            <div className={`flex justify-between items-center ${
-                              !conv.read 
-                                ? isDarkMode ? 'text-white' : 'text-gray-900'
-                                : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
-                              <p className={`text-sm truncate mr-2 ${!conv.read ? 'font-medium' : ''}`}>
-                                {conv.lastMessage ? (
-                                  conv.lastMessageSender?._id === localStorage.getItem("userId")
-                                    ? <span>You: {conv.lastMessage}</span>
-                                    : conv.lastMessage
-                                ) : (
-                                  <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>
-                                    No messages yet
-                                  </span>
-                                )}
-                              </p>
-                              <div className="flex items-center space-x-2">
-                                {!conv.read && (
-                                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                    isDarkMode ? 'bg-blue-400' : 'bg-blue-600'
-                                  }`}></span>
-                                )}
-                                <button
-                                  onClick={(e) => deleteConversation(conv._id, e)}
-                                  className={`p-1 rounded-full hover:bg-opacity-20 transition-opacity ${
-                                    isDarkMode ? 'hover:bg-gray-700 text-gray-400 hover:text-red-400' : 'hover:bg-gray-200 text-gray-500 hover:text-red-600'
-                                  } opacity-0 group-hover:opacity-100`}
-                                  aria-label="Delete conversation"
-                                >
-                                  <RiDeleteBin6Line size={16} />
-                                </button>
+                                <p className={`text-sm truncate mr-2 ${!conv.read ? 'font-medium' : ''}`}>
+                                  {conv.lastMessage ? (
+                                    conv.lastMessageSender?._id === localStorage.getItem("userId")
+                                      ? <span>You: {conv.lastMessage}</span>
+                                      : conv.lastMessage
+                                  ) : (
+                                    <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>
+                                      No messages yet
+                                    </span>
+                                  )}
+                                </p>
+                                <div className="flex items-center space-x-2">
+                                  {!conv.read && (
+                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                      isDarkMode ? 'bg-blue-400' : 'bg-blue-600'
+                                    }`}></span>
+                                  )}
+                                  <button
+                                    onClick={(e) => deleteConversation(conv._id, e)}
+                                    className={`p-1 rounded-full hover:bg-opacity-20 transition-opacity ${
+                                      isDarkMode ? 'hover:bg-gray-700 text-gray-400 hover:text-red-400' : 'hover:bg-gray-200 text-gray-500 hover:text-red-600'
+                                    } opacity-0 group-hover:opacity-100`}
+                                    aria-label="Delete conversation"
+                                  >
+                                    <RiDeleteBin6Line size={16} />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </motion.li>
-                    );
-                  })}
+                        </motion.li>
+                      );
+                    })
+                  ) : (
+                    <div className="py-10 text-center">
+                      <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>No conversations match your search</p>
+                    </div>
+                  )}
                 </motion.ul>
               )}
             </>

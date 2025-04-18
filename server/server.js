@@ -26,39 +26,49 @@ const app = express();
 const server = http.createServer(app);
 initializeWebSocket(server); // Initialize WebSocket server
 
-// Add this after your MongoDB connection is established
+// Update your change stream setup in server.js to handle errors
 const setupScheduleChangeStream = () => {
-  const scheduleChangeStream = Schedule.watch();
-  
-  scheduleChangeStream.on('change', async (change) => {
-    const io = require('./websocket').getIO();
+  try {
+    const scheduleChangeStream = Schedule.watch({
+      fullDocument: 'updateLookup' // Include this option to get the full updated document
+    });
     
-    try {
-      if (change.operationType === 'update' || change.operationType === 'insert') {
-        const schedule = await Schedule.findById(change.documentKey._id)
-          .populate('patrolArea')
-          .populate('tanods');
-          
-        io.to('schedules').emit('scheduleUpdate', {
-          type: change.operationType,
-          schedule
-        });
+    scheduleChangeStream.on('change', async (change) => {
+      const io = require('./websocket').getIO();
+      
+      try {
+        if (change.operationType === 'update' || change.operationType === 'insert') {
+          const schedule = await Schedule.findById(change.documentKey._id)
+            .populate('patrolArea')
+            .populate('tanods');
+            
+          io.to('schedules').emit('scheduleUpdate', {
+            type: change.operationType,
+            schedule
+          });
+        }
+      } catch (error) {
+        console.error('Error processing schedule change:', error);
       }
-    } catch (error) {
-      console.error('Error processing schedule change:', error);
-    }
-  });
+    });
 
-  scheduleChangeStream.on('error', (error) => {
-    console.error('Schedule change stream error:', error);
-    setTimeout(setupScheduleChangeStream, 5000); // Retry connection after 5 seconds
-  });
+    scheduleChangeStream.on('error', (error) => {
+      console.error('Schedule change stream error in server.js:', error);
+      // Retry connection after a delay
+      setTimeout(setupScheduleChangeStream, 5000);
+    });
+  } catch (error) {
+    console.error('Error setting up schedule change stream:', error);
+    setTimeout(setupScheduleChangeStream, 5000);
+  }
 };
 
 // Call this after your MongoDB connection
 connectDB().then(() => {
   setupScheduleChangeStream();
   // ...rest of your server startup code...
+}).catch(error => {
+  console.error('Failed to connect to database:', error);
 });
 
 // Firebase Admin Setup
@@ -162,6 +172,10 @@ app.use('/api/assistance-requests', assistanceRequestRoutes);
 
 // Add assistance integration routes
 app.use('/api/integration', assistanceIntegrationRoutes);
+
+// Add incident report integration routes
+const incidentReportIntegrationRoutes = require('./routes/incidentReportIntegrationRoutes');
+app.use('/api/integration/incident-reports', incidentReportIntegrationRoutes);
 
 // Vehicle Routes - Update to ensure consistent path for all vehicle endpoints
 const vehicleRoutes = require('./routes/vehicleRoutes');

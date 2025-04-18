@@ -11,6 +11,9 @@ const Vehicle = require('./models/Vehicle'); // Add this import
 let io;
 let activeLocations = new Map();
 
+// Store change streams for reconnection
+let changeStreams = [];
+
 const initializeWebSocket = (server) => {
   io = new Server(server, {
     cors: {
@@ -52,172 +55,8 @@ const initializeWebSocket = (server) => {
     }
   });
 
-  // Set up change streams
-  const incidentChangeStream = IncidentReport.watch();
-  const locationChangeStream = TanodLocation.watch();
-  const scheduleChangeStream = Schedule.watch();
-  const notificationChangeStream = Notification.watch();
-  
-  // Add vehicle request change stream
-  const vehicleRequestChangeStream = VehicleRequest.watch();
-  // Add vehicle change stream
-  const vehicleChangeStream = Vehicle.watch();
-
-  // Handle incident changes
-  incidentChangeStream.on('change', async (change) => {
-    if (change.operationType === 'insert' || change.operationType === 'update') {
-      try {
-        const incident = await IncidentReport.findById(change.documentKey._id)
-          .populate('reporter', 'firstName lastName')
-          .populate('responder', 'firstName lastName');
-          
-        io.to('incidents').emit('incidentUpdate', {
-          type: change.operationType,
-          incident
-        });
-      } catch (error) {
-        console.error('Error processing incident change:', error);
-      }
-    }
-  });
-
-  // Handle location changes
-  locationChangeStream.on('change', async (change) => {
-    try {
-      if (change.operationType === 'update' || change.operationType === 'insert') {
-        const location = await TanodLocation.findById(change.documentKey._id)
-          .populate('userId', 'firstName lastName profilePicture')
-          .populate({
-            path: 'currentScheduleId',
-            populate: {
-              path: 'patrolArea',
-              select: 'color legend'
-            }
-          });
-
-        if (location && location.isActive) {
-          io.to('tracking').emit('locationUpdate', {
-            ...location.toObject(),
-            markerColor: location.markerColor,
-            isOnPatrol: location.isOnPatrol
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error processing location change:', error);
-    }
-  });
-
-  // Add schedule change stream handler
-  scheduleChangeStream.on('change', async (change) => {
-    try {
-      if (change.operationType === 'update') {
-        const schedule = await Schedule.findById(change.documentKey._id);
-        
-        // Update location markers for affected tanods
-        const affectedTanods = schedule.patrolStatus
-          .filter(status => status.status === 'Started')
-          .map(status => status.tanodId);
-
-        for (const tanodId of affectedTanods) {
-          await TanodLocation.findOneAndUpdate(
-            { userId: tanodId, isActive: true },
-            { 
-              markerColor: schedule.patrolArea?.color || 'red',
-              isOnPatrol: true,
-              currentScheduleId: schedule._id
-            },
-            { new: true }
-          ).populate('userId', 'firstName lastName profilePicture');
-        }
-      }
-    } catch (error) {
-      console.error('Error processing schedule change:', error);
-    }
-  });
-
-  // Add notification change stream handler
-  notificationChangeStream.on('change', async (change) => {
-    try {
-      if (change.operationType === 'insert') {
-        const notification = await Notification.findById(change.documentKey._id);
-        if (notification) {
-          // Emit to specific user's room
-          io.to(`user_${notification.userId}`).emit('notificationUpdate', {
-            type: 'new',
-            notification
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error processing notification change:', error);
-    }
-  });
-
-  // Handle vehicle request changes
-  vehicleRequestChangeStream.on('change', async (change) => {
-    try {
-      if (change.operationType === 'insert' || change.operationType === 'update' || 
-          change.operationType === 'replace') {
-        
-        // Get the updated vehicle request document with populated fields
-        const vehicleRequest = await VehicleRequest.findById(change.documentKey._id)
-          .populate('vehicleId', 'name licensePlate status condition imageUrl')
-          .populate('requesterId', 'firstName lastName');
-          
-        if (vehicleRequest) {
-          console.log(`Broadcasting vehicle request update: ${change.operationType}, ID: ${vehicleRequest._id}`);
-          
-          // Emit to admin room for resource management
-          io.to('vehicle-requests').emit('vehicleRequestUpdate', {
-            type: 'vehicleRequestUpdate',
-            request: vehicleRequest,
-            action: change.operationType
-          });
-          
-          // Also emit to the specific user who made the request
-          const userRoomId = `user-${vehicleRequest.requesterId._id}`;
-          console.log(`Broadcasting to user room: ${userRoomId}`);
-          io.to(userRoomId).emit('vehicleRequestUpdate', {
-            type: 'vehicleRequestUpdate',
-            request: vehicleRequest,
-            action: change.operationType
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error processing vehicle request change:', error);
-    }
-  });
-  
-  // Handle vehicle status changes
-  vehicleChangeStream.on('change', async (change) => {
-    try {
-      if (change.operationType === 'update' || change.operationType === 'replace') {
-        // Get the updated vehicle document
-        const vehicle = await Vehicle.findById(change.documentKey._id)
-          .populate('assignedDriver', 'firstName lastName');
-        
-        if (vehicle) {
-          // Emit to vehicle rooms
-          io.to('vehicles').emit('vehicleStatusUpdate', {
-            type: change.operationType,
-            vehicle: vehicle
-          });
-          
-          // If in use, also emit to user's room
-          if (vehicle.status === 'In Use' && vehicle.currentUserId) {
-            io.to(`user-${vehicle.currentUserId}`).emit('vehicleStatusUpdate', {
-              type: change.operationType,
-              vehicle: vehicle
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error processing vehicle change:', error);
-    }
-  });
+  // Set up change streams with reconnection logic
+  setupChangeStreams();
 
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -396,6 +235,235 @@ const initializeWebSocket = (server) => {
       }
     });
   });
+};
+
+// Separate function to set up change streams for better error handling
+const setupChangeStreams = () => {
+  // Close any existing change streams before creating new ones
+  if (changeStreams.length > 0) {
+    console.log('Closing existing change streams before reconnecting...');
+    changeStreams.forEach(stream => {
+      try {
+        stream.close();
+      } catch (err) {
+        console.log('Error closing change stream:', err);
+      }
+    });
+    changeStreams = [];
+  }
+
+  try {
+    // Set up change streams with error handling
+    const incidentChangeStream = IncidentReport.watch();
+    const locationChangeStream = TanodLocation.watch();
+    const scheduleChangeStream = Schedule.watch();
+    const notificationChangeStream = Notification.watch();
+    const vehicleRequestChangeStream = VehicleRequest.watch();
+    const vehicleChangeStream = Vehicle.watch();
+    
+    // Add all streams to array for reconnection management
+    changeStreams = [
+      incidentChangeStream,
+      locationChangeStream, 
+      scheduleChangeStream,
+      notificationChangeStream,
+      vehicleRequestChangeStream,
+      vehicleChangeStream
+    ];
+
+    // Handle incident changes with error handling
+    incidentChangeStream.on('change', async (change) => {
+      try {
+        if (change.operationType === 'insert' || change.operationType === 'update') {
+          const incident = await IncidentReport.findById(change.documentKey._id)
+            .populate('reporter', 'firstName lastName')
+            .populate('responder', 'firstName lastName');
+            
+          io.to('incidents').emit('incidentUpdate', {
+            type: change.operationType,
+            incident
+          });
+        }
+      } catch (error) {
+        console.error('Error processing incident change:', error);
+      }
+    });
+
+    incidentChangeStream.on('error', (error) => {
+      console.error('Incident change stream error:', error);
+      // Wait and try to reconnect
+      setTimeout(setupChangeStreams, 5000);
+    });
+
+    // Handle location changes with error handling
+    locationChangeStream.on('change', async (change) => {
+      try {
+        if (change.operationType === 'update' || change.operationType === 'insert') {
+          const location = await TanodLocation.findById(change.documentKey._id)
+            .populate('userId', 'firstName lastName profilePicture')
+            .populate({
+              path: 'currentScheduleId',
+              populate: {
+                path: 'patrolArea',
+                select: 'color legend'
+              }
+            });
+
+          if (location && location.isActive) {
+            io.to('tracking').emit('locationUpdate', {
+              ...location.toObject(),
+              markerColor: location.markerColor,
+              isOnPatrol: location.isOnPatrol
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error processing location change:', error);
+      }
+    });
+
+    locationChangeStream.on('error', (error) => {
+      console.error('Location change stream error:', error);
+      // Don't restart here as we'll restart once from the first error
+    });
+
+    // Handle schedule changes with error handling
+    scheduleChangeStream.on('change', async (change) => {
+      try {
+        if (change.operationType === 'update') {
+          const schedule = await Schedule.findById(change.documentKey._id);
+          
+          // Update location markers for affected tanods
+          const affectedTanods = schedule.patrolStatus
+            .filter(status => status.status === 'Started')
+            .map(status => status.tanodId);
+
+          for (const tanodId of affectedTanods) {
+            await TanodLocation.findOneAndUpdate(
+              { userId: tanodId, isActive: true },
+              { 
+                markerColor: schedule.patrolArea?.color || 'red',
+                isOnPatrol: true,
+                currentScheduleId: schedule._id
+              },
+              { new: true }
+            ).populate('userId', 'firstName lastName profilePicture');
+          }
+        }
+      } catch (error) {
+        console.error('Error processing schedule change:', error);
+      }
+    });
+
+    scheduleChangeStream.on('error', (error) => {
+      console.error('Schedule change stream error:', error);
+      // Don't restart here as we'll restart once from the first error
+    });
+
+    // Handle notification changes with error handling
+    notificationChangeStream.on('change', async (change) => {
+      try {
+        if (change.operationType === 'insert') {
+          const notification = await Notification.findById(change.documentKey._id);
+          if (notification) {
+            // Emit to specific user's room
+            io.to(`user_${notification.userId}`).emit('notificationUpdate', {
+              type: 'new',
+              notification
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error processing notification change:', error);
+      }
+    });
+
+    notificationChangeStream.on('error', (error) => {
+      console.error('Notification change stream error:', error);
+      // Don't restart here as we'll restart once from the first error
+    });
+
+    // Handle vehicle request changes with error handling
+    vehicleRequestChangeStream.on('change', async (change) => {
+      try {
+        if (change.operationType === 'insert' || change.operationType === 'update' || 
+            change.operationType === 'replace') {
+          
+          // Get the updated vehicle request document with populated fields
+          const vehicleRequest = await VehicleRequest.findById(change.documentKey._id)
+            .populate('vehicleId', 'name licensePlate status condition imageUrl')
+            .populate('requesterId', 'firstName lastName');
+            
+          if (vehicleRequest) {
+            console.log(`Broadcasting vehicle request update: ${change.operationType}, ID: ${vehicleRequest._id}`);
+            
+            // Emit to admin room for resource management
+            io.to('vehicle-requests').emit('vehicleRequestUpdate', {
+              type: 'vehicleRequestUpdate',
+              request: vehicleRequest,
+              action: change.operationType
+            });
+            
+            // Also emit to the specific user who made the request
+            const userRoomId = `user-${vehicleRequest.requesterId._id}`;
+            console.log(`Broadcasting to user room: ${userRoomId}`);
+            io.to(userRoomId).emit('vehicleRequestUpdate', {
+              type: 'vehicleRequestUpdate',
+              request: vehicleRequest,
+              action: change.operationType
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error processing vehicle request change:', error);
+      }
+    });
+
+    vehicleRequestChangeStream.on('error', (error) => {
+      console.error('Vehicle request change stream error:', error);
+      // Don't restart here as we'll restart once from the first error
+    });
+
+    // Handle vehicle status changes with error handling
+    vehicleChangeStream.on('change', async (change) => {
+      try {
+        if (change.operationType === 'update' || change.operationType === 'replace') {
+          // Get the updated vehicle document
+          const vehicle = await Vehicle.findById(change.documentKey._id)
+            .populate('assignedDriver', 'firstName lastName');
+          
+          if (vehicle) {
+            // Emit to vehicle rooms
+            io.to('vehicles').emit('vehicleStatusUpdate', {
+              type: change.operationType,
+              vehicle: vehicle
+            });
+            
+            // If in use, also emit to user's room
+            if (vehicle.status === 'In Use' && vehicle.currentUserId) {
+              io.to(`user-${vehicle.currentUserId}`).emit('vehicleStatusUpdate', {
+                type: change.operationType,
+                vehicle: vehicle
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error processing vehicle change:', error);
+      }
+    });
+
+    vehicleChangeStream.on('error', (error) => {
+      console.error('Vehicle change stream error:', error);
+      // Don't restart here as we'll restart once from the first error
+    });
+
+    console.log('All change streams set up successfully with error handling');
+  } catch (error) {
+    console.error('Error setting up change streams:', error);
+    // Try to reconnect after a delay
+    setTimeout(setupChangeStreams, 5000);
+  }
 };
 
 // Update the function to broadcast vehicle request updates

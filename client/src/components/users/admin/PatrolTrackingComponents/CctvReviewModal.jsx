@@ -383,7 +383,7 @@ const CctvReviewModal = ({ isOpen, onClose, incident, cctv }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50"
+        className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-4"
         onClick={onClose}
       >
         <motion.div 
@@ -391,9 +391,9 @@ const CctvReviewModal = ({ isOpen, onClose, incident, cctv }) => {
           initial="hidden"
           animate="visible"
           exit="exit"
-          className={`w-11/12 max-w-3xl rounded-xl shadow-2xl overflow-hidden p-0 ${
+          className={`w-11/12 max-w-3xl rounded-xl shadow-2xl overflow-hidden p-0 mx-auto my-auto ${
             isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'
-          }`}
+          } max-h-[90vh] flex flex-col`}
           onClick={e => e.stopPropagation()}
         >
           {/* Close button overlay - visible on all screens */}
@@ -422,8 +422,8 @@ const CctvReviewModal = ({ isOpen, onClose, incident, cctv }) => {
             </div>
           </div>
           
-          {/* Content */}
-          <div className="p-4 space-y-4">
+          {/* Content - Add overflow scrolling here */}
+          <div className="p-4 space-y-4 overflow-y-auto flex-1">
             {/* Incident Details */}
             <motion.div 
               variants={contentVariants}
@@ -620,7 +620,7 @@ const CctvReviewModal = ({ isOpen, onClose, incident, cctv }) => {
             </motion.div>
           </div>
           
-          {/* Footer */}
+          {/* Footer - keep outside of scrollable area */}
           <div className={`px-4 py-3 border-t flex justify-end gap-2 ${
             isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'
           }`}>

@@ -14,6 +14,9 @@ const NotFound = lazy(() => import("./components/common/NotFound"));
 const ForgotPassword = lazy(() => import("./components/users/common/ForgotPassword"));
 const ResetPassword = lazy(() => import("./components/users/common/ResetPassword"));
 
+// Add import for the new ResetPin component
+const ResetPin = lazy(() => import("./components/users/residents/ResetPin"));
+
 const SelectionPage = lazy(() => import("./pages/SelectionPage"));
 const SignupPage = lazy(() => import("./pages/Signup"));
 const LoginTanod = lazy(() => import("./pages/LoginTanod"));
@@ -63,9 +66,10 @@ function App() {
                 <Route path="/Tanodevaluation" element={<ResidentRating />} />
                 <Route path="/Reportincidents" element={<ReportIncident />} />
                 
-                {/* Add these new routes for password reset */}
+                {/* Password and PIN reset routes */}
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password/:token" element={<ResetPassword />} />
+                <Route path="/reset-pin/:token" element={<ResetPin />} />
                 
                 <Route element={<Layout />}>
                   <Route path="/myaccount" element={<MyAccount />}/>

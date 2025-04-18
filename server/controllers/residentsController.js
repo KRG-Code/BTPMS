@@ -2,6 +2,7 @@ const Resident = require('../models/residents');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const emailService = require('../utils/emailService');
 
 /**
  * Generate a resident ID based on personal information
@@ -212,6 +213,248 @@ exports.login = async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Server error during login' });
+  }
+};
+
+// Modify verifyResidentById to also generate a token
+exports.verifyResidentById = async (req, res) => {
+  try {
+    const { residentId } = req.params;
+    
+    if (!residentId) {
+      return res.status(400).json({ message: 'Resident ID is required' });
+    }
+    
+    const resident = await Resident.findOne({ residentId });
+    
+    if (!resident) {
+      return res.status(404).json({ message: 'Resident not found. Please check the ID and try again.' });
+    }
+    
+    // Generate a JWT token for the resident
+    const token = jwt.sign(
+      { id: resident._id, type: 'resident' },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    // Return resident information without sensitive data
+    res.status(200).json({
+      success: true,
+      token, // Include token in response
+      resident: {
+        residentId: resident.residentId,
+        firstName: resident.firstName,
+        middleName: resident.middleName,
+        lastName: resident.lastName,
+        age: resident.age,
+        gender: resident.gender,
+        contactNumber: resident.contactNumber,
+        email: resident.email,
+        address: resident.address,
+        profilePicture: resident.profilePicture
+      }
+    });
+  } catch (error) {
+    console.error('Error verifying resident:', error);
+    res.status(500).json({ message: 'Server error during verification', error: error.message });
+  }
+};
+
+// Also modify verifyResidentPassword to consistently return a token
+exports.verifyResidentPassword = async (req, res) => {
+  try {
+    const { residentId, password } = req.body;
+    
+    if (!residentId || !password) {
+      return res.status(400).json({ success: false, message: 'Resident ID and password are required' });
+    }
+    
+    // Find the resident by ID
+    const resident = await Resident.findOne({ residentId });
+    
+    if (!resident) {
+      return res.status(404).json({ success: false, message: 'Resident not found' });
+    }
+    
+    // Compare the provided password with the stored password
+    const isMatch = await resident.comparePassword(password);
+    
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid password' });
+    }
+    
+    // Generate a JWT token
+    const token = jwt.sign(
+      { id: resident._id, type: 'resident' },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    // If password matches, return success with token
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Password verified successfully',
+      token, // Include token in response
+      resident: {
+        residentId: resident.residentId,
+        firstName: resident.firstName,
+        lastName: resident.lastName
+      }
+    });
+  } catch (error) {
+    console.error('Error verifying resident password:', error);
+    return res.status(500).json({ success: false, message: 'Server error during verification', error: error.message });
+  }
+};
+
+// Request PIN reset
+exports.requestPinReset = async (req, res) => {
+  try {
+    const { email, residentId } = req.body;
+    
+    // Validate input
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Please enter a valid email address' });
+    }
+    
+    let resident = null;
+    
+    // If residentId is provided, verify email matches that resident's account
+    if (residentId) {
+      resident = await Resident.findOne({ residentId });
+      
+      // Check if resident exists
+      if (!resident) {
+        return res.status(404).json({ message: 'Resident not found. Please check your Resident ID.' });
+      }
+      
+      // Check if email matches resident's email
+      if (resident.email.toLowerCase() !== email.toLowerCase()) {
+        console.log(`Email mismatch: Provided ${email}, stored ${resident.email}`);
+        return res.status(400).json({ 
+          message: 'The email you entered does not match the email associated with this account.' 
+        });
+      }
+    } else {
+      // Only email was provided, find by email
+      resident = await Resident.findOne({ email: { $regex: new RegExp(`^${email.toLowerCase()}$`, 'i') } });
+      
+      if (!resident) {
+        return res.status(404).json({ 
+          message: 'No account found with this email address.' 
+        });
+      }
+    }
+    
+    // Generate a token for PIN reset (expires in 1 hour)
+    const token = jwt.sign(
+      { id: resident._id, type: 'pin-reset' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    
+    // Create reset URL (frontend will handle this route)
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-pin/${token}`;
+    
+    // Send email with the reset link
+    try {
+      const emailSent = await emailService.sendPinResetEmail(
+        resident.email,
+        resetUrl,
+        resident.firstName
+      );
+      
+      if (!emailSent && process.env.NODE_ENV !== 'Development') {
+        return res.status(500).json({ message: "Failed to send PIN reset email. Please try again later." });
+      }
+      
+      // Log successful reset request
+      console.log(`PIN reset requested for resident: ${resident.residentId}, email: ${resident.email}`);
+      
+      return res.status(200).json({ 
+        message: 'PIN reset instructions sent to your email' 
+      });
+    } catch (emailError) {
+      console.error('Error sending PIN reset email:', emailError);
+      return res.status(500).json({ message: 'Failed to send PIN reset email' });
+    }
+  } catch (error) {
+    console.error('Error in requestPinReset:', error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Reset PIN with token
+exports.resetPin = async (req, res) => {
+  try {
+    const { token, newPin } = req.body;
+    
+    if (!token || !newPin) {
+      return res.status(400).json({ message: 'Token and new PIN are required' });
+    }
+    
+    // Basic PIN strength validation
+    if (newPin.length < 8) {
+      return res.status(400).json({ message: 'PIN must be at least 8 characters long' });
+    }
+    
+    // Check PIN strength (require at least uppercase, lowercase, number, and special char)
+    const hasUppercase = /[A-Z]/.test(newPin);
+    const hasLowercase = /[a-z]/.test(newPin);
+    const hasNumber = /[0-9]/.test(newPin);
+    const hasSpecialChar = /[^A-Za-z0-9]/.test(newPin);
+    
+    const strength = [hasUppercase, hasLowercase, hasNumber, hasSpecialChar].filter(Boolean).length;
+    
+    // PIN must have at least 3 of the 4 criteria
+    if (strength < 3) {
+      return res.status(400).json({ 
+        message: 'PIN is too weak. Please include a mix of uppercase letters, lowercase letters, numbers, and special characters.' 
+      });
+    }
+    
+    // Verify token
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Check if it's a valid PIN reset token
+      if (decoded.type !== 'pin-reset') {
+        return res.status(400).json({ message: 'Invalid token' });
+      }
+      
+      // Find resident with the token
+      const resident = await Resident.findById(decoded.id);
+      
+      if (!resident) {
+        return res.status(404).json({ message: 'Resident not found' });
+      }
+      
+      // UPDATE FIX: Using the same approach as in MyAcc.jsx for changing password
+      // Instead of using updateOne, we'll update the resident object and save it
+      // This ensures the pre-save middleware properly hashes the password
+      
+      // Update the password field with the new PIN
+      resident.password = newPin;  // Will be hashed via pre-save middleware
+      resident.pin = newPin;       // Store plain PIN for reference
+      
+      // Save the updated resident (triggers the pre-save middleware)
+      await resident.save();
+      
+      return res.status(200).json({ message: 'PIN reset successful' });
+    } catch (tokenError) {
+      // Token verification failed
+      return res.status(400).json({ message: 'Token is invalid or has expired' });
+    }
+  } catch (error) {
+    console.error('Error in resetPin:', error);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 

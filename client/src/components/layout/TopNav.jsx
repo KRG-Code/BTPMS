@@ -279,11 +279,11 @@ export default function TopNav() {
 
   return (
     <>
-      <aside className="rounded-2xl card p-2"> {/* Use 'card' class instead of 'TopNav' */}
-        <header className="flex justify-between items-center rounded navigation p-4">
-          <button onClick={toggleSideNav} className="text-2xl" aria-label="Toggle navigation">
+      <aside className="rounded-2xl card p-0 mr-4 ml-2 "> {/* Use 'card' class instead of 'TopNav' */}
+        <header className="flex justify-between items-center rounded navigation p-0 ">
+          <button onClick={toggleSideNav} className="text-2xl ml-6" aria-label="Toggle navigation">
             <RiMenuLine />
-          </button>
+          </button>   
           <div className="flex items-center m-2 space-x-5">
             {navItems.map((item) => (
               <span key={item.id} className="flex border-2 rounded-3xl text-2xl" title={item.label}>
@@ -387,8 +387,8 @@ export default function TopNav() {
             )}
 
             {storedUserType !== "resident" && (
-              <div className="relative" ref={dropdownRef}>
-                <button onClick={toggleDropdown} className="border-2 rounded-full">
+              <div className="relative " ref={dropdownRef}>
+                <button onClick={toggleDropdown} className="border-2 rounded-full mr-3">
                   {profilePicture ? (
                     <img src={profilePicture} alt="Profile" className="rounded-full w-12 h-12 object-cover" />
                   ) : (

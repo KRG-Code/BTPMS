@@ -15,7 +15,9 @@ import {
   RiCheckboxCircleLine,
   RiSettings4Line,
   RiFilter2Line,
-  RiCheckboxMultipleLine
+  RiCheckboxMultipleLine,
+  RiArrowUpLine,
+  RiArrowDownLine
 } from "react-icons/ri";
 import { useTheme } from "../../contexts/ThemeContext";
 
@@ -50,6 +52,8 @@ export default function NotificationList({ onClose }) {
   const [activeCategory, setActiveCategory] = useState("all");
   const [unreadCount, setUnreadCount] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [sortOrder, setSortOrder] = useState('desc'); // 'desc' for newest first, 'asc' for oldest first
+  const [showFilters, setShowFilters] = useState(true); // State to toggle filter visibility
 
   useEffect(() => {
     fetchNotifications();
@@ -380,16 +384,33 @@ export default function NotificationList({ onClose }) {
   };
 
   const getFilteredNotifications = () => {
-    return notifications.filter(notification => {
-      // Filter by search term
-      const matchesSearch = notification.message.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      // Filter by category
-      const notificationCategory = categorizeNotification(notification.message);
-      const matchesCategory = activeCategory === "all" || notificationCategory === activeCategory;
-      
-      return matchesSearch && matchesCategory;
-    });
+    return notifications
+      .filter(notification => {
+        // Filter by search term
+        const matchesSearch = notification.message.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        // Filter by category
+        const notificationCategory = categorizeNotification(notification.message);
+        const matchesCategory = activeCategory === "all" || notificationCategory === activeCategory;
+        
+        return matchesSearch && matchesCategory;
+      })
+      .sort((a, b) => {
+        // Sort by createdAt based on sortOrder
+        if (sortOrder === 'desc') {
+          return new Date(b.createdAt) - new Date(a.createdAt); // Newest first
+        } else {
+          return new Date(a.createdAt) - new Date(b.createdAt); // Oldest first
+        }
+      });
+  };
+
+  const toggleSortOrder = () => {
+    setSortOrder(prevOrder => prevOrder === 'desc' ? 'asc' : 'desc');
+  };
+
+  const toggleFilters = () => {
+    setShowFilters(prev => !prev);
   };
 
   const formatTimeAgo = (timestamp) => {
@@ -514,8 +535,8 @@ export default function NotificationList({ onClose }) {
           </div>
         </div>
 
-        {/* Search and Filter */}
-        <div className="px-4 py-2 border-b border-gray-700">
+        {/* Search and Filter - removed border-b border-gray-700 */}
+        <div className="px-4 py-2">
           <div className="flex items-center gap-2">
             <div className="relative flex-grow">
               <RiSearchLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
@@ -531,31 +552,61 @@ export default function NotificationList({ onClose }) {
               variants={buttonVariants}
               whileHover="hover"
               whileTap="tap"
+              onClick={toggleSortOrder}
               className={`p-2 rounded-full ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-200 hover:bg-gray-300'}`}
+              title={sortOrder === 'desc' ? 'Showing newest first' : 'Showing oldest first'}
             >
-              <RiFilter2Line size={20} className={isDarkMode ? 'text-gray-300' : 'text-gray-600'} />
+              {sortOrder === 'desc' ? 
+                <RiArrowDownLine size={20} className={isDarkMode ? 'text-gray-300' : 'text-gray-600'} /> : 
+                <RiArrowUpLine size={20} className={isDarkMode ? 'text-gray-300' : 'text-gray-600'} />
+              }
+            </motion.button>
+            <motion.button
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              onClick={toggleFilters}
+              className={`p-2 rounded-full ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-200 hover:bg-gray-300'}`}
+              title="Toggle filters"
+            >
+              <RiFilter2Line 
+                size={20} 
+                className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} ${showFilters ? 'text-indigo-500' : ''}`} 
+              />
             </motion.button>
           </div>
 
-          {/* Category tabs */}
-          <div className="flex overflow-x-auto space-x-1 pt-2 pb-1 hide-scrollbar">
-            {["all", "incidents", "schedules", "equipment", "assistance"].map(category => (
-              <motion.button
-                key={category}
-                variants={buttonVariants}
-                whileHover="hover"
-                whileTap="tap"
-                onClick={() => setActiveCategory(category)}
-                className={`px-3 py-1.5 text-sm rounded-full whitespace-nowrap ${
-                  activeCategory === category
-                    ? `${isDarkMode ? 'bg-indigo-900 text-indigo-100' : 'bg-indigo-100 text-indigo-800'}`
-                    : `${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-200 text-gray-700'}`
-                }`}
+          {/* Category tabs with animation */}
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0, overflow: 'hidden' }}
+                animate={{ height: 'auto', opacity: 1, overflow: 'visible' }}
+                exit={{ height: 0, opacity: 0, overflow: 'hidden' }}
+                transition={{ duration: 0.2 }}
+                className="pt-2"
               >
-                {category.charAt(0).toUpperCase() + category.slice(1)}
-              </motion.button>
-            ))}
-          </div>
+                <div className="flex overflow-x-auto space-x-1 pb-1 hide-scrollbar">
+                  {["all", "incidents", "schedules", "equipment", "assistance"].map(category => (
+                    <motion.button
+                      key={category}
+                      variants={buttonVariants}
+                      whileHover="hover"
+                      whileTap="tap"
+                      onClick={() => setActiveCategory(category)}
+                      className={`px-3 py-1.5 text-sm rounded-full whitespace-nowrap ${
+                        activeCategory === category
+                          ? `${isDarkMode ? 'bg-indigo-900 text-indigo-100' : 'bg-indigo-100 text-indigo-800'}`
+                          : `${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-200 text-gray-700'}`
+                      }`}
+                    >
+                      {category.charAt(0).toUpperCase() + category.slice(1)}
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Notifications List */}

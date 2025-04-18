@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaSearch, FaTicketAlt, FaSpinner, FaClipboardCheck, FaUserClock, FaTimesCircle, FaCheckCircle, FaClock, FaMapMarkerAlt, FaCalendarAlt, FaStar, FaComment } from "react-icons/fa";
+import { FaSearch, FaTicketAlt, FaSpinner, FaClipboardCheck, FaUserClock, FaTimesCircle, FaCheckCircle, FaClock, FaMapMarkerAlt, FaCalendarAlt, FaStar, FaComment, FaUpload, FaFileAlt } from "react-icons/fa";
 import { useTheme } from "../../../contexts/ThemeContext";
 import { toast } from "react-toastify";
 import { v4 as uuidv4 } from 'uuid'; // Import UUID for visitor ID
@@ -11,6 +11,8 @@ const TicketLookup = ({ onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [ticketData, setTicketData] = useState(null);
   const [error, setError] = useState(null);
+  const [isFileUploading, setIsFileUploading] = useState(false); // New state for file upload
+  const fileInputRef = useRef(null); // Reference for file input
   
   // Add states for rating system
   const [rating, setRating] = useState(0);
@@ -60,8 +62,59 @@ const TicketLookup = ({ onClose }) => {
     }
   }, []);
 
-  const searchTicket = async () => {
-    if (!ticketId.trim()) {
+  // Function to handle file upload and extract ticket ID
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Check if file is text file
+    if (!file.type.match('text/plain') && !file.name.endsWith('.txt')) {
+      toast.error("Please upload a .txt file");
+      return;
+    }
+
+    setIsFileUploading(true);
+    setError(null);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target.result;
+        
+        // Try to extract ticket ID from content
+        const ticketIdMatch = content.match(/Ticket ID: ([A-Z0-9-]+)/i) || 
+                              content.match(/Ticket[\s-]*[Rr]eference:?\s*([A-Z0-9-]+)/i) ||
+                              content.match(/Ticket:?\s*([A-Z0-9-]+)/i) ||
+                              content.match(/ID:?\s*([A-Z0-9-]+)/i);
+        
+        if (ticketIdMatch && ticketIdMatch[1]) {
+          const extractedTicketId = ticketIdMatch[1].trim();
+          setTicketId(extractedTicketId);
+          // Automatically search with the extracted ticket ID
+          searchWithTicketId(extractedTicketId);
+          toast.success("Ticket ID extracted from file");
+        } else {
+          toast.error("Could not find a valid ticket ID in the file");
+        }
+      } catch (error) {
+        console.error("Error reading file:", error);
+        toast.error("Error reading file");
+      } finally {
+        setIsFileUploading(false);
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error("Error reading file");
+      setIsFileUploading(false);
+    };
+
+    reader.readAsText(file);
+  };
+
+  // Modified search function to be reusable
+  const searchWithTicketId = async (idToSearch) => {
+    if (!idToSearch.trim()) {
       toast.error("Please enter a ticket ID");
       return;
     }
@@ -70,7 +123,7 @@ const TicketLookup = ({ onClose }) => {
     setError(null);
 
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/incident-reports/ticket/${ticketId}`);
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/incident-reports/ticket/${idToSearch}`);
       
       if (!response.ok) {
         throw new Error(
@@ -93,6 +146,11 @@ const TicketLookup = ({ onClose }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Update the original search function to use the reusable one
+  const searchTicket = () => {
+    searchWithTicketId(ticketId);
   };
 
   // Add function to check if user already rated this incident
@@ -264,6 +322,13 @@ const TicketLookup = ({ onClose }) => {
     );
   };
 
+  // Reset file input when closed
+  const handleFileInputClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = null;
+    }
+  };
+
   return (
     <motion.div
       variants={containerVariants}
@@ -287,7 +352,7 @@ const TicketLookup = ({ onClose }) => {
           </button>
         </div>
         <p className="text-white/80">
-          Enter your ticket ID to check the current status of your reported incident.
+          Enter your ticket ID or upload your saved ticket file to check status.
         </p>
       </div>
 
@@ -314,6 +379,47 @@ const TicketLookup = ({ onClose }) => {
             >
               {isLoading ? <FaSpinner className="animate-spin" /> : <FaSearch />}
             </button>
+          </div>
+          
+          {/* Add file upload section */}
+          <div className="mt-4">
+            <p className="text-sm font-medium mb-2 flex items-center">
+              <FaFileAlt className="mr-1" /> Or upload your ticket file (.txt)
+            </p>
+            <div className="flex items-center">
+              <input
+                type="file"
+                accept=".txt"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                onClick={handleFileInputClick}
+              />
+              <button
+                onClick={() => fileInputRef.current.click()}
+                disabled={isFileUploading}
+                className={`flex items-center justify-center px-4 py-2 w-full border rounded-lg ${
+                  isDarkMode 
+                    ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' 
+                    : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {isFileUploading ? (
+                  <>
+                    <FaSpinner className="animate-spin mr-2" />
+                    Processing file...
+                  </>
+                ) : (
+                  <>
+                    <FaUpload className="mr-2" />
+                    Upload ticket file
+                  </>
+                )}
+              </button>
+            </div>
+            <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              We'll extract the ticket ID from your saved ticket file
+            </p>
           </div>
           
           {error && (

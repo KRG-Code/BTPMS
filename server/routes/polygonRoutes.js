@@ -6,10 +6,14 @@ const {
   updatePolygon,
   deletePolygon,
   getPolygonById,
-  getPolygonsByPatrolAreaId, // Import the controller function
+  getPolygonsByPatrolAreaId,
+  getPublicPolygons, // Add new controller function for public access
 } = require("../controllers/polygonController");
 
 const router = express.Router();
+
+// Add a public endpoint to access polygons without authentication
+router.get("/public", getPublicPolygons);
 
 // Fetch all polygons
 router.get("/", protect, getPolygons);

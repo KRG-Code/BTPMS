@@ -3,49 +3,74 @@ const mongoose = require('mongoose');
 const incidentReportSchema = new mongoose.Schema({
   type: {
     type: String,
-    required: true,
-    enum: ['Theft', 'Assault', 'Harassment', 'Vandalism', 'Noise Complaint', 'Suspicious Activity', 'Traffic Violation', 'Other']
+    required: true
   },
   location: {
-    type: {
-      type: String,
-      default: 'Point'
-    },
-    coordinates: {
-      type: [Number],
-      required: true
-    }
+    type: String,
+    required: true
+  },
+  locationNote: {
+    type: String
+  },
+  address: {
+    type: String
   },
   description: {
     type: String,
-    required: true
+    default: "Not provided"
+  },
+  date: {
+    type: Date,
+    default: Date.now
+  },
+  time: {
+    type: String
+  },
+  fullName: {
+    type: String
+  },
+  contactNumber: {
+    type: String
+  },
+  email: {
+    type: String
   },
   status: {
     type: String,
-    required: true,
-    enum: ['Pending', 'Assigned', 'In Progress', 'Resolved', 'Closed'],
+    enum: ['Pending', 'In Progress', 'Resolved', 'Rejected'],
     default: 'Pending'
   },
-  reportedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  ticketId: {
+    type: String,
+    unique: true
+  },
+  incidentClassification: {
+    type: String,
+    enum: ['Normal Incident', 'Emergency Incident'],
+    default: 'Normal Incident'
   },
   responder: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  responseDetails: {
+  responderName: {
     type: String
   },
   respondedAt: {
     type: Date
   },
-  images: [String],
-  priority: {
-    type: String,
-    enum: ['Low', 'Medium', 'High', 'Critical'],
-    default: 'Medium'
+  resolvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  resolvedByFullName: {
+    type: String
+  },
+  resolvedAt: {
+    type: Date
+  },
+  log: {
+    type: String
   },
   createdAt: {
     type: Date,

@@ -17,13 +17,13 @@ export default function Layout() {
             <div className="flex h-screen">
                 {/* Sidebar taking full height without overlapping */}
                 <SideNav isOpen={isSideNavOpen} toggleSideNav={toggleSideNav} className="h-full" />
-
-                <div className="flex flex-col w-full h-full">
+               
+                <div className="flex flex-col w-full h-full mt-4 ">
                     {/* TopNav aligned to right */}
                     <TopNav toggleSideNav={toggleSideNav} />
 
                     {/* Main content with routes */}
-                    <main className="main-content mt-3 z-0 flex-1 overflow-y-auto">
+                    <main className="main-content mt-3 z-0 flex-1 overflow-y-auto px-2 rounded-xl">
                         <Outlet />
                     </main>
                 </div>

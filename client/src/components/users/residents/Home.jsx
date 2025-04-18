@@ -43,6 +43,7 @@ const Home = () => {
   };
 
   const handleReportClick = () => {
+    setShowEmergencyForm(false);
     setShowReportModal(true);
   };
 
@@ -59,7 +60,12 @@ const Home = () => {
   };
 
   const handleEmergencyFormClose = () => {
+    // Only close the emergency form if it's explicitly closed by the user
+    // This will be called from EmergencyReportForm's Close button
     setShowEmergencyForm(false);
+    
+    // Always ensure the report modal is closed when emergency modal is handled
+    setShowReportModal(false);
   };
 
   const handleTicketLookupClose = () => {
@@ -810,7 +816,11 @@ const Home = () => {
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           >
-            <EmergencyReportForm onClose={handleEmergencyFormClose} />
+            <EmergencyReportForm 
+              onClose={handleEmergencyFormClose} 
+              // Pass additional props to help with state management
+              setShowEmergencyForm={setShowEmergencyForm}
+            />
           </motion.div>
         )}
         

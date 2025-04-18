@@ -37,33 +37,55 @@ const getAddressFromCoordinates = async (latitude, longitude) => {
 // Create a new incident report
 exports.createIncidentReport = async (req, res) => {
   try {
-    const { incidentClassification, type, location, locationNote, address, description, date, time, fullName, contactNumber, ticketId } = req.body;
+    console.log("Incoming request data:", req.body); // Debug log
 
-    console.log("Incoming request data:", req.body); // Log the incoming request data
+    // Extract all possible fields from request body
+    const { 
+      type, 
+      location, 
+      locationNote, 
+      address, 
+      description, 
+      date, 
+      time, 
+      fullName, 
+      contactNumber, 
+      email,
+      incidentClassification, 
+      ticketId,
+      latitude,
+      longitude
+    } = req.body;
 
+    // Validate required fields
+    if (!type || !location) {
+      return res.status(400).json({ message: "Type and location are required fields" });
+    }
+
+    // Create new report with validated classification and default status
     const newIncidentReport = new IncidentReport({
-      incidentClassification,
       type,
       location,
       locationNote,
-      address, // Add the address field here
-      description,
-      date,
+      address,
+      description: description || "No description provided",
+      date: date || new Date(),
       time,
-      fullName,
-      contactNumber,
-      status: 'Pending', // This is optional since we set the default in the schema
-      ticketId // Include ticketId in the new report
+      fullName: fullName || "Anonymous",
+      contactNumber: contactNumber || "",
+      email: email || "",
+      status: "Pending",  // Always set status to 'Pending' for new reports
+      incidentClassification: incidentClassification === "Emergency Incident" 
+        ? "Emergency Incident" 
+        : "Normal Incident",  // Validate classification
+      ticketId: ticketId || `IR-${Date.now().toString().substring(6)}`
     });
 
     await newIncidentReport.save();
-
+    
     // Get human-readable address from coordinates if available
-    let locationDisplay = address || location; // Use the provided address when available
-    if (location && location.latitude && location.longitude) {
-      locationDisplay = await getAddressFromCoordinates(location.latitude, location.longitude);
-    }
-
+    let locationDisplay = address || location;
+    
     // Fetch all Tanod and Admin users
     const tanodsAndAdmins = await User.find({ userType: { $in: ['tanod', 'admin'] } });
 
@@ -75,10 +97,17 @@ exports.createIncidentReport = async (req, res) => {
 
     await Notification.insertMany(notifications);
 
-    res.status(201).json({ message: 'Incident report created successfully', incidentReport: newIncidentReport });
+    res.status(201).json({ 
+      message: 'Incident report created successfully',
+      report: newIncidentReport
+    });
   } catch (error) {
     console.error('Error creating incident report:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+    });
   }
 };
 

@@ -180,7 +180,43 @@ const sendPasswordResetEmail = async (email, resetLink, firstName) => {
   }
 };
 
+// Send PIN reset email
+const sendPinResetEmail = async (email, resetUrl, firstName) => {
+  try {
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Reset Your BTPMS PIN',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+          <h2 style="color: #3b82f6; text-align: center;">Reset Your PIN</h2>
+          <p>Hello ${firstName},</p>
+          <p>You recently requested to reset your PIN for your BTPMS resident account. Click the button below to reset your PIN:</p>
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${resetUrl}" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Your PIN</a>
+          </div>
+          <p>If you did not request a PIN reset, please ignore this email or contact support if you have concerns.</p>
+          <p>This link will expire in 1 hour for security reasons.</p>
+          <p>Regards,<br>Barangay Tanod Patrol Management System</p>
+          <div style="border-top: 1px solid #e0e0e0; margin-top: 20px; padding-top: 20px; font-size: 12px; color: #666; text-align: center;">
+            <p>If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="word-break: break-all;">${resetUrl}</p>
+          </div>
+        </div>
+      `
+    };
+    
+    const info = await transporter.sendMail(mailOptions);
+    console.log('PIN reset email sent:', info.messageId);
+    return true;
+  } catch (error) {
+    console.error('Error sending PIN reset email:', error);
+    return false;
+  }
+};
+
 module.exports = {
   sendVerificationCode,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  sendPinResetEmail
 };
